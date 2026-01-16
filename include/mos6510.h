@@ -95,6 +95,7 @@ void mos6510_push(MOS6510 *cpu, uint8_t data);
 uint8_t mos6510_pull(MOS6510 *cpu);
 
 // Addressing mode helpers
+void advance_pc(MOS6510 *cpu, addressing_mode_t mode);
 uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode);
 uint8_t fetch_operand(MOS6510 *cpu, addressing_mode_t mode);
 

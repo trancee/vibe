@@ -6,10 +6,7 @@ void LDA(MOS6510 *cpu) {
     cpu->A = fetch_operand(cpu, op->addr_mode);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
-    mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    if (op->addr_mode != ADDR_IMP && op->addr_mode != ADDR_IMM) {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    }
+    advance_pc(cpu, op->addr_mode);
 }
 
 void LDX(MOS6510 *cpu) {
@@ -17,10 +14,7 @@ void LDX(MOS6510 *cpu) {
     cpu->X = fetch_operand(cpu, op->addr_mode);
     set_flag_negative(cpu, cpu->X & 0x80);
     set_flag_zero(cpu, cpu->X == 0);
-    mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    if (op->addr_mode != ADDR_IMP && op->addr_mode != ADDR_IMM) {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    }
+    advance_pc(cpu, op->addr_mode);
 }
 
 void LDY(MOS6510 *cpu) {
@@ -28,10 +22,7 @@ void LDY(MOS6510 *cpu) {
     cpu->Y = fetch_operand(cpu, op->addr_mode);
     set_flag_negative(cpu, cpu->Y & 0x80);
     set_flag_zero(cpu, cpu->Y == 0);
-    mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    if (op->addr_mode != ADDR_IMP && op->addr_mode != ADDR_IMM) {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
-    }
+    advance_pc(cpu, op->addr_mode);
 }
 
 void STA(MOS6510 *cpu) {
@@ -418,82 +409,90 @@ void RTS(MOS6510 *cpu) {
 
 // Branch Operations
 void BCC(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (!get_flag_carry(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BCS(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (get_flag_carry(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BEQ(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (get_flag_zero(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BMI(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (get_flag_negative(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BNE(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (!get_flag_zero(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BPL(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (!get_flag_negative(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BVC(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (!get_flag_overflow(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 
 void BVS(MOS6510 *cpu) {
+    uint16_t pc = mos6510_get_pc(cpu);
     if (get_flag_overflow(cpu)) {
-        int8_t offset = (int8_t)fetch_operand(cpu, ADDR_REL);
-        uint16_t new_pc = mos6510_get_pc(cpu) + offset;
+        int8_t offset = (int8_t)cpu->memory[pc + 1];  // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;  // Offset relative to next instruction
         mos6510_set_pc(cpu, new_pc);
     } else {
-        mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+        mos6510_set_pc(cpu, pc + 2);  // Skip to next instruction
     }
 }
 

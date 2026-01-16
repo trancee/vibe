@@ -53,37 +53,37 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode) {
             return 0;  // Not used for implied addressing
             
         case ADDR_IMM:
-            return mos6510_get_pc(cpu);
+            return mos6510_get_pc(cpu) + 1;
             
         case ADDR_ZP:
-            return cpu->memory[mos6510_get_pc(cpu)];
+            return cpu->memory[mos6510_get_pc(cpu) + 1];
             
         case ADDR_ZPX:
-            return (cpu->memory[mos6510_get_pc(cpu)] + cpu->X) & 0xFF;
+            return (cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->X) & 0xFF;
             
         case ADDR_ZPY:
-            return (cpu->memory[mos6510_get_pc(cpu)] + cpu->Y) & 0xFF;
+            return (cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->Y) & 0xFF;
             
         case ADDR_ABS:
-            low_byte = cpu->memory[mos6510_get_pc(cpu)];
-            high_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
             return (high_byte << 8) | low_byte;
             
         case ADDR_ABSX:
-            low_byte = cpu->memory[mos6510_get_pc(cpu)];
-            high_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
             addr = (high_byte << 8) | low_byte;
             return addr + cpu->X;
             
         case ADDR_ABSY:
-            low_byte = cpu->memory[mos6510_get_pc(cpu)];
-            high_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
             addr = (high_byte << 8) | low_byte;
             return addr + cpu->Y;
             
         case ADDR_IND:
-            low_byte = cpu->memory[mos6510_get_pc(cpu)];
-            high_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
+            high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
             addr = (high_byte << 8) | low_byte;
             // 6502 bug: if page boundary crossed, high byte wraps
             if (low_byte == 0xFF) {
@@ -94,7 +94,7 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode) {
             
         case ADDR_INDX:
             {
-                uint8_t ptr = cpu->memory[mos6510_get_pc(cpu)] + cpu->X;
+                uint8_t ptr = cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->X;
                 low_byte = cpu->memory[ptr];
                 high_byte = cpu->memory[(ptr + 1) & 0xFF];
                 return (high_byte << 8) | low_byte;
@@ -102,7 +102,7 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode) {
             
         case ADDR_INDY:
             {
-                uint8_t ptr = cpu->memory[mos6510_get_pc(cpu)];
+                uint8_t ptr = cpu->memory[mos6510_get_pc(cpu) + 1];
                 low_byte = cpu->memory[ptr];
                 high_byte = cpu->memory[(ptr + 1) & 0xFF];
                 addr = (high_byte << 8) | low_byte;
@@ -110,10 +110,37 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode) {
             }
             
         case ADDR_REL:
-            return mos6510_get_pc(cpu);
+            return mos6510_get_pc(cpu) + 1;
             
         default:
             return 0;
+    }
+}
+
+void advance_pc(MOS6510 *cpu, addressing_mode_t mode) {
+    uint16_t pc = mos6510_get_pc(cpu);
+    switch (mode) {
+        case ADDR_IMP:
+        case ADDR_REL:
+            mos6510_set_pc(cpu, pc + 1);
+            break;
+        case ADDR_IMM:
+        case ADDR_ZP:
+        case ADDR_ZPX:
+        case ADDR_ZPY:
+            mos6510_set_pc(cpu, pc + 2);
+            break;
+        case ADDR_ABS:
+        case ADDR_ABSX:
+        case ADDR_ABSY:
+        case ADDR_IND:
+        case ADDR_INDX:
+        case ADDR_INDY:
+            mos6510_set_pc(cpu, pc + 3);
+            break;
+        default:
+            mos6510_set_pc(cpu, pc + 1);
+            break;
     }
 }
 
