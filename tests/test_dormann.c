@@ -50,7 +50,8 @@ typedef struct
 } test_case_t;
 
 static const test_case_t opcode_tests[] = {
-    {"6502_functional_test", 0x0400, 0x3469, 0x0200, 96247422}, // 05-jan-2020
+    {"6502_functional_test", 0x0400, 0x3469, 0x0200, 96247422},        // 05-jan-2020
+    {"65C02_extended_opcodes_test", 0x0400, 0x24F1, 0x0202, 95340970}, // 04-dec-2017
 };
 
 int main()
@@ -59,12 +60,13 @@ int main()
 
     for (size_t i = 0; i < sizeof(opcode_tests) / sizeof(opcode_tests[0]); i++)
     {
-        printf("--- %s\n", opcode_tests[i].test_name);
+        test_case_t test_case = opcode_tests[i];
+        printf("--- %s\n", test_case.test_name);
 
         MOS6510 *cpu = setup_cpu();
-        load_test(cpu->memory, opcode_tests[i].test_name);
+        load_test(cpu->memory, test_case.test_name);
 
-        mos6510_set_pc(cpu, opcode_tests[i].start_address);
+        mos6510_set_pc(cpu, test_case.start_address);
 
         int cycles = 0;
 
@@ -83,8 +85,8 @@ int main()
                 printf("Too many steps, stopping...\n");
                 break;
             }
-        } while (pc != mos6510_get_pc(cpu) && cycles < opcode_tests[i].exact_cycles &&
-                 mos6510_get_pc(cpu) != opcode_tests[i].end_address);
+        } while (pc != mos6510_get_pc(cpu) && cycles < test_case.exact_cycles &&
+                 mos6510_get_pc(cpu) != test_case.end_address);
 
         teardown_cpu(cpu);
 
