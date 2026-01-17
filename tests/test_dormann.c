@@ -17,21 +17,27 @@ static void teardown_cpu(MOS6510 *cpu)
     free(cpu);
 }
 
-void load_test(uint8_t memory, char *test_name)
+void load_test(uint8_t *memory, const char *test_name)
 {
     char test_path[256];
     snprintf(test_path, sizeof(test_path), "tests/dormann/%s.bin", test_name);
 
-    FILE *ptr = fopen(test_path, "rb");
-    if (ptr == NULL)
+    FILE *stream = fopen(test_path, "rb");
+    if (stream == NULL)
     {
         fprintf(stderr, "Error: Could not open test binary.\n");
         exit(1);
     }
 
-    fread(memory, sizeof(memory), 1, ptr);
+    uint8_t buffer[65536];
+    size_t read = fread(buffer, 1, sizeof(buffer), stream);
 
-    fclose(ptr);
+    for (size_t i = 0; i < read; i++)
+    {
+        memory[i] = buffer[i];
+    }
+
+    fclose(stream);
 }
 
 typedef struct
@@ -53,13 +59,36 @@ int main()
 
     for (size_t i = 0; i < sizeof(opcode_tests) / sizeof(opcode_tests[0]); i++)
     {
+        printf("--- %s\n", opcode_tests[i].test_name);
+
         MOS6510 *cpu = setup_cpu();
         load_test(cpu->memory, opcode_tests[i].test_name);
 
         mos6510_set_pc(cpu, opcode_tests[i].start_address);
-        uint8_t cycles = mos6510_step(cpu);
+
+        int cycles = 0;
+
+        int step = 1;
+        uint16_t pc;
+        do
+        {
+            pc = mos6510_get_pc(cpu);
+            uint8_t opcode = cpu->memory[pc];
+
+            cycles += mos6510_step(cpu);
+
+            step++;
+            if (step > 50000)
+            { // Safety limit
+                printf("Too many steps, stopping...\n");
+                break;
+            }
+        } while (pc != mos6510_get_pc(cpu) && cycles < opcode_tests[i].exact_cycles &&
+                 mos6510_get_pc(cpu) != opcode_tests[i].end_address);
 
         teardown_cpu(cpu);
+
+        // printf("cycles: %d\nexpected %d\n", cycles, opcode_tests[0].exact_cycles);
     }
 
     return 0;

@@ -9,21 +9,24 @@ BUILD_DIR = build
 SOURCES = $(SRC_DIR)/mos6510.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/opcode_table.c
 TEST_SOURCES = $(TEST_DIR)/test_opcodes.c
 TEST_DORMANN_SRC = $(TEST_DIR)/test_dormann.c
+TEST_NESTEST_SRC = $(TEST_DIR)/test_nestest.c
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_DORMANN_OBJ = $(TEST_DORMANN_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
+TEST_NESTEST_OBJ = $(TEST_NESTEST_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Executables
 LIB_NAME = $(BUILD_DIR)/libmos6510.a
 TEST_EXEC = $(BUILD_DIR)/test_opcodes
 TEST_DORMANN_BIN = $(BUILD_DIR)/test_dormann
+TEST_NESTEST_BIN = $(BUILD_DIR)/test_nestest
 EXAMPLE_EXEC = $(BUILD_DIR)/example
 
 .PHONY: all clean test run-test example run-example docs
 
-all: $(LIB_NAME) $(TEST_EXEC) $(TEST_DORMANN_BIN) $(EXAMPLE_EXEC)
+all: $(LIB_NAME) $(TEST_EXEC) $(TEST_DORMANN_BIN) $(TEST_NESTEST_BIN) $(EXAMPLE_EXEC)
 
 # Create build directory
 $(BUILD_DIR):
@@ -46,6 +49,8 @@ $(TEST_EXEC): $(OBJECTS) $(TEST_OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 $(TEST_DORMANN_BIN): $(OBJECTS) $(TEST_DORMANN_OBJ) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
+$(TEST_NESTEST_BIN): $(OBJECTS) $(TEST_NESTEST_OBJ) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 
 # Build example executable
 $(EXAMPLE_EXEC): $(OBJECTS) | $(BUILD_DIR)
@@ -62,6 +67,12 @@ test-dormann: $(TEST_DORMANN_BIN)
 	./$(TEST_DORMANN_BIN)
 
 run-test-dormann: test-dormann
+
+# Run NESTEST tests
+test-nestest: $(TEST_NESTEST_BIN)
+	./$(TEST_NESTEST_BIN)
+
+run-test-nestest: test-nestest
 
 # Run example
 example: $(EXAMPLE_EXEC)
@@ -94,6 +105,7 @@ help:
 	@echo "  all           - Build library, tests, and examples"
 	@echo "  test          - Run the test suite"
 	@echo "  test-dormann  - Run the Dormann test suite"
+	@echo "  test-nestest  - Run the NESTEST test suite"
 	@echo "  example       - Build and run example programs"
 	@echo "  clean         - Remove build artifacts"
 	@echo "  install       - Install library to system"
