@@ -212,10 +212,6 @@ int main()
         uint8_t opcode = cpu->memory[pc];
 
         cycles += mos6510_step(cpu);
-        if (opcode == 0x00)
-        {
-            break;
-        }
 
         step++;
         if (step > 1000000000)

@@ -203,17 +203,76 @@ static inline void set_flag_negative(MOS6510 *cpu, bool set)
 // Arithmetic operations
 static inline uint8_t add_with_carry(MOS6510 *cpu, uint8_t a, uint8_t b)
 {
-    uint16_t sum = a + b + get_flag_carry(cpu);
-    set_flag_carry(cpu, sum > 0xFF);
-    set_flag_overflow(cpu, ~(a ^ b) & (a ^ sum) & 0x80);
-    set_flag_negative(cpu, sum & 0x80);
-    set_flag_zero(cpu, (sum & 0xFF) == 0);
-    return sum & 0xFF;
+    uint8_t c = get_flag_carry(cpu);
+    uint16_t sum = a + b + c;
+
+    if (get_flag_decimal(cpu))
+    {
+        uint8_t lo = (a & 0x0F) + (b & 0x0F) + c;
+        uint16_t hi = (a & 0xF0) + (b & 0xF0);
+
+        // BCD fixup for lower nibble.
+        if (lo > 0x09)
+            lo += 0x06;
+        if (lo > 0x0F)
+            hi += 0x10;
+
+        // `Z` flag is not affected by decimal mode,
+        // it will be set if the binary operation would become zero, regardless of the BCD result.
+        set_flag_zero(cpu, (sum & 0xFF) == 0);
+
+        // The `N` and `V` flags are set after fixing the lower nibble but before fixing the upper one.
+        // They use the same logic as binary mode `ADC`.
+        set_flag_negative(cpu, hi & 0x80);
+        set_flag_overflow(cpu, (~(a ^ b) & (a ^ hi) & 0x80));
+
+        // BCD fixup for higher nibble.
+        if (hi > 0x90)
+            hi += 0x60;
+
+        // `C` flag works as a carry for multi-byte operations as expected.
+        set_flag_carry(cpu, hi > 0xFF);
+
+        return (hi & 0xF0) | (lo & 0x0F);
+    }
+    else
+    {
+        set_flag_carry(cpu, sum > 0xFF);
+        set_flag_overflow(cpu, ~(a ^ b) & (a ^ sum) & 0x80);
+        set_flag_negative(cpu, sum & 0x80);
+        set_flag_zero(cpu, (sum & 0xFF) == 0);
+        return sum & 0xFF;
+    }
 }
 
 static inline uint8_t subtract_with_borrow(MOS6510 *cpu, uint8_t a, uint8_t b)
 {
-    return add_with_carry(cpu, a, ~b);
+    uint8_t c = get_flag_carry(cpu);
+    uint16_t sum = a - b - (1 - c);
+
+    set_flag_carry(cpu, a - b - (1 - c) >= 0);
+    set_flag_overflow(cpu, (a ^ b) & (a ^ sum) & 0x80);
+    set_flag_negative(cpu, sum & 0x80);
+    set_flag_zero(cpu, (sum & 0xFF) == 0);
+
+    if (get_flag_decimal(cpu))
+    {
+        uint8_t lo = (a & 0x0F) - (b & 0x0F) - (1 - c);
+        uint16_t hi = (a & 0xF0) - (b & 0xF0);
+
+        if (lo & 0x10)
+        {
+            lo -= 0x06;
+            hi -= 0x10;
+        }
+
+        if (hi > 0xFF)
+            hi -= 0x60;
+
+        return (hi & 0xF0) | (lo & 0x0F);
+    }
+    else
+        return sum & 0xFF;
 }
 
 // Stack operations
