@@ -298,3 +298,16 @@ This project is released under the MIT License. See LICENSE file for details.
 - [6502 Opcode Reference](https://www.masswerk.at/6502/6502_instruction_set.html)
 - [6502.org](https://www.6502.org/)
 - [Commodore 64 Memory Map](https://www.c64-wiki.com/wiki/Memory_Map)
+
+# vsid
+
+Build vsid from VICE source code.
+
+## Prerequisites
+
+xa is a high-speed, two-pass portable cross-assembler.
+https://www.floodgap.com/retrotech/xa/dists/
+
+```bash
+sudo dnf install glib-devel glib2-devel SDL2-devel SDL2_image-devel curl-devel pulseaudio-libs-devel alsa-lib-devel libpng-devel
+```

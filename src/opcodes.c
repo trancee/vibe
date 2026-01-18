@@ -171,7 +171,7 @@ void PLA(MOS6510 *cpu)
 void PLP(MOS6510 *cpu)
 {
     // nestest requires that BREAK flag is cleared when pulling P
-    cpu->P = mos6510_pull(cpu) & ~FLAG_BREAK | FLAG_RESERVED;
+    cpu->P = (mos6510_pull(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
     mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
 }
 

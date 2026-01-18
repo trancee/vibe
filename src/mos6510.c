@@ -6,6 +6,34 @@
 #define read8() mos6510_read_byte(cpu, pc + 1)
 #define read16() mos6510_read_word(cpu, pc + 1)
 
+trap_t traps[] = {{}, {}, {}, {}, {}};
+
+bool add_trap(trap_t *trap)
+{
+    for (size_t i = 0; i < sizeof(traps) / sizeof(*traps); i++)
+    {
+        if (traps[i].handler == NULL || traps[i].address == trap->address)
+        {
+            printf("TRAP[%04X]=%p\n", trap->address, trap->handler);
+            traps[i].address = trap->address;
+            traps[i].handler = trap->handler;
+            return true;
+        }
+    }
+    return false;
+}
+handler_t find_trap(const uint16_t address)
+{
+    for (size_t i = 0; i < sizeof(traps) / sizeof(*traps); i++)
+    {
+        if (traps[i].address == address)
+        {
+            return traps[i].handler;
+        }
+    }
+    return NULL;
+}
+
 void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 {
     uint16_t pc = mos6510_get_pc(cpu);
@@ -99,7 +127,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, JMP, JSR, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
         printf(" $%04X", read16());
-        if (instruction->opcode == 0x20 || instruction->opcode == 0x4C || instruction->opcode == 0x6C) // JSR or JMP
+        if (instruction->execute == JSR || instruction->execute == JMP)
             printf("     ");
         else
             printf(" = %02X", mos6510_read_byte(cpu, read16()));
@@ -197,67 +225,96 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
     printf("\n");
 }
 
-void mos6510_init(MOS6510 *cpu)
+void mos6510_init(MOS6510 *cpu, bool debug)
 {
     memset(cpu, 0, sizeof(MOS6510));
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
+    cpu->debug = debug;
 }
 
 void mos6510_reset(MOS6510 *cpu)
 {
-    cpu->PC = cpu->memory[0xFFFC] | (cpu->memory[0xFFFD] << 8);
+    mos6510_reset_pc(cpu, mos6510_read_word(cpu, 0xFFFC));
+}
+void mos6510_reset_pc(MOS6510 *cpu, uint16_t addr)
+{
+    cpu->A = 0x00;
+    cpu->X = 0x00;
+    cpu->Y = 0x00;
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
+
+    mos6510_set_pc(cpu, addr);
 }
 
 uint16_t mos6510_get_pc(MOS6510 *cpu)
 {
-    return cpu->PC | (cpu->PCH << 8);
+    // return cpu->PC | (cpu->PCH << 8);
+    return cpu->pc;
 }
-
 void mos6510_set_pc(MOS6510 *cpu, uint16_t addr)
 {
-    cpu->PC = addr & 0xFF;
-    cpu->PCH = (addr >> 8) & 0xFF;
+    // cpu->PC = addr & 0xFF;
+    // cpu->PCH = (addr >> 8) & 0xFF;
+    cpu->pc = addr;
 }
 
 uint8_t mos6510_read_byte(MOS6510 *cpu, uint16_t addr)
 {
     return cpu->memory[addr];
 }
-
 uint16_t mos6510_read_word(MOS6510 *cpu, uint16_t addr)
 {
-    return cpu->memory[addr] | (cpu->memory[addr + 1] << 8);
+    return mos6510_read_byte(cpu, addr) | (mos6510_read_byte(cpu, addr + 1) << 8);
 }
-
 uint16_t mos6510_read_word_zp(MOS6510 *cpu, uint16_t addr)
 {
-    return cpu->memory[addr] | (cpu->memory[((addr + 1) & 0x00FF) | (addr & 0xFF00)] << 8);
+    return mos6510_read_byte(cpu, addr) | (mos6510_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
 }
 
 void mos6510_write_byte(MOS6510 *cpu, uint16_t addr, uint8_t data)
 {
     cpu->memory[addr] = data;
 }
+void mos6510_write_word(MOS6510 *cpu, uint16_t addr, uint16_t data)
+{
+    mos6510_write_byte(cpu, addr, data & 0xFF);
+    mos6510_write_byte(cpu, addr + 1, (data >> 8) & 0xFF);
+}
+
+void mos6510_write_data(MOS6510 *cpu, uint16_t addr, uint8_t data[], size_t size)
+{
+    for (size_t i = 0; i < size; i++)
+    {
+        mos6510_write_byte(cpu, addr + i, data[i]);
+    }
+}
 
 void mos6510_push(MOS6510 *cpu, uint8_t data)
 {
-    cpu->memory[0x0100 | cpu->SP] = data;
+    mos6510_write_byte(cpu, 0x0100 | cpu->SP, data);
     cpu->SP--;
 }
-
 void mos6510_push16(MOS6510 *cpu, uint16_t data)
 {
     mos6510_push(cpu, (data >> 8) & 0xFF);
     mos6510_push(cpu, data & 0xFF);
 }
-
 uint8_t mos6510_pull(MOS6510 *cpu)
 {
     cpu->SP++;
-    return cpu->memory[0x0100 | cpu->SP];
+    return mos6510_read_byte(cpu, 0x0100 | cpu->SP);
+}
+uint16_t mos6510_pull16(MOS6510 *cpu)
+{
+    return mos6510_pull(cpu) | (mos6510_pull(cpu) << 8);
+}
+
+bool mos6510_trap(MOS6510 *cpu, uint16_t addr, handler_t handler)
+{
+    trap_t trap = {addr, handler};
+    return add_trap(&trap);
 }
 
 uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
@@ -343,16 +400,14 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
 uint8_t fetch_operand(MOS6510 *cpu, addressing_mode_t mode)
 {
     uint16_t addr = get_operand_address(cpu, mode);
-    // if (mode == ADDR_IMM)
-    // {
-    //     return cpu->memory[addr];
-    // }
     return cpu->memory[addr];
 }
 
 uint8_t mos6510_step(MOS6510 *cpu)
 {
-    uint8_t opcode = cpu->memory[mos6510_get_pc(cpu)];
+    uint16_t pc = mos6510_get_pc(cpu);
+
+    uint8_t opcode = cpu->memory[pc];
     const instruction_t *instruction = &instructions[opcode];
 
     // if (op->execute == NOP) {
@@ -383,10 +438,15 @@ uint8_t mos6510_step(MOS6510 *cpu)
     //     return op->cycles;
     // }
 
-    dump_step(cpu, instruction);
+    if (cpu->debug)
+        dump_step(cpu, instruction);
 
-    uint16_t pc = mos6510_get_pc(cpu);
+    // uint16_t pc = mos6510_get_pc(cpu);
     instruction->execute(cpu);
+
+    handler_t handler = find_trap(pc);
+    if (handler != NULL)
+        handler(cpu);
 
     // if (mos6510_get_pc(cpu) != pc + instruction->size)
     // {

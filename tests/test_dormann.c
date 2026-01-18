@@ -4,11 +4,13 @@
 #include <string.h>
 #include <assert.h>
 
+#define DEBUG true
+
 // Helper functions
 static MOS6510 *setup_cpu()
 {
     MOS6510 *cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu);
+    mos6510_init(cpu, DEBUG);
     return cpu;
 }
 
@@ -56,12 +58,12 @@ static const test_case_t opcode_tests[] = {
 
 int main()
 {
-    printf("=== MOS 6510 Dormann Test Suite ===\n\n");
+    printf("=== MOS 6510 Dormann Test Suite ===\n");
 
     for (size_t i = 0; i < sizeof(opcode_tests) / sizeof(opcode_tests[0]); i++)
     {
         test_case_t test_case = opcode_tests[i];
-        printf("--- %s\n", test_case.test_name);
+        printf("\n--- %s\n", test_case.test_name);
 
         MOS6510 *cpu = setup_cpu();
         load_test(cpu->memory, test_case.test_name);
@@ -72,9 +74,16 @@ int main()
 
         int step = 1;
         uint16_t pc;
+        uint8_t last_test = -1;
         do
         {
             pc = mos6510_get_pc(cpu);
+            if (cpu->memory[test_case.test_case_address] != last_test)
+            {
+                last_test = cpu->memory[test_case.test_case_address];
+                printf("test case #$%02X at $%04X\n", last_test, pc);
+            }
+
             uint8_t opcode = cpu->memory[pc];
 
             cycles += mos6510_step(cpu);
@@ -88,9 +97,17 @@ int main()
         } while (pc != mos6510_get_pc(cpu) && cycles < test_case.exact_cycles &&
                  mos6510_get_pc(cpu) != test_case.end_address);
 
-        teardown_cpu(cpu);
+        printf("---\n");
+        if (mos6510_get_pc(cpu) == test_case.end_address)
+        {
+            printf("test passed\n");
+        }
+        else
+        {
+            printf("test failed at $%04X\n", mos6510_get_pc(cpu));
+        }
 
-        // printf("cycles: %d\nexpected %d\n", cycles, opcode_tests[0].exact_cycles);
+        teardown_cpu(cpu);
     }
 
     return 0;

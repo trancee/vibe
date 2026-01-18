@@ -4,6 +4,8 @@
 #include <string.h>
 #include <assert.h>
 
+#define DEBUG true
+
 #define START_ADDRESS 0xC000
 #define END_ADDRESS 0x0800
 #define PAYLOAD_LENGTH 0x4000
@@ -30,7 +32,7 @@
 static MOS6510 *setup_cpu()
 {
     MOS6510 *cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu);
+    mos6510_init(cpu, DEBUG);
     return cpu;
 }
 
@@ -97,9 +99,11 @@ int main()
     } while (pc != mos6510_get_pc(cpu) && cycles < EXACT_CYCLES &&
              mos6510_get_pc(cpu) != END_ADDRESS);
 
-    teardown_cpu(cpu);
+    printf("---\n");
+    printf("$02 #$%02X %s\n", cpu->memory[0x02], cpu->memory[0x02] == 0x00 ? "OK" : "FAIL");
+    printf("$03 #$%02X %s\n", cpu->memory[0x03], cpu->memory[0x03] == 0x00 ? "OK" : "FAIL");
 
-    // printf("cycles: %d\nexpected %d\n", cycles, opcode_tests[0].exact_cycles);
+    teardown_cpu(cpu);
 
     return 0;
 }
