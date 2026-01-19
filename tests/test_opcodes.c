@@ -25,7 +25,7 @@ static int total_tests = 0;
 // Helper functions
 static MOS6510* setup_cpu() {
     MOS6510* cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu);
+    mos6510_init(cpu, false);
     return cpu;
 }
 

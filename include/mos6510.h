@@ -86,15 +86,15 @@ typedef enum
                      /// This form of addressing is used in conjunction with the `X` index register.
                      /// The effective address is calculated by adding the second byte to the contents of the index register.
                      /// Since this is a form of "Zero Page" addressing, the content of the second byte references a location in page zero.
-                     /// Additionally, due to the “Zero Page" addressing nature of this mode, no carry is added to the high order 8 bits of memory and crossing of page boundaries does not occur.
+                     /// Additionally, due to the "Zero Page" addressing nature of this mode, no carry is added to the high order 8 bits of memory and crossing of page boundaries does not occur.
     ZeroPageX,       // 11
                      /// Y-Indexed Zero Page  $nn,Y
                      /// This form of addressing is used in conjunction with the `Y` index register.
                      /// The effective address is calculated by adding the second byte to the contents of the index register.
                      /// Since this is a form of "Zero Page" addressing, the content of the second byte references a location in page zero.
-                     /// Additionally, due to the “Zero Page" addressing nature of this mode, no carry is added to the high order 8 bits of memory and crossing of page boundaries does not occur.
+                     /// Additionally, due to the "Zero Page" addressing nature of this mode, no carry is added to the high order 8 bits of memory and crossing of page boundaries does not occur.
     ZeroPageY,       // 12
-} mode_t;
+} addr_mode_t;
 
 // Opcode structure
 typedef struct
@@ -111,7 +111,7 @@ typedef struct
     uint8_t opcode;
     char name[4];
     void (*execute)(MOS6510 *cpu);
-    mode_t mode;
+    addr_mode_t mode;
     uint8_t size;
     uint8_t cycles;
     bool illegal;
