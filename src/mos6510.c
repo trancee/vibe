@@ -14,7 +14,6 @@ bool add_trap(trap_t *trap)
     {
         if (traps[i].handler == NULL || traps[i].address == trap->address)
         {
-            printf("TRAP[%04X]=%p\n", trap->address, trap->handler);
             traps[i].address = trap->address;
             traps[i].handler = trap->handler;
             return true;
@@ -403,8 +402,58 @@ uint8_t fetch_operand(CPU *cpu, addressing_mode_t mode)
     return cpu->memory[addr];
 }
 
+/// triggers a NMI IRQ in the processor
+/// this is very similar to the BRK instruction
+void cpu_nmi(CPU *cpu)
+{
+    printf("*** NMI $%04X #$%04X\n", NMI, cpu_read_word(cpu, NMI));
+
+    cpu_push16(cpu, cpu_get_pc(cpu));
+    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
+
+    set_flag_interrupt(cpu, true);
+
+    cpu_set_pc(cpu, cpu_read_word(cpu, NMI));
+}
+
+/// triggers a normal IRQ
+/// this is very similar to the BRK instruction
+void cpu_irq(CPU *cpu)
+{
+    printf("*** IRQ $%04X #$%04X\n", IRQ, cpu_read_word(cpu, IRQ));
+
+    cpu_push16(cpu, cpu_get_pc(cpu));
+    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
+
+    set_flag_interrupt(cpu, true);
+
+    cpu_set_pc(cpu, cpu_read_word(cpu, IRQ));
+}
+
+bool cpu_interrupts(CPU *cpu)
+{
+    if (cpu->nmi)
+    {
+        cpu->nmi = false;
+        cpu_nmi(cpu);
+        return true;
+    }
+    else if (cpu->irq && !cpu->has_interrupts)
+    {
+        cpu->irq = false;
+        cpu_irq(cpu);
+        return true;
+    }
+    return false;
+}
+
 uint8_t cpu_step(CPU *cpu)
 {
+    if (cpu_interrupts(cpu))
+    {
+        return 7; // IRQ/NMI interrupt handling takes 7 cycles
+    }
+
     uint16_t pc = cpu_get_pc(cpu);
 
     uint8_t opcode = cpu->memory[pc];

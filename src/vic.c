@@ -380,7 +380,7 @@ void vic_render_line(VIC *vic, uint16_t raster_line)
     }
     else
     {
-        vic_render_text_line(vic, display_line, multicolor_mode);
+        // vic_render_text_line(vic, display_line, multicolor_mode);
     }
 
     // Render sprites

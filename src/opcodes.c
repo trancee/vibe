@@ -739,22 +739,20 @@ void SEI(CPU *cpu)
 // System Operations
 void BRK(CPU *cpu)
 {
-    cpu_push(cpu, (cpu_get_pc(cpu) >> 8) & 0xFF);
-    cpu_push(cpu, cpu_get_pc(cpu) & 0xFF);
-    cpu_push(cpu, cpu->P | FLAG_BREAK);
+    cpu_push16(cpu, cpu_get_pc(cpu) + 2);
+    cpu_push(cpu, cpu->P | FLAG_RESERVED | FLAG_BREAK);
 
     set_flag_interrupt(cpu, true);
 
-    uint16_t addr = cpu->memory[0xFFFE] | (cpu->memory[0xFFFF] << 8);
+    uint16_t addr = cpu_read_word(cpu, IRQ);
     cpu_set_pc(cpu, addr);
 }
 
 void RTI(CPU *cpu)
 {
-    cpu->P = cpu_pull(cpu) | FLAG_RESERVED;
-    uint8_t low_byte = cpu_pull(cpu);
-    uint8_t high_byte = cpu_pull(cpu);
-    uint16_t addr = (high_byte << 8) | low_byte;
+    cpu->P = (cpu_pull(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
+
+    uint16_t addr = cpu_pull16(cpu);
     cpu_set_pc(cpu, addr);
 }
 

@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define DEBUG true
+
 int main() {
     printf("=== MOS 6510 CPU Example ===\n\n");
     
     // Initialize CPU
     CPU cpu;
-    cpu_init(&cpu);
+    cpu_init(&cpu, DEBUG);
     
     printf("Initial CPU state:\n");
     printf("  PC: $%04X\n", cpu_get_pc(&cpu));

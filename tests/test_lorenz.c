@@ -1,4 +1,4 @@
-#include "../include/mos6510.h"
+#include "../include/c64.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,28 +93,20 @@ void ready_handler(CPU *cpu)
     abort();
 }
 
-static CPU *setup_cpu()
+void setup_c64(C64 *c64)
 {
-    CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, DEBUG);
+    c64_init(c64, DEBUG);
 
     // Print Character
-    cpu_trap(cpu, 0xFFD2, print_handler);
+    c64_trap(c64, 0xFFD2, print_handler);
     // Load
-    cpu_trap(cpu, 0xE16F, load_handler);
+    c64_trap(c64, 0xE16F, load_handler);
     // Exit
-    cpu_trap(cpu, 0x8000, warm_handler);
-    cpu_trap(cpu, 0xA474, ready_handler);
-
-    return cpu;
+    c64_trap(c64, 0x8000, warm_handler);
+    c64_trap(c64, 0xA474, ready_handler);
 }
 
-static void teardown_cpu(CPU *cpu)
-{
-    free(cpu);
-}
-
-uint8_t irq[] = {
+uint8_t irq_handler[] = {
     0x48, // PHA
     0x8A, // TXA
     0x48, // PHA
@@ -140,7 +132,7 @@ void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
     cpu_write_data(cpu, addr, data, size);
 
-    cpu_write_data(cpu, 0xFF48, irq, sizeof(irq));
+    cpu_write_data(cpu, 0xFF48, irq_handler, sizeof(irq_handler));
 
     cpu_write_byte(cpu, R6510, 0x04); // VIC
     cpu_write_byte(cpu, UNUSED, 0x00);
@@ -197,10 +189,11 @@ int main()
 {
     printf("=== MOS 6510 Lorenz Test Suite ===\n");
 
-    CPU *cpu = setup_cpu();
+    C64 c64;
+    setup_c64(&c64);
 
-    uint16_t addr = load_testcase(cpu, TESTCASE);
-    cpu_reset_pc(cpu, addr);
+    uint16_t addr = load_testcase(&c64.cpu, TESTCASE);
+    c64_reset_pc(&c64, addr);
 
     int cycles = 0;
 
@@ -208,10 +201,10 @@ int main()
     uint16_t pc;
     do
     {
-        pc = cpu_get_pc(cpu);
-        uint8_t opcode = cpu->memory[pc];
+        pc = c64_get_pc(&c64);
+        uint8_t opcode = c64_get_pc(&c64);
 
-        cycles += cpu_step(cpu);
+        cycles += c64_step(&c64);
 
         step++;
         if (step > 1000000000)
@@ -219,11 +212,9 @@ int main()
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != cpu_get_pc(cpu) && cycles < 10000000000);
+    } while (pc != c64_get_pc(&c64) && cycles < 10000000000);
 
     printf("cycles: %d\n", cycles);
-
-    teardown_cpu(cpu);
 
     return 0;
 }

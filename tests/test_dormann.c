@@ -4,13 +4,34 @@
 #include <string.h>
 #include <assert.h>
 
-#define DEBUG true
+#define DEBUG false
+
+void reset_handler(CPU *cpu)
+{
+    printf("\u{1B}[31;1;6mRESET\u{1B}[0m");
+    abort();
+}
+void nmi_handler(CPU *cpu)
+{
+    printf("\u{1B}[31;1;6mNMI\u{1B}[0m");
+    abort();
+}
+void irq_handler(CPU *cpu)
+{
+    printf("\u{1B}[31;1;6mIRQ\u{1B}[0m");
+    abort();
+}
 
 // Helper functions
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
     cpu_init(cpu, DEBUG);
+
+    cpu_trap(cpu, RESET, reset_handler);
+    cpu_trap(cpu, NMI, nmi_handler);
+    cpu_trap(cpu, IRQ, irq_handler);
+
     return cpu;
 }
 
@@ -89,7 +110,7 @@ int main()
             cycles += cpu_step(cpu);
 
             step++;
-            if (step > 50000)
+            if (step > 100000000)
             { // Safety limit
                 printf("Too many steps, stopping...\n");
                 break;

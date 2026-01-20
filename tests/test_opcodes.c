@@ -9,58 +9,70 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 static int total_tests = 0;
 
-#define TEST_ASSERT(condition, message) do { \
-    total_tests++; \
-    if (condition) { \
-        tests_passed++; \
-        printf("✓ %s\n", message); \
-    } else { \
-        tests_failed++; \
-        printf("✗ %s\n", message); \
-    } \
-} while(0)
+#define TEST_ASSERT(condition, message) \
+    do                                  \
+    {                                   \
+        total_tests++;                  \
+        if (condition)                  \
+        {                               \
+            tests_passed++;             \
+            printf("✓ %s\n", message);  \
+        }                               \
+        else                            \
+        {                               \
+            tests_failed++;             \
+            printf("✗ %s\n", message);  \
+        }                               \
+    } while (0)
 
 #define TEST_ASSERT_EQ(expected, actual, message) TEST_ASSERT((expected) == (actual), message)
 
 // Helper functions
-static CPU* setup_cpu() {
-    CPU* cpu = malloc(sizeof(CPU));
+static CPU *setup_cpu()
+{
+    CPU *cpu = malloc(sizeof(CPU));
     cpu_init(cpu, false);
     return cpu;
 }
 
-static void teardown_cpu(CPU* cpu) {
+static void teardown_cpu(CPU *cpu)
+{
     free(cpu);
 }
 
-static void write_instruction(CPU* cpu, uint16_t addr, const uint8_t* bytes, int len) {
-    for (int i = 0; i < len; i++) {
+static void write_instruction(CPU *cpu, uint16_t addr, const uint8_t *bytes, int len)
+{
+    for (int i = 0; i < len; i++)
+    {
         cpu->memory[addr + i] = bytes[i];
     }
     cpu_set_pc(cpu, addr);
 }
 
 // Test data structures
-typedef struct {
+typedef struct
+{
     uint8_t opcode;
     char name[4];
-    void (*test_func)(CPU*);
+    void (*test_func)(CPU *);
 } test_case_t;
 
 // Individual opcode tests
-static void test_ADC_imm(CPU* cpu) {
+static void test_ADC_imm(CPU *cpu)
+{
     cpu->A = 0x50;
-    uint8_t instr[] = {0x69, 0x30};  // ADC #$30
+    uint8_t instr[] = {0x69, 0x30}; // ADC #$30
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x80, cpu->A, "ADC immediate sets accumulator");
     TEST_ASSERT_EQ(false, get_flag_carry(cpu), "ADC immediate clears carry when no overflow");
 }
 
-static void test_ADC_imm_with_carry(CPU* cpu) {
+static void test_ADC_imm_with_carry(CPU *cpu)
+{
     set_flag_carry(cpu, true);
     cpu->A = 0xFF;
-    uint8_t instr[] = {0x69, 0x01};  // ADC #$01
+    uint8_t instr[] = {0x69, 0x01}; // ADC #$01
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x01, cpu->A, "ADC immediate with carry wraps around");
@@ -69,9 +81,10 @@ static void test_ADC_imm_with_carry(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_negative(cpu), "ADC immediate clears negative flag");
 }
 
-static void test_AND_imm(CPU* cpu) {
+static void test_AND_imm(CPU *cpu)
+{
     cpu->A = 0xFF;
-    uint8_t instr[] = {0x29, 0x0F};  // AND #$0F
+    uint8_t instr[] = {0x29, 0x0F}; // AND #$0F
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x0F, cpu->A, "AND immediate performs bitwise AND");
@@ -79,9 +92,10 @@ static void test_AND_imm(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "AND immediate clears zero flag");
 }
 
-static void test_ASL_acc(CPU* cpu) {
+static void test_ASL_acc(CPU *cpu)
+{
     cpu->A = 0x80;
-    uint8_t instr[] = {0x0A};  // ASL A
+    uint8_t instr[] = {0x0A}; // ASL A
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x00, cpu->A, "ASL accumulator shifts left");
@@ -89,43 +103,48 @@ static void test_ASL_acc(CPU* cpu) {
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "ASL accumulator sets zero flag");
 }
 
-static void test_ASL_zp(CPU* cpu) {
+static void test_ASL_zp(CPU *cpu)
+{
     cpu->memory[0x0010] = 0x01;
-    uint8_t instr[] = {0x06, 0x10};  // ASL $10
+    uint8_t instr[] = {0x06, 0x10}; // ASL $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x02, cpu->memory[0x0010], "ASL zero page shifts memory left");
     TEST_ASSERT_EQ(false, get_flag_carry(cpu), "ASL zero page clears carry");
 }
 
-static void test_BCC_taken(CPU* cpu) {
+static void test_BCC_taken(CPU *cpu)
+{
     set_flag_carry(cpu, false);
-    uint8_t instr[] = {0x90, 0x10};  // BCC $10
+    uint8_t instr[] = {0x90, 0x10}; // BCC $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x1012, cpu_get_pc(cpu), "BCC taken when carry clear");
 }
 
-static void test_BCC_not_taken(CPU* cpu) {
+static void test_BCC_not_taken(CPU *cpu)
+{
     set_flag_carry(cpu, true);
-    uint8_t instr[] = {0x90, 0x10};  // BCC $10
+    uint8_t instr[] = {0x90, 0x10}; // BCC $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x1002, cpu_get_pc(cpu), "BCC not taken when carry set");
 }
 
-static void test_BEQ_taken(CPU* cpu) {
+static void test_BEQ_taken(CPU *cpu)
+{
     set_flag_zero(cpu, true);
-    uint8_t instr[] = {0xF0, 0x08};  // BEQ $08
+    uint8_t instr[] = {0xF0, 0x08}; // BEQ $08
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x100A, cpu_get_pc(cpu), "BEQ taken when zero set");
 }
 
-static void test_BIT_zp(CPU* cpu) {
+static void test_BIT_zp(CPU *cpu)
+{
     cpu->A = 0x40;
     cpu->memory[0x0020] = 0xC0;
-    uint8_t instr[] = {0x24, 0x20};  // BIT $20
+    uint8_t instr[] = {0x24, 0x20}; // BIT $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "BIT sets zero flag based on AND result");
@@ -133,9 +152,10 @@ static void test_BIT_zp(CPU* cpu) {
     TEST_ASSERT_EQ(true, get_flag_overflow(cpu), "BIT copies bit 6 to overflow flag");
 }
 
-static void test_CMP_imm_equal(CPU* cpu) {
+static void test_CMP_imm_equal(CPU *cpu)
+{
     cpu->A = 0x50;
-    uint8_t instr[] = {0xC9, 0x50};  // CMP #$50
+    uint8_t instr[] = {0xC9, 0x50}; // CMP #$50
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "CMP sets carry when A >= operand");
@@ -143,18 +163,20 @@ static void test_CMP_imm_equal(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_negative(cpu), "CMP clears negative when result >= 0");
 }
 
-static void test_DEX(CPU* cpu) {
+static void test_DEX(CPU *cpu)
+{
     cpu->X = 0x01;
-    uint8_t instr[] = {0xCA};  // DEX
+    uint8_t instr[] = {0xCA}; // DEX
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x00, cpu->X, "DEX decrements X register");
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "DEX sets zero flag");
 }
 
-static void test_INX(CPU* cpu) {
+static void test_INX(CPU *cpu)
+{
     cpu->X = 0x7F;
-    uint8_t instr[] = {0xE8};  // INX
+    uint8_t instr[] = {0xE8}; // INX
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x80, cpu->X, "INX increments X register");
@@ -162,16 +184,18 @@ static void test_INX(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "INX clears zero flag");
 }
 
-static void test_JMP_abs(CPU* cpu) {
-    uint8_t instr[] = {0x4C, 0x00, 0x20};  // JMP $2000
+static void test_JMP_abs(CPU *cpu)
+{
+    uint8_t instr[] = {0x4C, 0x00, 0x20}; // JMP $2000
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x2000, cpu_get_pc(cpu), "JMP absolute jumps to address");
 }
 
-static void test_JSR(CPU* cpu) {
+static void test_JSR(CPU *cpu)
+{
     cpu->SP = 0xFF;
-    uint8_t instr[] = {0x20, 0x34, 0x12};  // JSR $1234
+    uint8_t instr[] = {0x20, 0x34, 0x12}; // JSR $1234
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x1234, cpu_get_pc(cpu), "JSR jumps to subroutine");
@@ -180,8 +204,9 @@ static void test_JSR(CPU* cpu) {
     TEST_ASSERT_EQ(0x02, cpu->memory[0x01FE], "JSR pushes low byte of return address");
 }
 
-static void test_LDA_imm(CPU* cpu) {
-    uint8_t instr[] = {0xA9, 0x42};  // LDA #$42
+static void test_LDA_imm(CPU *cpu)
+{
+    uint8_t instr[] = {0xA9, 0x42}; // LDA #$42
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->A, "LDA immediate loads accumulator");
@@ -189,8 +214,9 @@ static void test_LDA_imm(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "LDA immediate clears zero flag");
 }
 
-static void test_LDX_imm(CPU* cpu) {
-    uint8_t instr[] = {0xA2, 0x80};  // LDX #$80
+static void test_LDX_imm(CPU *cpu)
+{
+    uint8_t instr[] = {0xA2, 0x80}; // LDX #$80
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x80, cpu->X, "LDX immediate loads X register");
@@ -198,8 +224,9 @@ static void test_LDX_imm(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "LDX immediate clears zero flag");
 }
 
-static void test_LDY_imm(CPU* cpu) {
-    uint8_t instr[] = {0xA0, 0x00};  // LDY #$00
+static void test_LDY_imm(CPU *cpu)
+{
+    uint8_t instr[] = {0xA0, 0x00}; // LDY #$00
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x00, cpu->Y, "LDY immediate loads Y register");
@@ -207,9 +234,10 @@ static void test_LDY_imm(CPU* cpu) {
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "LDY immediate sets zero flag");
 }
 
-static void test_LSR_acc(CPU* cpu) {
+static void test_LSR_acc(CPU *cpu)
+{
     cpu->A = 0x01;
-    uint8_t instr[] = {0x4A};  // LSR A
+    uint8_t instr[] = {0x4A}; // LSR A
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x00, cpu->A, "LSR accumulator shifts right");
@@ -217,18 +245,20 @@ static void test_LSR_acc(CPU* cpu) {
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "LSR accumulator sets zero flag");
 }
 
-static void test_NOP(CPU* cpu) {
+static void test_NOP(CPU *cpu)
+{
     uint16_t pc = 0x1000;
     cpu_set_pc(cpu, pc);
-    uint8_t instr[] = {0xEA};  // NOP
+    uint8_t instr[] = {0xEA}; // NOP
     write_instruction(cpu, pc, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(pc + 1, cpu_get_pc(cpu), "NOP increments PC");
 }
 
-static void test_ORA_imm(CPU* cpu) {
+static void test_ORA_imm(CPU *cpu)
+{
     cpu->A = 0x30;
-    uint8_t instr[] = {0x09, 0x81};  // ORA #$81
+    uint8_t instr[] = {0x09, 0x81}; // ORA #$81
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0xB1, cpu->A, "ORA immediate performs bitwise OR");
@@ -236,89 +266,161 @@ static void test_ORA_imm(CPU* cpu) {
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "ORA immediate clears zero flag");
 }
 
-static void test_PHA_PLA(CPU* cpu) {
+static void test_PHA_PLA(CPU *cpu)
+{
     cpu->A = 0x42;
     cpu->SP = 0xFF;
-    
+
     // Test PHA
-    uint8_t instr_pha[] = {0x48};  // PHA
+    uint8_t instr_pha[] = {0x48}; // PHA
     write_instruction(cpu, 0x1000, instr_pha, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0xFE, cpu->SP, "PHA decrements stack pointer");
     TEST_ASSERT_EQ(0x42, cpu->memory[0x01FF], "PHA stores accumulator on stack");
-    
+
     // Test PLA
     cpu->A = 0x00;
-    uint8_t instr_pla[] = {0x68};  // PLA
+    uint8_t instr_pla[] = {0x68}; // PLA
     write_instruction(cpu, 0x1001, instr_pla, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0xFF, cpu->SP, "PLA increments stack pointer");
     TEST_ASSERT_EQ(0x42, cpu->A, "PLA restores accumulator from stack");
 }
 
-static void test_RTS(CPU* cpu) {
+static void test_RTS(CPU *cpu)
+{
     cpu->SP = 0xFD;
     cpu->memory[0x01FF] = 0x10;
     cpu->memory[0x01FE] = 0x02;
-    
-    uint8_t instr[] = {0x60};  // RTS
+
+    uint8_t instr[] = {0x60}; // RTS
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x1003, cpu_get_pc(cpu), "RTS pulls return address and adds 1");
     TEST_ASSERT_EQ(0xFF, cpu->SP, "RTS increments stack pointer");
 }
 
-static void test_SBC_imm(CPU* cpu) {
+static void test_SBC_imm(CPU *cpu)
+{
     set_flag_carry(cpu, true);
     cpu->A = 0x50;
-    uint8_t instr[] = {0xE9, 0x30};  // SBC #$30
+    uint8_t instr[] = {0xE9, 0x30}; // SBC #$30
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x20, cpu->A, "SBC immediate performs subtraction");
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SBC immediate sets carry when no borrow");
 }
 
-static void test_STA_zp(CPU* cpu) {
+static void test_STA_zp(CPU *cpu)
+{
     cpu->A = 0x42;
-    uint8_t instr[] = {0x85, 0x20};  // STA $20
+    uint8_t instr[] = {0x85, 0x20}; // STA $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->memory[0x0020], "STA zero page stores accumulator");
 }
 
-static void test_TAX_TAY(CPU* cpu) {
+static void test_TAX_TAY(CPU *cpu)
+{
     cpu->A = 0x80;
-    
+
     // Test TAX
-    uint8_t instr_tax[] = {0xAA};  // TAX
+    uint8_t instr_tax[] = {0xAA}; // TAX
     write_instruction(cpu, 0x1000, instr_tax, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x80, cpu->X, "TAX transfers A to X");
     TEST_ASSERT_EQ(true, get_flag_negative(cpu), "TAX sets negative flag");
-    
+
     // Test TAY
-    uint8_t instr_tay[] = {0xA8};  // TAY
+    uint8_t instr_tay[] = {0xA8}; // TAY
     write_instruction(cpu, 0x1001, instr_tay, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x80, cpu->Y, "TAY transfers A to Y");
     TEST_ASSERT_EQ(true, get_flag_negative(cpu), "TAY sets negative flag");
 }
 
-static void test_TSX_TXS(CPU* cpu) {
+static void test_TSX_TXS(CPU *cpu)
+{
     cpu->SP = 0x42;
-    
+
     // Test TSX
-    uint8_t instr_tsx[] = {0xBA};  // TSX
+    uint8_t instr_tsx[] = {0xBA}; // TSX
     write_instruction(cpu, 0x1000, instr_tsx, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->X, "TSX transfers SP to X");
-    
+
     // Test TXS
     cpu->X = 0xFF;
-    uint8_t instr_txs[] = {0x9A};  // TXS
+    uint8_t instr_txs[] = {0x9A}; // TXS
     write_instruction(cpu, 0x1001, instr_txs, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0xFF, cpu->SP, "TXS transfers X to SP");
+}
+
+static void test_BRK(CPU *cpu)
+{
+    cpu->P = FLAG_RESERVED;
+
+    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+
+    // $C000 BRK
+    cpu_write_byte(cpu, 0xC000, 0x00); // BRK opcode
+
+    cpu_set_pc(cpu, 0xC000);
+
+    TEST_ASSERT_EQ(7, cpu_step(cpu), "BRK takes 7 cycles");
+    TEST_ASSERT_EQ(0xABCD, cpu_get_pc(cpu), "BRK sets PC to IRQ vector");
+    TEST_ASSERT_EQ(0xFC, cpu->SP, "BRK pushes PC and P to stack");
+    TEST_ASSERT_EQ(0x02, cpu->memory[PCL], "BRK pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC0, cpu->memory[PCH], "BRK pushes high byte of PC");
+    TEST_ASSERT_EQ(0xC002, cpu_read_word(cpu, 0x01FE), "BRK pushes correct PC onto stack");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_BREAK, cpu->memory[0x01FD], "BRK pushes P with BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "BRK sets INTERRUPT flag in P");
+    printf("PC:%04X\n", cpu_read_word(cpu, 0x01FE));
+}
+
+static void test_IRQ(CPU *cpu)
+{
+    cpu->P = FLAG_RESERVED;
+
+    cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
+    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+
+    cpu_set_pc(cpu, 0xC123);
+
+    cpu->irq = true;
+
+    TEST_ASSERT_EQ(7, cpu_step(cpu), "IRQ takes 7 cycles");
+    TEST_ASSERT_EQ(0xABCD, cpu_get_pc(cpu), "IRQ sets PC to IRQ vector");
+    TEST_ASSERT_EQ(0xFC, cpu->SP, "IRQ pushes PC and P to stack");
+    TEST_ASSERT_EQ(0x23, cpu->memory[PCL], "IRQ pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC1, cpu->memory[PCH], "IRQ pushes high byte of PC");
+    TEST_ASSERT_EQ(0xC123, cpu_read_word(cpu, 0x01FE), "IRQ pushes correct PC onto stack");
+    TEST_ASSERT_EQ(FLAG_RESERVED, cpu->memory[0x01FD], "IRQ pushes P without BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "IRQ sets INTERRUPT flag in P");
+    printf("PC:%04X\n", cpu_read_word(cpu, 0x01FE));
+}
+
+static void test_NMI(CPU *cpu)
+{
+    cpu->P = FLAG_RESERVED;
+
+    cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
+    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+
+    cpu_set_pc(cpu, 0xC123);
+
+    cpu->nmi = true;
+
+    TEST_ASSERT_EQ(7, cpu_step(cpu), "NMI takes 7 cycles");
+    TEST_ASSERT_EQ(0x7788, cpu_get_pc(cpu), "NMI sets PC to NMI vector");
+    TEST_ASSERT_EQ(0xFC, cpu->SP, "NMI pushes PC and P to stack");
+    TEST_ASSERT_EQ(0x23, cpu->memory[PCL], "NMI pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC1, cpu->memory[PCH], "NMI pushes high byte of PC");
+    TEST_ASSERT_EQ(0xC123, cpu_read_word(cpu, 0x01FE), "NMI pushes correct PC onto stack");
+    TEST_ASSERT_EQ(FLAG_RESERVED, cpu->memory[0x01FD], "NMI pushes P without BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "NMI sets INTERRUPT flag in P");
+    printf("PC:%04X\n", cpu_read_word(cpu, 0x01FE));
 }
 
 // Test array for all opcodes
@@ -352,158 +454,172 @@ static const test_case_t opcode_tests[] = {
     {0xA8, "TAY", test_TAX_TAY},
     {0xBA, "TSX", test_TSX_TXS},
     {0x9A, "TXS", test_TSX_TXS},
+    {0x00, "BRK", test_BRK},
+    {0x00, "IRQ", test_IRQ},
+    {0x00, "NMI", test_NMI},
 };
 
 // Comprehensive addressing mode tests
-static void test_addressing_modes() {
-    CPU* cpu = setup_cpu();
-    
+static void test_addressing_modes()
+{
+    CPU *cpu = setup_cpu();
+
     // Test immediate addressing
-    cpu->memory[0x1000] = 0xA9;  // LDA immediate
+    cpu->memory[0x1000] = 0xA9; // LDA immediate
     cpu->memory[0x1001] = 0x42;
     cpu_set_pc(cpu, 0x1000);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->A, "Immediate addressing loads correct value");
-    
+
     // Test zero page addressing
-    cpu->memory[0x1010] = 0xA5;  // LDA zero page
+    cpu->memory[0x1010] = 0xA5; // LDA zero page
     cpu->memory[0x1011] = 0x50;
     cpu->memory[0x0050] = 0x84;
     cpu_set_pc(cpu, 0x1010);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x84, cpu->A, "Zero page addressing loads correct value");
-    
+
     // Test absolute addressing
-    cpu->memory[0x1020] = 0xAD;  // LDA absolute
+    cpu->memory[0x1020] = 0xAD; // LDA absolute
     cpu->memory[0x1021] = 0x00;
     cpu->memory[0x1022] = 0x20;
     cpu->memory[0x2000] = 0x96;
     cpu_set_pc(cpu, 0x1020);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x96, cpu->A, "Absolute addressing loads correct value");
-    
+
     // Test indexed addressing
     cpu->X = 0x10;
-    cpu->memory[0x1030] = 0xB5;  // LDA zero page, X
+    cpu->memory[0x1030] = 0xB5; // LDA zero page, X
     cpu->memory[0x1031] = 0x40;
     cpu->memory[0x0050] = 0x31;
     cpu_set_pc(cpu, 0x1030);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x31, cpu->A, "Zero page X addressing loads correct value");
-    
+
     teardown_cpu(cpu);
 }
 
 // Stack tests
-static void test_stack_operations() {
-    CPU* cpu = setup_cpu();
-    
+static void test_stack_operations()
+{
+    CPU *cpu = setup_cpu();
+
     // Test stack push/pull cycle
     cpu->SP = 0xFF;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 10; i++)
+    {
         cpu->A = i + 0x30;
-        cpu->memory[cpu_get_pc(cpu)] = 0x48;  // PHA
+        cpu->memory[cpu_get_pc(cpu)] = 0x48; // PHA
         cpu_step(cpu);
     }
-    
+
     TEST_ASSERT_EQ(0xF5, cpu->SP, "Stack pointer decremented correctly");
-    
-    for (int i = 9; i >= 0; i--) {
-        cpu->memory[cpu_get_pc(cpu)] = 0x68;  // PLA
+
+    for (int i = 9; i >= 0; i--)
+    {
+        cpu->memory[cpu_get_pc(cpu)] = 0x68; // PLA
         cpu_step(cpu);
         TEST_ASSERT_EQ(i + 0x30, cpu->A, "Stack pull returns correct value");
     }
-    
+
     TEST_ASSERT_EQ(0xFF, cpu->SP, "Stack pointer restored correctly");
-    
+
     teardown_cpu(cpu);
 }
 
 // Flag test comprehensive
-static void test_flag_operations() {
-    CPU* cpu = setup_cpu();
-    
+static void test_flag_operations()
+{
+    CPU *cpu = setup_cpu();
+
     // Test all flag bits
     set_flag_carry(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "Set carry flag");
-    
+
     set_flag_zero(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "Set zero flag");
-    
+
     set_flag_interrupt(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_interrupt(cpu), "Set interrupt disable flag");
-    
+
     set_flag_decimal(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_decimal(cpu), "Set decimal flag");
-    
+
     set_flag_break(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_break(cpu), "Set break flag");
-    
+
     set_flag_overflow(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_overflow(cpu), "Set overflow flag");
-    
+
     set_flag_negative(cpu, true);
     TEST_ASSERT_EQ(true, get_flag_negative(cpu), "Set negative flag");
-    
+
     // Test clearing flags
     set_flag_carry(cpu, false);
     TEST_ASSERT_EQ(false, get_flag_carry(cpu), "Clear carry flag");
-    
+
     teardown_cpu(cpu);
 }
 
 // Run all tests
-int main() {
+int main()
+{
     printf("=== MOS 6510 Opcode Test Suite ===\n\n");
-    
+
     // Test flag operations
     printf("Testing Flag Operations:\n");
     test_flag_operations();
     printf("\n");
-    
+
     // Test addressing modes
     printf("Testing Addressing Modes:\n");
     test_addressing_modes();
     printf("\n");
-    
+
     // Test stack operations
     printf("Testing Stack Operations:\n");
     test_stack_operations();
     printf("\n");
-    
+
     // Test individual opcodes
     printf("Testing Individual Opcodes:\n");
-    for (size_t i = 0; i < sizeof(opcode_tests) / sizeof(opcode_tests[0]); i++) {
-        CPU* cpu = setup_cpu();
+    for (size_t i = 0; i < sizeof(opcode_tests) / sizeof(opcode_tests[0]); i++)
+    {
+        CPU *cpu = setup_cpu();
         opcode_tests[i].test_func(cpu);
         teardown_cpu(cpu);
     }
     printf("\n");
-    
+
     // Test comprehensive opcode coverage
     printf("Testing All 256 Opcodes:\n");
-    CPU* cpu = setup_cpu();
-    for (int opcode = 0; opcode < 256; opcode++) {
+    CPU *cpu = setup_cpu();
+    for (int opcode = 0; opcode < 256; opcode++)
+    {
         cpu->memory[0x1000] = opcode;
         cpu_set_pc(cpu, 0x1000);
-        
+
         // Just make sure it doesn't crash
         uint8_t cycles = cpu_step(cpu);
         TEST_ASSERT(cycles > 0, "Opcode executes without crashing");
     }
     teardown_cpu(cpu);
-    
+
     // Print results
     printf("\n=== Test Results ===\n");
     printf("Total tests: %d\n", total_tests);
     printf("Passed: %d\n", tests_passed);
     printf("Failed: %d\n", tests_failed);
     printf("Success rate: %.1f%%\n", (float)tests_passed / total_tests * 100);
-    
-    if (tests_failed == 0) {
+
+    if (tests_failed == 0)
+    {
         printf("🎉 All tests passed!\n");
         return 0;
-    } else {
+    }
+    else
+    {
         printf("❌ Some tests failed.\n");
         return 1;
     }
