@@ -8,10 +8,10 @@
 
 #define TESTCASE "start"
 
-uint16_t load_testcase(MOS6510 *cpu, const char *testcase);
+uint16_t load_testcase(CPU *cpu, const char *testcase);
 
 // Helper functions
-void print_handler(MOS6510 *cpu)
+void print_handler(CPU *cpu)
 {
     // Set $030C = 0
     // Print PETSCII character corresponding to value of A
@@ -19,7 +19,7 @@ void print_handler(MOS6510 *cpu)
     // Set PC to return address
     // Re-start the CPU
 
-    mos6510_write_byte(cpu, SAREG, 0x00); // Storage for 6502 .A Register
+    cpu_write_byte(cpu, SAREG, 0x00); // Storage for 6502 .A Register
 
     uint8_t a = cpu->A;
 
@@ -52,7 +52,7 @@ void print_handler(MOS6510 *cpu)
                            a);
     }
 }
-void load_handler(MOS6510 *cpu)
+void load_handler(CPU *cpu)
 {
     // $BB is PETSCII filename address, low byte
     // $BC is PETSCII filename address, high byte
@@ -67,49 +67,49 @@ void load_handler(MOS6510 *cpu)
     //     if (i % 16 == 0)
     //         printf("\n%04X  ", i);
 
-    //     printf("%02X ", mos6510_read_byte(cpu, 0x0D00 + i));
+    //     printf("%02X ", cpu_read_byte(cpu, 0x0D00 + i));
     // }
     // printf("\n");
 
-    uint16_t addr = mos6510_read_byte(cpu, 0xBB) | (mos6510_read_byte(cpu, 0xBC) << 8);
-    uint8_t size = mos6510_read_word(cpu, 0xB7);
+    uint16_t addr = cpu_read_byte(cpu, 0xBB) | (cpu_read_byte(cpu, 0xBC) << 8);
+    uint8_t size = cpu_read_word(cpu, 0xB7);
 
     char testcase[size + 1];
     for (size_t i = 0; i < size; i++)
-        testcase[i] = mos6510_read_byte(cpu, addr + i) - 0x41 + 97;
+        testcase[i] = cpu_read_byte(cpu, addr + i) - 0x41 + 97;
     testcase[size] = 0;
 
     load_testcase(cpu, testcase);
-    mos6510_reset_pc(cpu, 0x0816);
+    cpu_reset_pc(cpu, 0x0816);
 }
-void warm_handler(MOS6510 *cpu)
+void warm_handler(CPU *cpu)
 {
     printf("\u{1B}[31;1;6mWARM \u{1B}[0m\n");
     abort();
 }
-void ready_handler(MOS6510 *cpu)
+void ready_handler(CPU *cpu)
 {
     printf("\u{1B}[31;1;6m[READY \u{1B}[0m\n");
     abort();
 }
 
-static MOS6510 *setup_cpu()
+static CPU *setup_cpu()
 {
-    MOS6510 *cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu, DEBUG);
+    CPU *cpu = malloc(sizeof(CPU));
+    cpu_init(cpu, DEBUG);
 
     // Print Character
-    mos6510_trap(cpu, 0xFFD2, print_handler);
+    cpu_trap(cpu, 0xFFD2, print_handler);
     // Load
-    mos6510_trap(cpu, 0xE16F, load_handler);
+    cpu_trap(cpu, 0xE16F, load_handler);
     // Exit
-    mos6510_trap(cpu, 0x8000, warm_handler);
-    mos6510_trap(cpu, 0xA474, ready_handler);
+    cpu_trap(cpu, 0x8000, warm_handler);
+    cpu_trap(cpu, 0xA474, ready_handler);
 
     return cpu;
 }
 
-static void teardown_cpu(MOS6510 *cpu)
+static void teardown_cpu(CPU *cpu)
 {
     free(cpu);
 }
@@ -136,32 +136,32 @@ uint8_t irq[] = {
     0x03, // JMP ($0314)
 };
 
-void reset(MOS6510 *cpu, uint16_t addr, uint8_t data[], size_t size)
+void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    mos6510_write_data(cpu, addr, data, size);
+    cpu_write_data(cpu, addr, data, size);
 
-    mos6510_write_data(cpu, 0xFF48, irq, sizeof(irq));
+    cpu_write_data(cpu, 0xFF48, irq, sizeof(irq));
 
-    mos6510_write_byte(cpu, R6510, 0x04); // VIC
-    mos6510_write_byte(cpu, UNUSED, 0x00);
+    cpu_write_byte(cpu, R6510, 0x04); // VIC
+    cpu_write_byte(cpu, UNUSED, 0x00);
 
-    mos6510_write_word(cpu, WARM, 0x8000); // 0xA002
-    mos6510_write_word(cpu, PC, 0x7FFF);   // 0x01FE
-    mos6510_write_word(cpu, IRQ, 0xFF48);  // 0xFFFE
+    cpu_write_word(cpu, WARM, 0x8000); // 0xA002
+    cpu_write_word(cpu, PC, 0x7FFF);   // 0x01FE
+    cpu_write_word(cpu, IRQ, 0xFF48);  // 0xFFFE
 
     // Put RTSes in some of the stubbed calls
-    mos6510_write_byte(cpu, CHROUT, 0x60);  // 0xFFD2
-    mos6510_write_byte(cpu, CARTROM, 0x60); // 0x8000
-    mos6510_write_byte(cpu, READY, 0x60);   // 0xA474
+    cpu_write_byte(cpu, CHROUT, 0x60);  // 0xFFD2
+    cpu_write_byte(cpu, CARTROM, 0x60); // 0x8000
+    cpu_write_byte(cpu, READY, 0x60);   // 0xA474
 
     // NOP the loading routine
-    mos6510_write_byte(cpu, 0xE16F, 0xEA);
+    cpu_write_byte(cpu, 0xE16F, 0xEA);
 
     // scan keyboard is LDA #3: RTS
-    mos6510_write_data(cpu, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
+    cpu_write_data(cpu, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
 }
 
-uint16_t load_testcase(MOS6510 *cpu, const char *testcase)
+uint16_t load_testcase(CPU *cpu, const char *testcase)
 {
     char test_path[256];
     snprintf(test_path, sizeof(test_path), "tests/lorenz/%s", testcase);
@@ -197,10 +197,10 @@ int main()
 {
     printf("=== MOS 6510 Lorenz Test Suite ===\n");
 
-    MOS6510 *cpu = setup_cpu();
+    CPU *cpu = setup_cpu();
 
     uint16_t addr = load_testcase(cpu, TESTCASE);
-    mos6510_reset_pc(cpu, addr);
+    cpu_reset_pc(cpu, addr);
 
     int cycles = 0;
 
@@ -208,10 +208,10 @@ int main()
     uint16_t pc;
     do
     {
-        pc = mos6510_get_pc(cpu);
+        pc = cpu_get_pc(cpu);
         uint8_t opcode = cpu->memory[pc];
 
-        cycles += mos6510_step(cpu);
+        cycles += cpu_step(cpu);
 
         step++;
         if (step > 1000000000)
@@ -219,7 +219,7 @@ int main()
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != mos6510_get_pc(cpu) && cycles < 10000000000);
+    } while (pc != cpu_get_pc(cpu) && cycles < 10000000000);
 
     printf("cycles: %d\n", cycles);
 

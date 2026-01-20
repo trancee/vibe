@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "../include/cia.h"
+#include "../include/cia6526.h"
 #include "../include/mos6510.h"
 
 // Test context for CIA2

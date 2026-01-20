@@ -1,4 +1,4 @@
-#include "../include/cia.h"
+#include "../include/cia6526.h"
 #include <string.h>
 #include <assert.h>
 

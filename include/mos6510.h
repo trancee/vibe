@@ -1,5 +1,5 @@
-#ifndef MOS6510_H
-#define MOS6510_H
+#ifndef CPU_H
+#define CPU_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -15,7 +15,7 @@ typedef struct
     uint16_t pc;           // Program Counter
     uint8_t memory[65536]; // 64KB memory
     bool debug;
-} MOS6510;
+} CPU;
 
 // Status Register bit definitions
 #define FLAG_CARRY 0x01
@@ -103,21 +103,21 @@ typedef struct
     char name[4];
     addressing_mode_t mode;
     uint8_t cycles;
-    void (*execute)(MOS6510 *cpu);
+    void (*execute)(CPU *cpu);
 } opcode_t;
 
 typedef struct
 {
     uint8_t opcode;
     char name[4];
-    void (*execute)(MOS6510 *cpu);
+    void (*execute)(CPU *cpu);
     addr_mode_t mode;
     uint8_t size;
     uint8_t cycles;
     bool illegal;
 } instruction_t;
 
-typedef void (*handler_t)(MOS6510 *);
+typedef void (*handler_t)(CPU *);
 
 typedef struct
 {
@@ -126,73 +126,73 @@ typedef struct
 } trap_t;
 
 // CPU functions
-void mos6510_init(MOS6510 *cpu, bool debug);
-void mos6510_reset(MOS6510 *cpu);
-void mos6510_reset_pc(MOS6510 *cpu, uint16_t pc);
-uint8_t mos6510_step(MOS6510 *cpu);
-uint16_t mos6510_get_pc(MOS6510 *cpu);
-void mos6510_set_pc(MOS6510 *cpu, uint16_t addr);
-uint8_t mos6510_read_byte(MOS6510 *cpu, uint16_t addr);
-uint16_t mos6510_read_word(MOS6510 *cpu, uint16_t addr);
-uint16_t mos6510_read_word_zp(MOS6510 *cpu, uint16_t addr);
-void mos6510_write_byte(MOS6510 *cpu, uint16_t addr, uint8_t data);
-void mos6510_write_word(MOS6510 *cpu, uint16_t addr, uint16_t data);
-void mos6510_write_data(MOS6510 *cpu, uint16_t addr, uint8_t data[], size_t size);
+void cpu_init(CPU *cpu, bool debug);
+void cpu_reset(CPU *cpu);
+void cpu_reset_pc(CPU *cpu, uint16_t pc);
+uint8_t cpu_step(CPU *cpu);
+uint16_t cpu_get_pc(CPU *cpu);
+void cpu_set_pc(CPU *cpu, uint16_t addr);
+uint8_t cpu_read_byte(CPU *cpu, uint16_t addr);
+uint16_t cpu_read_word(CPU *cpu, uint16_t addr);
+uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr);
+void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
+void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
+void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
 
-bool mos6510_trap(MOS6510 *cpu, uint16_t addr, handler_t handler);
+bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
 
 // Flag operations
-static inline bool get_flag_carry(MOS6510 *cpu) { return cpu->P & FLAG_CARRY; }
-static inline bool get_flag_zero(MOS6510 *cpu) { return cpu->P & FLAG_ZERO; }
-static inline bool get_flag_interrupt(MOS6510 *cpu) { return cpu->P & FLAG_INTERRUPT_DISABLE; }
-static inline bool get_flag_decimal(MOS6510 *cpu) { return cpu->P & FLAG_DECIMAL; }
-static inline bool get_flag_break(MOS6510 *cpu) { return cpu->P & FLAG_BREAK; }
-static inline bool get_flag_overflow(MOS6510 *cpu) { return cpu->P & FLAG_OVERFLOW; }
-static inline bool get_flag_negative(MOS6510 *cpu) { return cpu->P & FLAG_NEGATIVE; }
+static inline bool get_flag_carry(CPU *cpu) { return cpu->P & FLAG_CARRY; }
+static inline bool get_flag_zero(CPU *cpu) { return cpu->P & FLAG_ZERO; }
+static inline bool get_flag_interrupt(CPU *cpu) { return cpu->P & FLAG_INTERRUPT_DISABLE; }
+static inline bool get_flag_decimal(CPU *cpu) { return cpu->P & FLAG_DECIMAL; }
+static inline bool get_flag_break(CPU *cpu) { return cpu->P & FLAG_BREAK; }
+static inline bool get_flag_overflow(CPU *cpu) { return cpu->P & FLAG_OVERFLOW; }
+static inline bool get_flag_negative(CPU *cpu) { return cpu->P & FLAG_NEGATIVE; }
 
-static inline void set_flag_carry(MOS6510 *cpu, bool set)
+static inline void set_flag_carry(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_CARRY;
     else
         cpu->P &= ~FLAG_CARRY;
 }
-static inline void set_flag_zero(MOS6510 *cpu, bool set)
+static inline void set_flag_zero(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_ZERO;
     else
         cpu->P &= ~FLAG_ZERO;
 }
-static inline void set_flag_interrupt(MOS6510 *cpu, bool set)
+static inline void set_flag_interrupt(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_INTERRUPT_DISABLE;
     else
         cpu->P &= ~FLAG_INTERRUPT_DISABLE;
 }
-static inline void set_flag_decimal(MOS6510 *cpu, bool set)
+static inline void set_flag_decimal(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_DECIMAL;
     else
         cpu->P &= ~FLAG_DECIMAL;
 }
-static inline void set_flag_break(MOS6510 *cpu, bool set)
+static inline void set_flag_break(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_BREAK;
     else
         cpu->P &= ~FLAG_BREAK;
 }
-static inline void set_flag_overflow(MOS6510 *cpu, bool set)
+static inline void set_flag_overflow(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_OVERFLOW;
     else
         cpu->P &= ~FLAG_OVERFLOW;
 }
-static inline void set_flag_negative(MOS6510 *cpu, bool set)
+static inline void set_flag_negative(CPU *cpu, bool set)
 {
     if (set)
         cpu->P |= FLAG_NEGATIVE;
@@ -201,7 +201,7 @@ static inline void set_flag_negative(MOS6510 *cpu, bool set)
 }
 
 // Arithmetic operations
-static inline uint8_t add_with_carry(MOS6510 *cpu, uint8_t a, uint8_t b)
+static inline uint8_t add_with_carry(CPU *cpu, uint8_t a, uint8_t b)
 {
     uint8_t c = get_flag_carry(cpu);
     uint16_t sum = a + b + c;
@@ -245,7 +245,7 @@ static inline uint8_t add_with_carry(MOS6510 *cpu, uint8_t a, uint8_t b)
     }
 }
 
-static inline uint8_t subtract_with_borrow(MOS6510 *cpu, uint8_t a, uint8_t b)
+static inline uint8_t subtract_with_borrow(CPU *cpu, uint8_t a, uint8_t b)
 {
     uint8_t c = get_flag_carry(cpu);
     uint16_t sum = a - b - (1 - c);
@@ -276,87 +276,87 @@ static inline uint8_t subtract_with_borrow(MOS6510 *cpu, uint8_t a, uint8_t b)
 }
 
 // Stack operations
-void mos6510_push(MOS6510 *cpu, uint8_t data);
-void mos6510_push16(MOS6510 *cpu, uint16_t data);
-uint8_t mos6510_pull(MOS6510 *cpu);
-uint16_t mos6510_pull16(MOS6510 *cpu);
+void cpu_push(CPU *cpu, uint8_t data);
+void cpu_push16(CPU *cpu, uint16_t data);
+uint8_t cpu_pull(CPU *cpu);
+uint16_t cpu_pull16(CPU *cpu);
 
 // Addressing mode helpers
-uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode);
-uint8_t fetch_operand(MOS6510 *cpu, addressing_mode_t mode);
+uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode);
+uint8_t fetch_operand(CPU *cpu, addressing_mode_t mode);
 
 // Opcode declarations
-void ADC(MOS6510 *cpu);
-void AND(MOS6510 *cpu);
-void ASL(MOS6510 *cpu);
-void BCC(MOS6510 *cpu);
-void BCS(MOS6510 *cpu);
-void BEQ(MOS6510 *cpu);
-void BIT(MOS6510 *cpu);
-void BMI(MOS6510 *cpu);
-void BNE(MOS6510 *cpu);
-void BPL(MOS6510 *cpu);
-void BRK(MOS6510 *cpu);
-void BVC(MOS6510 *cpu);
-void BVS(MOS6510 *cpu);
-void CLC(MOS6510 *cpu);
-void CLD(MOS6510 *cpu);
-void CLI(MOS6510 *cpu);
-void CLV(MOS6510 *cpu);
-void CMP(MOS6510 *cpu);
-void CPX(MOS6510 *cpu);
-void CPY(MOS6510 *cpu);
-void DEC(MOS6510 *cpu);
-void DEX(MOS6510 *cpu);
-void DEY(MOS6510 *cpu);
-void EOR(MOS6510 *cpu);
-void INC(MOS6510 *cpu);
-void INX(MOS6510 *cpu);
-void INY(MOS6510 *cpu);
-void JMP(MOS6510 *cpu);
-void JSR(MOS6510 *cpu);
-void LDA(MOS6510 *cpu);
-void LDX(MOS6510 *cpu);
-void LDY(MOS6510 *cpu);
-void LSR(MOS6510 *cpu);
-void NOP(MOS6510 *cpu);
-void ORA(MOS6510 *cpu);
-void PHA(MOS6510 *cpu);
-void PHP(MOS6510 *cpu);
-void PLA(MOS6510 *cpu);
-void PLP(MOS6510 *cpu);
-void ROL(MOS6510 *cpu);
-void ROR(MOS6510 *cpu);
-void RTI(MOS6510 *cpu);
-void RTS(MOS6510 *cpu);
-void SBC(MOS6510 *cpu);
-void SEC(MOS6510 *cpu);
-void SED(MOS6510 *cpu);
-void SEI(MOS6510 *cpu);
-void STA(MOS6510 *cpu);
-void STX(MOS6510 *cpu);
-void STY(MOS6510 *cpu);
-void TAX(MOS6510 *cpu);
-void TAY(MOS6510 *cpu);
-void TSX(MOS6510 *cpu);
-void TXA(MOS6510 *cpu);
-void TXS(MOS6510 *cpu);
-void TYA(MOS6510 *cpu);
+void ADC(CPU *cpu);
+void AND(CPU *cpu);
+void ASL(CPU *cpu);
+void BCC(CPU *cpu);
+void BCS(CPU *cpu);
+void BEQ(CPU *cpu);
+void BIT(CPU *cpu);
+void BMI(CPU *cpu);
+void BNE(CPU *cpu);
+void BPL(CPU *cpu);
+void BRK(CPU *cpu);
+void BVC(CPU *cpu);
+void BVS(CPU *cpu);
+void CLC(CPU *cpu);
+void CLD(CPU *cpu);
+void CLI(CPU *cpu);
+void CLV(CPU *cpu);
+void CMP(CPU *cpu);
+void CPX(CPU *cpu);
+void CPY(CPU *cpu);
+void DEC(CPU *cpu);
+void DEX(CPU *cpu);
+void DEY(CPU *cpu);
+void EOR(CPU *cpu);
+void INC(CPU *cpu);
+void INX(CPU *cpu);
+void INY(CPU *cpu);
+void JMP(CPU *cpu);
+void JSR(CPU *cpu);
+void LDA(CPU *cpu);
+void LDX(CPU *cpu);
+void LDY(CPU *cpu);
+void LSR(CPU *cpu);
+void NOP(CPU *cpu);
+void ORA(CPU *cpu);
+void PHA(CPU *cpu);
+void PHP(CPU *cpu);
+void PLA(CPU *cpu);
+void PLP(CPU *cpu);
+void ROL(CPU *cpu);
+void ROR(CPU *cpu);
+void RTI(CPU *cpu);
+void RTS(CPU *cpu);
+void SBC(CPU *cpu);
+void SEC(CPU *cpu);
+void SED(CPU *cpu);
+void SEI(CPU *cpu);
+void STA(CPU *cpu);
+void STX(CPU *cpu);
+void STY(CPU *cpu);
+void TAX(CPU *cpu);
+void TAY(CPU *cpu);
+void TSX(CPU *cpu);
+void TXA(CPU *cpu);
+void TXS(CPU *cpu);
+void TYA(CPU *cpu);
 
 // Illegal opcodes (supported for completeness)
-void ANC(MOS6510 *cpu);
-void ARR(MOS6510 *cpu);
-void DCP(MOS6510 *cpu);
-void ISC(MOS6510 *cpu);
-void LAS(MOS6510 *cpu);
-void LAX(MOS6510 *cpu);
-void RLA(MOS6510 *cpu);
-void RRA(MOS6510 *cpu);
-void SAX(MOS6510 *cpu);
-void SLO(MOS6510 *cpu);
-void SRE(MOS6510 *cpu);
-void TAS(MOS6510 *cpu);
-void XAA(MOS6510 *cpu);
+void ANC(CPU *cpu);
+void ARR(CPU *cpu);
+void DCP(CPU *cpu);
+void ISC(CPU *cpu);
+void LAS(CPU *cpu);
+void LAX(CPU *cpu);
+void RLA(CPU *cpu);
+void RRA(CPU *cpu);
+void SAX(CPU *cpu);
+void SLO(CPU *cpu);
+void SRE(CPU *cpu);
+void TAS(CPU *cpu);
+void XAA(CPU *cpu);
 
 // Global opcode table declaration
 extern const instruction_t instructions[256];
@@ -622,4 +622,4 @@ extern const opcode_t opcode_table[256];
 #define BASICROM 0xA000
 #define KERNALROM 0xE000
 
-#endif // MOS6510_H
+#endif // CPU_H

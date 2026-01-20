@@ -6,11 +6,11 @@ int main() {
     printf("=== MOS 6510 CPU Example ===\n\n");
     
     // Initialize CPU
-    MOS6510 cpu;
-    mos6510_init(&cpu);
+    CPU cpu;
+    cpu_init(&cpu);
     
     printf("Initial CPU state:\n");
-    printf("  PC: $%04X\n", mos6510_get_pc(&cpu));
+    printf("  PC: $%04X\n", cpu_get_pc(&cpu));
     printf("  A: $%02X\n", cpu.A);
     printf("  X: $%02X\n", cpu.X);
     printf("  Y: $%02X\n", cpu.Y);
@@ -26,7 +26,7 @@ int main() {
     cpu.memory[0x1004] = 0x20;
     cpu.memory[0x1005] = 0x00;  // BRK
     
-    mos6510_set_pc(&cpu, 0x1000);
+    cpu_set_pc(&cpu, 0x1000);
     
     printf("Program loaded at $1000:\n");
     printf("  A9 42    LDA #$42\n");
@@ -37,7 +37,7 @@ int main() {
     int step = 1;
     uint16_t pc;
     do {
-        pc = mos6510_get_pc(&cpu);
+        pc = cpu_get_pc(&cpu);
         uint8_t opcode = cpu.memory[pc];
         
         printf("Step %d: PC=$%04X, Opcode=$%02X", step, pc, opcode);
@@ -57,7 +57,7 @@ int main() {
         printf(", A=$%02X, X=$%02X, Y=$%02X, SP=$%02X, P=$%02X\n", 
                cpu.A, cpu.X, cpu.Y, cpu.SP, cpu.P);
         
-        uint8_t cycles = mos6510_step(&cpu);
+        uint8_t cycles = cpu_step(&cpu);
         printf("  Cycles used: %d\n\n", cycles);
         
         step++;
@@ -65,10 +65,10 @@ int main() {
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != mos6510_get_pc(&cpu) && cpu.memory[mos6510_get_pc(&cpu)] != 0x00);
+    } while (pc != cpu_get_pc(&cpu) && cpu.memory[cpu_get_pc(&cpu)] != 0x00);
     
     printf("Final CPU state:\n");
-    printf("  PC: $%04X\n", mos6510_get_pc(&cpu));
+    printf("  PC: $%04X\n", cpu_get_pc(&cpu));
     printf("  A: $%02X\n", cpu.A);
     printf("  X: $%02X\n", cpu.X);
     printf("  Y: $%02X\n", cpu.Y);

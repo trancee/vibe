@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define read8() mos6510_read_byte(cpu, pc + 1)
-#define read16() mos6510_read_word(cpu, pc + 1)
+#define read8() cpu_read_byte(cpu, pc + 1)
+#define read16() cpu_read_word(cpu, pc + 1)
 
 trap_t traps[] = {{}, {}, {}, {}, {}};
 
@@ -34,16 +34,16 @@ handler_t find_trap(const uint16_t address)
     return NULL;
 }
 
-void dump_step(MOS6510 *cpu, const instruction_t *instruction)
+void dump_step(CPU *cpu, const instruction_t *instruction)
 {
-    uint16_t pc = mos6510_get_pc(cpu);
+    uint16_t pc = cpu_get_pc(cpu);
 
     printf("%04X ", pc);
 
     for (int i = 0; i < 3; i++)
     {
         if (i < instruction->size)
-            printf(" %02X", mos6510_read_byte(cpu, pc + i));
+            printf(" %02X", cpu_read_byte(cpu, pc + i));
         else
             printf("   ");
     }
@@ -89,7 +89,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
         // JMP
 
         printf(" ($%04X)", read16());
-        printf(" = %04X", mos6510_read_word_zp(cpu, read16()));
+        printf(" = %04X", cpu_read_word_zp(cpu, read16()));
         printf("%13s", ""); // 28 - 1 - 7 - 3 - 4 = 13
         break;
     case IndexedIndirect:
@@ -101,8 +101,8 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 
         printf(" ($%02X,X)", read8());
         printf(" @ %02X", (read8() + cpu->X) & 0xFF);
-        printf(" = %04X", mos6510_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
-        printf(" = %02X", mos6510_read_byte(cpu, mos6510_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
+        printf(" = %04X", cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
+        printf(" = %02X", cpu_read_byte(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
         printf("%3s", ""); // 28 - 1 - 7 - 3 - 2 - 3 - 4 - 3 - 2 = 3
         break;
     case IndirectIndexed:
@@ -114,9 +114,9 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
         // ADC, AND, CMP, EOR, LDA, ORA, SBC, and STA.
 
         printf(" ($%02X),Y", read8());
-        printf(" = %04X", mos6510_read_word_zp(cpu, read8()));
-        printf(" @ %04X", (mos6510_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
-        printf(" = %02X", mos6510_read_byte(cpu, (mos6510_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
+        printf(" = %04X", cpu_read_word_zp(cpu, read8()));
+        printf(" @ %04X", (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
+        printf(" = %02X", cpu_read_byte(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
         printf("%1s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 4 - 3 - 2 = 1
         break;
     case Absolute:
@@ -130,7 +130,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
         if (instruction->execute == JSR || instruction->execute == JMP)
             printf("     ");
         else
-            printf(" = %02X", mos6510_read_byte(cpu, read16()));
+            printf(" = %02X", cpu_read_byte(cpu, read16()));
         printf("%17s", ""); // 28 - 1 - 5 - 3 - 2 = 17
         break;
     case AbsoluteX:
@@ -142,7 +142,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 
         printf(" $%04X,X", read16());
         printf(" @ %04X", (read16() + cpu->X) & 0xFFFF);
-        printf(" = %02X", mos6510_read_byte(cpu, (read16() + cpu->X) & 0xFFFF));
+        printf(" = %02X", cpu_read_byte(cpu, (read16() + cpu->X) & 0xFFFF));
         printf("%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case AbsoluteY:
@@ -154,7 +154,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 
         printf(" $%04X,Y", read16());
         printf(" @ %04X", (read16() + cpu->Y) & 0xFFFF);
-        printf(" = %02X", mos6510_read_byte(cpu, (read16() + cpu->Y) & 0xFFFF));
+        printf(" = %02X", cpu_read_byte(cpu, (read16() + cpu->Y) & 0xFFFF));
         printf("%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case ZeroPage:
@@ -165,7 +165,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
         printf(" $%02X", read8());
-        printf(" = %02X", mos6510_read_byte(cpu, read8()));
+        printf(" = %02X", cpu_read_byte(cpu, read8()));
         printf("%19s", ""); // 28 - 1 - 3 - 3 - 2 = 19
         break;
     case ZeroPageX:
@@ -177,7 +177,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 
         printf(" $%02X,X", read8());
         printf(" @ %02X", (read8() + cpu->X) & 0xFF);
-        printf(" = %02X", mos6510_read_byte(cpu, (read8() + cpu->X) & 0xFF));
+        printf(" = %02X", cpu_read_byte(cpu, (read8() + cpu->X) & 0xFF));
         printf("%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case ZeroPageY:
@@ -189,7 +189,7 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
 
         printf(" $%02X,Y", read8());
         printf(" @ %02X", (read8() + cpu->Y) & 0xFF);
-        printf(" = %02X", mos6510_read_byte(cpu, (read8() + cpu->Y) & 0xFF));
+        printf(" = %02X", cpu_read_byte(cpu, (read8() + cpu->Y) & 0xFF));
         printf("%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case Relative:
@@ -225,19 +225,19 @@ void dump_step(MOS6510 *cpu, const instruction_t *instruction)
     printf("\n");
 }
 
-void mos6510_init(MOS6510 *cpu, bool debug)
+void cpu_init(CPU *cpu, bool debug)
 {
-    memset(cpu, 0, sizeof(MOS6510));
+    memset(cpu, 0, sizeof(CPU));
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
     cpu->debug = debug;
 }
 
-void mos6510_reset(MOS6510 *cpu)
+void cpu_reset(CPU *cpu)
 {
-    mos6510_reset_pc(cpu, mos6510_read_word(cpu, 0xFFFC));
+    cpu_reset_pc(cpu, cpu_read_word(cpu, 0xFFFC));
 }
-void mos6510_reset_pc(MOS6510 *cpu, uint16_t addr)
+void cpu_reset_pc(CPU *cpu, uint16_t addr)
 {
     cpu->A = 0x00;
     cpu->X = 0x00;
@@ -245,79 +245,79 @@ void mos6510_reset_pc(MOS6510 *cpu, uint16_t addr)
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
 
-    mos6510_set_pc(cpu, addr);
+    cpu_set_pc(cpu, addr);
 }
 
-uint16_t mos6510_get_pc(MOS6510 *cpu)
+uint16_t cpu_get_pc(CPU *cpu)
 {
     // return cpu->PC | (cpu->PCH << 8);
     return cpu->pc;
 }
-void mos6510_set_pc(MOS6510 *cpu, uint16_t addr)
+void cpu_set_pc(CPU *cpu, uint16_t addr)
 {
     // cpu->PC = addr & 0xFF;
     // cpu->PCH = (addr >> 8) & 0xFF;
     cpu->pc = addr;
 }
 
-uint8_t mos6510_read_byte(MOS6510 *cpu, uint16_t addr)
+uint8_t cpu_read_byte(CPU *cpu, uint16_t addr)
 {
     return cpu->memory[addr];
 }
-uint16_t mos6510_read_word(MOS6510 *cpu, uint16_t addr)
+uint16_t cpu_read_word(CPU *cpu, uint16_t addr)
 {
-    return mos6510_read_byte(cpu, addr) | (mos6510_read_byte(cpu, addr + 1) << 8);
+    return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, addr + 1) << 8);
 }
-uint16_t mos6510_read_word_zp(MOS6510 *cpu, uint16_t addr)
+uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr)
 {
-    return mos6510_read_byte(cpu, addr) | (mos6510_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
+    return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
 }
 
-void mos6510_write_byte(MOS6510 *cpu, uint16_t addr, uint8_t data)
+void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data)
 {
     cpu->memory[addr] = data;
 }
-void mos6510_write_word(MOS6510 *cpu, uint16_t addr, uint16_t data)
+void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data)
 {
-    mos6510_write_byte(cpu, addr, data & 0xFF);
-    mos6510_write_byte(cpu, addr + 1, (data >> 8) & 0xFF);
+    cpu_write_byte(cpu, addr, data & 0xFF);
+    cpu_write_byte(cpu, addr + 1, (data >> 8) & 0xFF);
 }
 
-void mos6510_write_data(MOS6510 *cpu, uint16_t addr, uint8_t data[], size_t size)
+void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
     for (size_t i = 0; i < size; i++)
     {
-        mos6510_write_byte(cpu, addr + i, data[i]);
+        cpu_write_byte(cpu, addr + i, data[i]);
     }
 }
 
-void mos6510_push(MOS6510 *cpu, uint8_t data)
+void cpu_push(CPU *cpu, uint8_t data)
 {
-    mos6510_write_byte(cpu, 0x0100 | cpu->SP, data);
+    cpu_write_byte(cpu, 0x0100 | cpu->SP, data);
     cpu->SP--;
 }
-void mos6510_push16(MOS6510 *cpu, uint16_t data)
+void cpu_push16(CPU *cpu, uint16_t data)
 {
-    mos6510_push(cpu, (data >> 8) & 0xFF);
-    mos6510_push(cpu, data & 0xFF);
+    cpu_push(cpu, (data >> 8) & 0xFF);
+    cpu_push(cpu, data & 0xFF);
 }
-uint8_t mos6510_pull(MOS6510 *cpu)
+uint8_t cpu_pull(CPU *cpu)
 {
     cpu->SP++;
-    return mos6510_read_byte(cpu, 0x0100 | cpu->SP);
+    return cpu_read_byte(cpu, 0x0100 | cpu->SP);
 }
-uint16_t mos6510_pull16(MOS6510 *cpu)
+uint16_t cpu_pull16(CPU *cpu)
 {
-    return mos6510_pull(cpu) | (mos6510_pull(cpu) << 8);
+    return cpu_pull(cpu) | (cpu_pull(cpu) << 8);
 }
 
-bool mos6510_trap(MOS6510 *cpu, uint16_t addr, handler_t handler)
+bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
 {
     trap_t trap = {addr, handler};
     return add_trap(&trap);
 }
 
-uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
+uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
 {
     uint16_t addr;
     uint8_t low_byte, high_byte;
@@ -328,53 +328,53 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
         return 0; // Not used for implied addressing
 
     case ADDR_IMM:
-        return mos6510_get_pc(cpu) + 1;
+        return cpu_get_pc(cpu) + 1;
 
     case ADDR_ZP:
-        return cpu->memory[mos6510_get_pc(cpu) + 1];
+        return cpu->memory[cpu_get_pc(cpu) + 1];
 
     case ADDR_ZPX:
-        return (cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->X) & 0xFF;
+        return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X) & 0xFF;
 
     case ADDR_ZPY:
-        return (cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->Y) & 0xFF;
+        return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->Y) & 0xFF;
 
     case ADDR_ABS:
-        low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
-        high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
+        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
+        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         return (high_byte << 8) | low_byte;
 
     case ADDR_ABSX:
-        low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
-        high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
+        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
+        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->X;
 
     case ADDR_ABSY:
-        low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
-        high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
+        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
+        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->Y;
 
     case ADDR_IND:
-        low_byte = cpu->memory[mos6510_get_pc(cpu) + 1];
-        high_byte = cpu->memory[mos6510_get_pc(cpu) + 2];
+        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
+        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
         // 6502 bug: if page boundary crossed, high byte wraps
         if (low_byte == 0xFF)
         {
             // return (cpu->memory[addr] << 8) | cpu->memory[addr & 0xFF00];
-            return mos6510_read_word_zp(cpu, addr);
+            return cpu_read_word_zp(cpu, addr);
         }
         else
         {
             // return (cpu->memory[addr + 1] << 8) | cpu->memory[addr];
-            return mos6510_read_word(cpu, addr);
+            return cpu_read_word(cpu, addr);
         }
 
     case ADDR_INDX:
     {
-        uint8_t ptr = cpu->memory[mos6510_get_pc(cpu) + 1] + cpu->X;
+        uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X;
         low_byte = cpu->memory[ptr];
         high_byte = cpu->memory[(ptr + 1) & 0xFF];
         return (high_byte << 8) | low_byte;
@@ -382,7 +382,7 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
 
     case ADDR_INDY:
     {
-        uint8_t ptr = cpu->memory[mos6510_get_pc(cpu) + 1];
+        uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1];
         low_byte = cpu->memory[ptr];
         high_byte = cpu->memory[(ptr + 1) & 0xFF];
         addr = (high_byte << 8) | low_byte;
@@ -390,22 +390,22 @@ uint16_t get_operand_address(MOS6510 *cpu, addressing_mode_t mode)
     }
 
     case ADDR_REL:
-        return mos6510_get_pc(cpu) + 1;
+        return cpu_get_pc(cpu) + 1;
 
     default:
         return 0;
     }
 }
 
-uint8_t fetch_operand(MOS6510 *cpu, addressing_mode_t mode)
+uint8_t fetch_operand(CPU *cpu, addressing_mode_t mode)
 {
     uint16_t addr = get_operand_address(cpu, mode);
     return cpu->memory[addr];
 }
 
-uint8_t mos6510_step(MOS6510 *cpu)
+uint8_t cpu_step(CPU *cpu)
 {
-    uint16_t pc = mos6510_get_pc(cpu);
+    uint16_t pc = cpu_get_pc(cpu);
 
     uint8_t opcode = cpu->memory[pc];
     const instruction_t *instruction = &instructions[opcode];
@@ -416,20 +416,20 @@ uint8_t mos6510_step(MOS6510 *cpu)
     //         JMP(cpu);
     //     } else {
     //         // Just skip the opcode and any operands
-    //         mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
+    //         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     //         switch (op->mode) {
     //             case ADDR_IMM:
     //             case ADDR_ZP:
     //             case ADDR_ZPX:
     //             case ADDR_ZPY:
     //             case ADDR_REL:
-    //                 mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 1);
+    //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     //                 break;
     //             case ADDR_ABS:
     //             case ADDR_ABSX:
     //             case ADDR_ABSY:
     //             case ADDR_IND:
-    //                 mos6510_set_pc(cpu, mos6510_get_pc(cpu) + 2);
+    //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     //                 break;
     //             default:
     //                 break;
@@ -441,16 +441,16 @@ uint8_t mos6510_step(MOS6510 *cpu)
     if (cpu->debug)
         dump_step(cpu, instruction);
 
-    // uint16_t pc = mos6510_get_pc(cpu);
+    // uint16_t pc = cpu_get_pc(cpu);
     instruction->execute(cpu);
 
     handler_t handler = find_trap(pc);
     if (handler != NULL)
         handler(cpu);
 
-    // if (mos6510_get_pc(cpu) != pc + instruction->size)
+    // if (cpu_get_pc(cpu) != pc + instruction->size)
     // {
-    //     printf("*** PC:$%04X != $%04X ($%04X +%d)\n", mos6510_get_pc(cpu), pc + instruction->size, pc, instruction->size);
+    //     printf("*** PC:$%04X != $%04X ($%04X +%d)\n", cpu_get_pc(cpu), pc + instruction->size, pc, instruction->size);
     //     // exit(1);
     // }
 

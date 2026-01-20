@@ -7,14 +7,14 @@
 #define DEBUG true
 
 // Helper functions
-static MOS6510 *setup_cpu()
+static CPU *setup_cpu()
 {
-    MOS6510 *cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu, DEBUG);
+    CPU *cpu = malloc(sizeof(CPU));
+    cpu_init(cpu, DEBUG);
     return cpu;
 }
 
-static void teardown_cpu(MOS6510 *cpu)
+static void teardown_cpu(CPU *cpu)
 {
     free(cpu);
 }
@@ -65,10 +65,10 @@ int main()
         test_case_t test_case = opcode_tests[i];
         printf("\n--- %s\n", test_case.test_name);
 
-        MOS6510 *cpu = setup_cpu();
+        CPU *cpu = setup_cpu();
         load_test(cpu->memory, test_case.test_name);
 
-        mos6510_set_pc(cpu, test_case.start_address);
+        cpu_set_pc(cpu, test_case.start_address);
 
         int cycles = 0;
 
@@ -77,7 +77,7 @@ int main()
         uint8_t last_test = -1;
         do
         {
-            pc = mos6510_get_pc(cpu);
+            pc = cpu_get_pc(cpu);
             if (cpu->memory[test_case.test_case_address] != last_test)
             {
                 last_test = cpu->memory[test_case.test_case_address];
@@ -86,7 +86,7 @@ int main()
 
             uint8_t opcode = cpu->memory[pc];
 
-            cycles += mos6510_step(cpu);
+            cycles += cpu_step(cpu);
 
             step++;
             if (step > 50000)
@@ -94,17 +94,17 @@ int main()
                 printf("Too many steps, stopping...\n");
                 break;
             }
-        } while (pc != mos6510_get_pc(cpu) && cycles < test_case.exact_cycles &&
-                 mos6510_get_pc(cpu) != test_case.end_address);
+        } while (pc != cpu_get_pc(cpu) && cycles < test_case.exact_cycles &&
+                 cpu_get_pc(cpu) != test_case.end_address);
 
         printf("---\n");
-        if (mos6510_get_pc(cpu) == test_case.end_address)
+        if (cpu_get_pc(cpu) == test_case.end_address)
         {
             printf("test passed\n");
         }
         else
         {
-            printf("test failed at $%04X\n", mos6510_get_pc(cpu));
+            printf("test failed at $%04X\n", cpu_get_pc(cpu));
         }
 
         teardown_cpu(cpu);

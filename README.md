@@ -75,7 +75,7 @@ make install
 
 int main() {
     // Initialize CPU
-    MOS6510 cpu;
+    CPU cpu;
     mos6510_init(&cpu);
     
     // Load program into memory
@@ -97,7 +97,7 @@ int main() {
 
 ### CPU Structure
 
-The MOS6510 structure contains all CPU state:
+The CPU structure contains all CPU state:
 
 ```c
 typedef struct {
@@ -109,7 +109,7 @@ typedef struct {
     uint8_t PCH;    // Program Counter (high byte)
     uint8_t P;      // Status Register
     uint8_t memory[65536];  // 64KB memory
-} MOS6510;
+} CPU;
 ```
 
 ### Status Flags
@@ -170,38 +170,38 @@ All undocumented/illegal opcodes for completeness:
 
 ```c
 // Initialize CPU state
-void mos6510_init(MOS6510 *cpu);
+void mos6510_init(CPU *cpu);
 
 // Reset CPU to initial state
-void mos6510_reset(MOS6510 *cpu);
+void mos6510_reset(CPU *cpu);
 
 // Execute one instruction
-uint8_t mos6510_step(MOS6510 *cpu);
+uint8_t mos6510_step(CPU *cpu);
 
 // Program counter management
-uint16_t mos6510_get_pc(MOS6510 *cpu);
-void mos6510_set_pc(MOS6510 *cpu, uint16_t addr);
+uint16_t mos6510_get_pc(CPU *cpu);
+void mos6510_set_pc(CPU *cpu, uint16_t addr);
 
 // Memory access
-uint8_t mos6510_read_byte(MOS6510 *cpu, uint16_t addr);
-void mos6510_write_byte(MOS6510 *cpu, uint16_t addr, uint8_t data);
+uint8_t mos6510_read_byte(CPU *cpu, uint16_t addr);
+void mos6510_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
 
 // Stack operations
-void mos6510_push(MOS6510 *cpu, uint8_t data);
-uint8_t mos6510_pull(MOS6510 *cpu);
+void mos6510_push(CPU *cpu, uint8_t data);
+uint8_t mos6510_pull(CPU *cpu);
 ```
 
 ### Flag Operations
 
 ```c
 // Get flag states
-bool get_flag_carry(MOS6510 *cpu);
-bool get_flag_zero(MOS6510 *cpu);
+bool get_flag_carry(CPU *cpu);
+bool get_flag_zero(CPU *cpu);
 // ... etc for all flags
 
 // Set flag states
-void set_flag_carry(MOS6510 *cpu, bool set);
-void set_flag_zero(MOS6510 *cpu, bool set);
+void set_flag_carry(CPU *cpu, bool set);
+void set_flag_zero(CPU *cpu, bool set);
 // ... etc for all flags
 ```
 

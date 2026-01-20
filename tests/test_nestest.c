@@ -29,14 +29,14 @@
     } while (0)
 
 // Helper functions
-static MOS6510 *setup_cpu()
+static CPU *setup_cpu()
 {
-    MOS6510 *cpu = malloc(sizeof(MOS6510));
-    mos6510_init(cpu, DEBUG);
+    CPU *cpu = malloc(sizeof(CPU));
+    cpu_init(cpu, DEBUG);
     return cpu;
 }
 
-static void teardown_cpu(MOS6510 *cpu)
+static void teardown_cpu(CPU *cpu)
 {
     free(cpu);
 }
@@ -65,7 +65,7 @@ int main()
 {
     printf("=== 6502 NESTEST Test Suite ===\n\n");
 
-    MOS6510 *cpu = setup_cpu();
+    CPU *cpu = setup_cpu();
 
     load_test(cpu->memory);
 
@@ -75,9 +75,9 @@ int main()
     }
     cpu->memory[0xA9A9] = 0xA9;
 
-    mos6510_push16(cpu, 0x07FF);
+    cpu_push16(cpu, 0x07FF);
 
-    mos6510_set_pc(cpu, START_ADDRESS);
+    cpu_set_pc(cpu, START_ADDRESS);
 
     int cycles = 0;
 
@@ -85,10 +85,10 @@ int main()
     uint16_t pc;
     do
     {
-        pc = mos6510_get_pc(cpu);
+        pc = cpu_get_pc(cpu);
         // uint8_t opcode = cpu->memory[pc];
 
-        cycles += mos6510_step(cpu);
+        cycles += cpu_step(cpu);
 
         step++;
         if (step > 9000)
@@ -96,8 +96,8 @@ int main()
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != mos6510_get_pc(cpu) && cycles < EXACT_CYCLES &&
-             mos6510_get_pc(cpu) != END_ADDRESS);
+    } while (pc != cpu_get_pc(cpu) && cycles < EXACT_CYCLES &&
+             cpu_get_pc(cpu) != END_ADDRESS);
 
     printf("---\n");
     printf("$02 #$%02X %s\n", cpu->memory[0x02], cpu->memory[0x02] == 0x00 ? "OK" : "FAIL");
