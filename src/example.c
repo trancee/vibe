@@ -1,6 +1,7 @@
-#include "../include/mos6510.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "mos6510.h"
 
 #define DEBUG true
 

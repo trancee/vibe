@@ -1,7 +1,8 @@
-#include "../include/mos6510.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "mos6510.h"
 
 #define read8() cpu_read_byte(cpu, pc + 1)
 #define read16() cpu_read_word(cpu, pc + 1)
@@ -312,6 +313,9 @@ uint16_t cpu_pull16(CPU *cpu)
 
 bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
 {
+    if (cpu == NULL || handler == NULL)
+        return false;
+
     trap_t trap = {addr, handler};
     return add_trap(&trap);
 }

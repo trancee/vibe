@@ -1,48 +1,6 @@
-/*
-   Commodore 64 Emulator
-   ---------------------
-   SDL2 Audio + Video + Glue
-*/
-
-// #include <SDL2/SDL.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-#include "../include/c64.h"
-
-#define DEBUG true
-
-/* ===== Globals ===== */
-
-// SDL_AudioDeviceID audio_dev;
-// SDL_Window *window;
-// SDL_Renderer *renderer;
-// SDL_Texture *texture;
-
-#define SAMPLE_RATE 44100
-#define FPS 50
-#define CPU_CLOCK 985248
-#define CYCLES_PER_FRAME (CPU_CLOCK / FPS)
-
-// uint32_t framebuffer[320 * 200];
-
-/* ============================================================
-   SDL Audio Callback
-   ============================================================ */
-
-// void audio_callback(void *userdata, Uint8 *stream, int len)
-// {
-//     float *out = (float *)stream;
-//     int samples = len / sizeof(float);
-
-//     for (int i = 0; i < samples; i++)
-//     {
-//         /* sid_tick already produces samples internally */
-//         out[i] = 0.0f;
-//     }
-// }
+#include "c64.h"
 
 void c64_init(C64 *c64, bool debug)
 {
@@ -107,12 +65,12 @@ void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size)
 
 bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
 {
-    cpu_trap(&c64->cpu, addr, handler);
+    return cpu_trap(&c64->cpu, addr, handler);
 }
 
 uint8_t c64_step(C64 *c64)
 {
-    cpu_step(&c64->cpu);
+    uint8_t steps = cpu_step(&c64->cpu);
 
     vic_clock(&c64->vic /*, CYCLES_PER_FRAME*/);
     vic_clock(&c64->vic /*, CYCLES_PER_FRAME*/);
@@ -121,6 +79,8 @@ uint8_t c64_step(C64 *c64)
     cia_clock(&c64->cia2 /*, CYCLES_PER_FRAME*/);
 
     // sid_clock(&sid, CYCLES_PER_FRAME);
+
+    return steps;
 }
 
 /* ============================================================
@@ -138,78 +98,3 @@ void c64_load_rom(C64 *c64, const char *path, uint16_t addr, size_t size)
     fread(&c64->cpu.memory[addr], 1, size, f);
     fclose(f);
 }
-
-/* ============================================================
-   Main
-   ============================================================ */
-
-// int main(int argc, char **argv)
-// {
-//     C64 c64;
-//     c64_init(&c64, DEBUG);
-
-//     /* SDL Init */
-//     // SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
-
-//     // window = SDL_CreateWindow(
-//     //     "C64 Emulator",
-//     //     SDL_WINDOWPOS_CENTERED,
-//     //     SDL_WINDOWPOS_CENTERED,
-//     //     640, 400,
-//     //     SDL_WINDOW_SHOWN);
-
-//     // renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-//     // texture = SDL_CreateTexture(
-//     //     renderer,
-//     //     SDL_PIXELFORMAT_ARGB8888,
-//     //     SDL_TEXTUREACCESS_STREAMING,
-//     //     320, 200);
-
-//     // /* Audio */
-//     // SDL_AudioSpec want = {0};
-//     // want.freq = SAMPLE_RATE;
-//     // want.format = AUDIO_F32SYS;
-//     // want.channels = 1;
-//     // want.samples = 1024;
-//     // want.callback = audio_callback;
-
-//     // audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
-//     // SDL_PauseAudioDevice(audio_dev, 0);
-
-//     /* Main loop */
-//     int running = 1;
-//     // SDL_Event e;
-
-//     while (running)
-//     {
-
-//         // uint32_t start = SDL_GetTicks();
-
-//         /* One PAL frame */
-//         for (int i = 0; i < CYCLES_PER_FRAME; i++)
-//         {
-//             c64_step(&c64);
-//         }
-
-//         /* Video (placeholder background) */
-//         // SDL_UpdateTexture(texture, NULL, framebuffer, 320 * sizeof(uint32_t));
-//         // SDL_RenderClear(renderer);
-//         // SDL_RenderCopy(renderer, texture, NULL, NULL);
-//         // SDL_RenderPresent(renderer);
-
-//         // while (SDL_PollEvent(&e))
-//         // {
-//         //     if (e.type == SDL_QUIT)
-//         //         running = 0;
-//         // }
-
-//         // /* Frame sync */
-//         // uint32_t elapsed = SDL_GetTicks() - start;
-//         // if (elapsed < (1000 / FPS))
-//         //     SDL_Delay((1000 / FPS) - elapsed);
-//     }
-
-//     // SDL_Quit();
-//     return 0;
-// }

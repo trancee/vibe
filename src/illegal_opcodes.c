@@ -1,4 +1,4 @@
-#include "../include/mos6510.h"
+#include "mos6510.h"
 
 // Illegal opcodes implementation
 void ANC(CPU *cpu) {

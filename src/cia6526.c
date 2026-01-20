@@ -1,6 +1,7 @@
-#include "../include/cia6526.h"
 #include <string.h>
 #include <assert.h>
+
+#include "cia6526.h"
 
 void cia_init(CIA *cia, uint16_t base_address)
 {

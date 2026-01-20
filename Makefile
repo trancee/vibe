@@ -6,8 +6,8 @@ TEST_DIR = tests
 BUILD_DIR = build
 
 # Source files
-SOURCES = $(SRC_DIR)/mos6510.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/opcode_table.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c $(SRC_DIR)/c64.c
-TEST_SOURCES = $(TEST_DIR)/test_opcodes.c
+SOURCES = $(SRC_DIR)/c64.c $(SRC_DIR)/mos6510.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/opcode_table.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c
+TEST_OPCODES_SRC = $(TEST_DIR)/test_opcodes.c
 TEST_DORMANN_SRC = $(TEST_DIR)/test_dormann.c
 TEST_LORENZ_SRC = $(TEST_DIR)/test_lorenz.c
 TEST_NESTEST_SRC = $(TEST_DIR)/test_nestest.c
@@ -17,7 +17,7 @@ TEST_CIA2_SRC = $(TEST_DIR)/test_cia2.c
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
+TEST_OPCODES_OBJ = $(TEST_OPCODES_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_DORMANN_OBJ = $(TEST_DORMANN_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_LORENZ_OBJ = $(TEST_LORENZ_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_NESTEST_OBJ = $(TEST_NESTEST_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -27,7 +27,7 @@ TEST_CIA2_OBJ = $(TEST_CIA2_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Executables
 LIB_NAME = $(BUILD_DIR)/libmos6510.a
-TEST_EXEC = $(BUILD_DIR)/test_opcodes
+TEST_OPCODES_BIN = $(BUILD_DIR)/test_opcodes
 TEST_DORMANN_BIN = $(BUILD_DIR)/test_dormann
 TEST_LORENZ_BIN = $(BUILD_DIR)/test_lorenz
 TEST_NESTEST_BIN = $(BUILD_DIR)/test_nestest
@@ -35,11 +35,11 @@ TEST_VIC_BIN = $(BUILD_DIR)/test_vic
 TEST_CIA1_BIN = $(BUILD_DIR)/test_cia1
 TEST_CIA2_BIN = $(BUILD_DIR)/test_cia2
 EXAMPLE_BIN = $(BUILD_DIR)/example
-C64_BIN = $(BUILD_DIR)/c64
+MAIN_BIN = $(BUILD_DIR)/main
 
-.PHONY: all clean test run-test example run-example c64 run-c64 docs
+.PHONY: all clean test run-test example run-example main run-main docs
 
-all: $(LIB_NAME) $(TEST_EXEC) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(EXAMPLE_BIN) $(C64_BIN)
+all: $(LIB_NAME) $(MAIN_BIN) $(TEST_OPCODES_BIN) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(EXAMPLE_BIN)
 
 # Create build directory
 $(BUILD_DIR):
@@ -58,7 +58,7 @@ $(LIB_NAME): $(OBJECTS) | $(BUILD_DIR)
 	ar rcs $@ $(OBJECTS)
 
 # Build test executable
-$(TEST_EXEC): $(OBJECTS) $(TEST_OBJECTS) | $(BUILD_DIR)
+$(TEST_OPCODES_BIN): $(OBJECTS) $(TEST_OPCODES_OBJ) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 $(TEST_DORMANN_BIN): $(OBJECTS) $(TEST_DORMANN_OBJ) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
@@ -81,13 +81,13 @@ $(TEST_CIA2_BIN): $(OBJECTS) $(TEST_CIA2_OBJ) | $(BUILD_DIR)
 $(EXAMPLE_BIN): $(OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $(SRC_DIR)/example.c $^ -o $@
 
-# Build C64 executable
-$(C64_BIN): $(OBJECTS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(INCLUDES) $(SRC_DIR)/c64.c $^ -o $@
+# Build main executable
+$(MAIN_BIN): $(OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $(SRC_DIR)/main.c $^ -o $@
 
 # Run tests
-test: $(TEST_EXEC)
-	./$(TEST_EXEC)
+test: $(TEST_OPCODES_BIN)
+	./$(TEST_OPCODES_BIN)
 test-vic: $(TEST_VIC_BIN)
 	./$(TEST_VIC_BIN)
 test-cia1: $(TEST_CIA1_BIN)
@@ -121,11 +121,11 @@ example: $(EXAMPLE_BIN)
 
 run-example: example
 
-# Run C64
-c64: $(C64_BIN)
-	./$(C64_BIN)
+# Run main
+main: $(MAIN_BIN)
+	./$(MAIN_BIN)
 
-run-c64: c64
+run-main: main
 
 # Install (optional)
 install: $(LIB_NAME)
@@ -158,7 +158,7 @@ help:
 	@echo "  test-cia1     - Run CIA1 test suite"
 	@echo "  test-cia2     - Run CIA2 test suite"
 	@echo "  example       - Build and run example programs"
-	@echo "  c64           - Build and run c64 programs"
+	@echo "  main          - Build and run main programs"
 	@echo "  clean         - Remove build artifacts"
 	@echo "  install       - Install library to system"
 	@echo "  docs          - Generate documentation"

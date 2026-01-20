@@ -1,4 +1,4 @@
-#include "../include/mos6510.h"
+#include "mos6510.h"
 
 // All 6502 instructions
 const instruction_t instructions[256] = {

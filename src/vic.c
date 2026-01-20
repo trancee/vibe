@@ -1,7 +1,8 @@
-#include "../include/vic.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+
+#include "vic.h"
 
 void vic_init(VIC *vic, uint8_t *memory)
 {

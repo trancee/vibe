@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "../include/vic.h"
-#include "../include/mos6510.h"
+
+#include "mos6510.h"
+#include "vic.h"
 
 // Test memory context for VIC-II
 typedef struct {
