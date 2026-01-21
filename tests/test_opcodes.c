@@ -1908,6 +1908,60 @@ static void test_ANE_zero_result(CPU *cpu)
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "ANE sets zero flag");
 }
 
+// ============================================================================
+// LXA - Unstable opcode $AB (per 64doc.txt)
+// A = X = (A | #$EE) & #byte
+// ============================================================================
+
+static void test_LXA_basic(CPU *cpu)
+{
+    // LXA: A = X = (A | $EE) & imm
+    cpu->A = 0x00;
+    uint8_t instr[] = {0xAB, 0xFF}; // LXA #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = X = (0x00 | 0xEE) & 0xFF = 0xEE
+    TEST_ASSERT_EQ(0xEE, cpu->A, "LXA: (0x00 | 0xEE) & 0xFF = 0xEE");
+    TEST_ASSERT_EQ(0xEE, cpu->X, "LXA: X = A");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "LXA sets negative flag");
+}
+
+static void test_LXA_imm_masks(CPU *cpu)
+{
+    // Immediate value masks the result
+    cpu->A = 0xFF;
+    uint8_t instr[] = {0xAB, 0x11}; // LXA #$11
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = X = (0xFF | 0xEE) & 0x11 = 0xFF & 0x11 = 0x11
+    TEST_ASSERT_EQ(0x11, cpu->A, "LXA: immediate masks result");
+    TEST_ASSERT_EQ(0x11, cpu->X, "LXA: X = A");
+}
+
+static void test_LXA_a_contributes_low_bits(CPU *cpu)
+{
+    // Only bits NOT set in $EE (bits 0 and 4) come from A
+    cpu->A = 0x11;  // bits 0 and 4 set
+    uint8_t instr[] = {0xAB, 0xFF}; // LXA #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = X = (0x11 | 0xEE) & 0xFF = 0xFF
+    TEST_ASSERT_EQ(0xFF, cpu->A, "LXA: A bits 0,4 combine with 0xEE");
+    TEST_ASSERT_EQ(0xFF, cpu->X, "LXA: X = A");
+}
+
+static void test_LXA_zero_result(CPU *cpu)
+{
+    cpu->A = 0x00;
+    uint8_t instr[] = {0xAB, 0x00}; // LXA #$00
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = X = (0x00 | 0xEE) & 0x00 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->A, "LXA: imm=0 produces zero result");
+    TEST_ASSERT_EQ(0x00, cpu->X, "LXA: X = A");
+    TEST_ASSERT_EQ(true, get_flag_zero(cpu), "LXA sets zero flag");
+}
+
 // Test array for all opcodes
 static const test_case_t opcode_tests[] = {
     // ADC tests
@@ -2092,6 +2146,10 @@ static const test_case_t opcode_tests[] = {
     {0x8B, "ANE", test_ANE_imm_masks},
     {0x8B, "ANE", test_ANE_a_contributes_low_bits},
     {0x8B, "ANE", test_ANE_zero_result},
+    {0xAB, "LXA", test_LXA_basic},
+    {0xAB, "LXA", test_LXA_imm_masks},
+    {0xAB, "LXA", test_LXA_a_contributes_low_bits},
+    {0xAB, "LXA", test_LXA_zero_result},
     {0xCB, "SBX", test_SBX},
 };
 

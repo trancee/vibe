@@ -160,6 +160,21 @@ void LAX(CPU *cpu)
     }
 }
 
+void LXA(CPU *cpu)
+{
+    // LXA opcode $AB (also known as LAX immediate, OAL, ATX)
+    // Per 64doc.txt: A = X = (A | #$EE) & #byte
+    // This is an unstable opcode similar to ANE but loads both A and X
+    // The #$EE constant is the most common value on C64 (6510)
+    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t imm = fetch_operand(cpu, op->mode);
+    uint8_t result = (cpu->A | 0xEE) & imm;
+    cpu->A = cpu->X = result;
+    set_flag_negative(cpu, result & 0x80);
+    set_flag_zero(cpu, result == 0);
+    cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
+}
+
 void RLA(CPU *cpu)
 {
     const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
@@ -253,7 +268,7 @@ void TAS(CPU *cpu)
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 3);
 }
 
-void XAA(CPU *cpu)
+void ANE(CPU *cpu)
 {
     // ANE / XAA opcode $8B
     // Per 64doc.txt: A = (A | #$EE) & X & #byte

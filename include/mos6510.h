@@ -369,13 +369,14 @@ void DCP(CPU *cpu);
 void ISC(CPU *cpu);
 void LAS(CPU *cpu);
 void LAX(CPU *cpu);
+void LXA(CPU *cpu);
 void RLA(CPU *cpu);
 void RRA(CPU *cpu);
 void SAX(CPU *cpu);
 void SLO(CPU *cpu);
 void SRE(CPU *cpu);
 void TAS(CPU *cpu);
-void XAA(CPU *cpu);
+void ANE(CPU *cpu);
 void SBX(CPU *cpu);
 
 // Global opcode table declaration
