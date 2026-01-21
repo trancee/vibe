@@ -1841,6 +1841,73 @@ static void test_SBX(CPU *cpu)
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SBX sets carry when no borrow");
 }
 
+// ============================================================================
+// ANE/XAA - Unstable opcode $8B (per 64doc.txt)
+// A = (A | #$EE) & X & #byte
+// ============================================================================
+
+static void test_ANE_basic(CPU *cpu)
+{
+    // ANE: A = (A | $EE) & X & imm
+    cpu->A = 0x00;
+    cpu->X = 0xFF;
+    uint8_t instr[] = {0x8B, 0xFF}; // ANE #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x00 | 0xEE) & 0xFF & 0xFF = 0xEE
+    TEST_ASSERT_EQ(0xEE, cpu->A, "ANE: (0x00 | 0xEE) & 0xFF & 0xFF = 0xEE");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "ANE sets negative flag");
+}
+
+static void test_ANE_x_masks(CPU *cpu)
+{
+    // X register masks the result
+    cpu->A = 0xFF;
+    cpu->X = 0x0F;
+    uint8_t instr[] = {0x8B, 0xFF}; // ANE #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0xFF | 0xEE) & 0x0F & 0xFF = 0xFF & 0x0F = 0x0F
+    TEST_ASSERT_EQ(0x0F, cpu->A, "ANE: X masks result to low nibble");
+}
+
+static void test_ANE_imm_masks(CPU *cpu)
+{
+    // Immediate value masks the result
+    cpu->A = 0xFF;
+    cpu->X = 0xFF;
+    uint8_t instr[] = {0x8B, 0x11}; // ANE #$11
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0xFF | 0xEE) & 0xFF & 0x11 = 0xFF & 0x11 = 0x11
+    TEST_ASSERT_EQ(0x11, cpu->A, "ANE: immediate masks result");
+}
+
+static void test_ANE_a_contributes_low_bits(CPU *cpu)
+{
+    // Only bits NOT set in $EE (bits 0 and 4) come from A
+    // $EE = 11101110, so bits 0 and 4 are 0 in the OR mask
+    cpu->A = 0x11;  // bits 0 and 4 set
+    cpu->X = 0xFF;
+    uint8_t instr[] = {0x8B, 0xFF}; // ANE #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x11 | 0xEE) & 0xFF & 0xFF = 0xFF
+    TEST_ASSERT_EQ(0xFF, cpu->A, "ANE: A bits 0,4 combine with 0xEE to make 0xFF");
+}
+
+static void test_ANE_zero_result(CPU *cpu)
+{
+    cpu->A = 0x00;
+    cpu->X = 0x00;
+    uint8_t instr[] = {0x8B, 0xFF}; // ANE #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x00 | 0xEE) & 0x00 & 0xFF = 0xEE & 0x00 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->A, "ANE: X=0 produces zero result");
+    TEST_ASSERT_EQ(true, get_flag_zero(cpu), "ANE sets zero flag");
+}
+
 // Test array for all opcodes
 static const test_case_t opcode_tests[] = {
     // ADC tests
@@ -2020,6 +2087,11 @@ static const test_case_t opcode_tests[] = {
     {0x6B, "ARR", test_ARR_decimal_low_nybble_fixup},
     {0x6B, "ARR", test_ARR_decimal_high_nybble_fixup},
     {0x6B, "ARR", test_ARR_decimal_v_flag},
+    {0x8B, "ANE", test_ANE_basic},
+    {0x8B, "ANE", test_ANE_x_masks},
+    {0x8B, "ANE", test_ANE_imm_masks},
+    {0x8B, "ANE", test_ANE_a_contributes_low_bits},
+    {0x8B, "ANE", test_ANE_zero_result},
     {0xCB, "SBX", test_SBX},
 };
 

@@ -255,8 +255,13 @@ void TAS(CPU *cpu)
 
 void XAA(CPU *cpu)
 {
+    // ANE / XAA opcode $8B
+    // Per 64doc.txt: A = (A | #$EE) & X & #byte
+    // The #$EE constant is the most common value on C64 (6510)
+    // This is an unstable opcode - behavior varies by chip revision
     const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A &= cpu->X & fetch_operand(cpu, op->mode);
+    uint8_t imm = fetch_operand(cpu, op->mode);
+    cpu->A = (cpu->A | 0xEE) & cpu->X & imm;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);

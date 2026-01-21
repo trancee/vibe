@@ -150,7 +150,7 @@ const instruction_t instructions[256] = {
     {0x88, "DEY", DEY, Implied, 1, 2, false},
     {0x89, "NOP", NOP, Immediate, 2, 2, true},
     {0x8A, "TXA", TXA, Implied, 1, 2, false},
-    {0x8B, "XAA", XAA, Immediate, 2, 2, true}, // FIXME: ANE
+    {0x8B, "ANE", XAA, Immediate, 2, 2, true}, // 6502: XAA
     {0x8C, "STY", STY, Absolute, 3, 4, false},
     {0x8D, "STA", STA, Absolute, 3, 4, false},
     {0x8E, "STX", STX, Absolute, 3, 4, false},
