@@ -9,16 +9,17 @@
 // Test context for CIA1
 typedef struct {
     uint8_t keyboard_matrix[8][8];
-    uint8_t joystick1_state;
-    uint8_t joystick2_state;
+    uint8_t joystick1_state;  // Joystick 1 on Port B (active low)
+    uint8_t joystick2_state;  // Joystick 2 on Port A (active low)
     uint8_t port_a_output;
     uint8_t port_b_output;
 } cia1_context_t;
 
-// CIA1 port A callback (keyboard rows)
+// CIA1 port A callback (keyboard rows + joystick 2)
 uint8_t cia1_port_a_read(void *context) {
     cia1_context_t *ctx = (cia1_context_t*)context;
-    return ctx->port_a_output;
+    // Return joystick 2 state (bits 0-4) combined with port A output
+    return (ctx->port_a_output & 0xE0) | (ctx->joystick2_state & 0x1F);
 }
 
 void cia1_port_a_write(void *context, uint8_t data) {
@@ -26,19 +27,11 @@ void cia1_port_a_write(void *context, uint8_t data) {
     ctx->port_a_output = data;
 }
 
-// CIA1 port B callback (keyboard columns + joysticks)
+// CIA1 port B callback (keyboard columns + joystick 1)
 uint8_t cia1_port_b_read(void *context) {
     cia1_context_t *ctx = (cia1_context_t*)context;
-    uint8_t rows = ctx->port_a_output;
-    uint8_t result = 0xFF;
-    
-    // For the test, if any rows are active, return the simulated keyboard data
-    if (rows != 0xFF) {
-        // Return column data for active rows
-        result = ctx->joystick1_state & ctx->joystick2_state;
-    }
-    
-    return result;
+    // Return joystick 1 state (bits 0-4) combined with port B output
+    return (ctx->port_b_output & 0xE0) | (ctx->joystick1_state & 0x1F);
 }
 
 void cia1_port_b_write(void *context, uint8_t data) {
@@ -136,31 +129,39 @@ void test_cia1_timer_a() {
     assert(cia1.timer_a_latch == 0x1000);
     assert(cia1.timer_a == 0x1000);
     
+    // Enable Timer A interrupt (bit 7=1 for SET, bit 0 for TA)
+    cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_TA);
+    assert((cia1.icr_mask & CIA_ICR_TA) != 0);
+    
     // Test timer start
     cia_write(&cia1, CIA1_CRA, CIA_CR_START);
     assert(cia1.timer_a_running);
     assert((cia1.cra & CIA_CR_START) != 0);
     
-    // Clock timer and check underflow
-    for (int i = 0; i < 0x1000; i++) {
+    // Clock timer and check underflow (0x1001 clocks: 0x1000 decrements to 0, then 1 more to underflow)
+    for (int i = 0; i < 0x1001; i++) {
         cia_clock(&cia1);
     }
     
     assert(cia1.timer_a_underflow);
     assert(cia_get_irq(&cia1));
-    assert((cia1.icr & CIA_ICR_TA) != 0);
+    assert((cia1.icr_data & CIA_ICR_TA) != 0);
     
-    // Clear interrupt
-    cia_write(&cia1, CIA1_ICR, 0);
-    cia_write(&cia1, CIA1_ICR, CIA_ICR_TA);
-    assert(!cia_get_irq(&cia1));
+    // Read ICR to clear interrupt (reading clears icr_data)
+    uint8_t icr_val = cia_read(&cia1, CIA1_ICR);
+    assert((icr_val & CIA_ICR_TA) != 0);      // Timer A interrupt was set
+    assert((icr_val & CIA_ICR_FLAG) != 0);    // IRQ flag was set
+    assert(!cia_get_irq(&cia1));              // IRQ cleared after read
+    assert(cia1.icr_data == 0);               // ICR data cleared after read
     
-    // Test one-shot mode
-    cia_write(&cia1, CIA1_TALO, 0x01);
+    // Test one-shot mode (default - bit 3 = 1 in RUNMODE)
+    cia_write(&cia1, CIA1_TALO, 0x02);
     cia_write(&cia1, CIA1_TAHI, 0x00);
-    cia_write(&cia1, CIA1_CRA, CIA_CR_START | CIA_CR_LOAD);
-    cia_clock(&cia1);
-    cia_clock(&cia1);
+    cia_write(&cia1, CIA1_CRA, CIA_CR_START | CIA_CR_LOAD | CIA_CR_RUNMODE);
+    assert(cia1.timer_a == 0x0002);
+    cia_clock(&cia1);  // 2 -> 1
+    cia_clock(&cia1);  // 1 -> 0
+    cia_clock(&cia1);  // 0 -> underflow, reload to 2, stop timer
     assert(!cia1.timer_a_running);
     assert((cia1.cra & CIA_CR_START) == 0);
     
@@ -185,22 +186,27 @@ void test_cia1_timer_b() {
     assert(cia1.timer_b_latch == 0x2000);
     assert(cia1.timer_b == 0x2000);
     
+    // Enable Timer B interrupt (bit 7=1 for SET, bit 1 for TB)
+    cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_TB);
+    assert((cia1.icr_mask & CIA_ICR_TB) != 0);
+    
     // Test timer start
     cia_write(&cia1, CIA1_CRB, CIA_CRB_START);
     assert(cia1.timer_b_running);
     assert((cia1.crb & CIA_CRB_START) != 0);
     
-    // Clock timer and check underflow
-    for (int i = 0; i < 0x2000; i++) {
+    // Clock timer and check underflow (0x2001 clocks needed)
+    for (int i = 0; i < 0x2001; i++) {
         cia_clock(&cia1);
     }
     
     assert(cia1.timer_b_underflow);
     assert(cia_get_irq(&cia1));
-    assert((cia1.icr & CIA_ICR_TB) != 0);
+    assert((cia1.icr_data & CIA_ICR_TB) != 0);
     
-    // Clear interrupt
-    cia_write(&cia1, CIA1_ICR, CIA_ICR_TB);
+    // Read ICR to clear interrupt
+    uint8_t icr_val = cia_read(&cia1, CIA1_ICR);
+    assert((icr_val & CIA_ICR_TB) != 0);
     assert(!cia_get_irq(&cia1));
     
     printf("✓ CIA1 Timer B test passed\n\n");
@@ -242,6 +248,9 @@ void test_cia1_tod() {
     cia_clock_phi2(&cia1); // 10ths increment
     assert(cia1.tod_10th == 8);
     
+    // Enable TOD interrupt
+    cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_TOD);
+    
     // Simulate reaching alarm
     cia1.tod_hr = 13;
     cia1.tod_min = 35;
@@ -250,11 +259,11 @@ void test_cia1_tod() {
     cia_clock_phi2(&cia1);
     
     assert(cia_get_irq(&cia1));
-    assert((cia1.icr & CIA_ICR_TOD) != 0);
+    assert((cia1.icr_data & CIA_ICR_TOD) != 0);
     
-    // Clear TOD interrupt by reading hours register
-    cia_read(&cia1, CIA1_TODHR);
-    assert(!(cia1.icr & CIA_ICR_TOD));
+    // Read ICR to clear TOD interrupt
+    cia_read(&cia1, CIA1_ICR);
+    assert(cia1.icr_data == 0);
     
     printf("✓ CIA1 Time of Day test passed\n\n");
 }
@@ -271,28 +280,30 @@ void test_cia1_interrupts() {
                       cia1_port_a_read, cia1_port_a_write,
                       cia1_port_b_read, cia1_port_b_write);
     
-    // Test interrupt enable/disable
+    // Test interrupt enable/disable using icr_mask
     cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_TA | CIA_ICR_TB | CIA_ICR_TOD | CIA_ICR_SDR);
-    assert(cia1.icr == (CIA_ICR_TA | CIA_ICR_TB | CIA_ICR_TOD | CIA_ICR_SDR));
+    assert(cia1.icr_mask == (CIA_ICR_TA | CIA_ICR_TB | CIA_ICR_TOD | CIA_ICR_SDR));
     
     // Clear all interrupt enables
-    cia_write(&cia1, CIA1_ICR, 0);
-    assert(cia1.icr == 0);
+    cia_write(&cia1, CIA1_ICR, CIA_ICR_TA | CIA_ICR_TB | CIA_ICR_TOD | CIA_ICR_SDR);  // No SET bit = clear
+    assert(cia1.icr_mask == 0);
     
     // Enable specific interrupts
     cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_TA | CIA_ICR_TB);
-    assert(cia1.icr == (CIA_ICR_TA | CIA_ICR_TB));
+    assert(cia1.icr_mask == (CIA_ICR_TA | CIA_ICR_TB));
     
     // Generate timer A interrupt
-    cia_write(&cia1, CIA1_TALO, 0x01);
+    cia_write(&cia1, CIA1_TALO, 0x02);
     cia_write(&cia1, CIA1_TAHI, 0x00);
-    cia_write(&cia1, CIA1_CRA, CIA_CR_START);
-    cia_clock(&cia1);
-    cia_clock(&cia1);
+    cia_write(&cia1, CIA1_CRA, CIA_CR_START | CIA_CR_LOAD);
+    cia_clock(&cia1);  // 2 -> 1
+    cia_clock(&cia1);  // 1 -> 0
+    cia_clock(&cia1);  // 0 -> underflow
     
     assert(cia_get_irq(&cia1));
-    assert((cia1.icr & CIA_ICR_FLAG));
-    assert(cia_read(&cia1, CIA1_ICR) & CIA_ICR_FLAG);
+    uint8_t icr_val = cia_read(&cia1, CIA1_ICR);
+    assert((icr_val & CIA_ICR_FLAG) != 0);
+    assert((icr_val & CIA_ICR_TA) != 0);
     
     printf("✓ CIA1 interrupts test passed\n\n");
 }
@@ -338,31 +349,41 @@ void test_cia1_joystick() {
     CIA cia1;
     cia1_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
+    ctx.joystick1_state = 0xFF;  // All released initially
+    ctx.joystick2_state = 0xFF;  // All released initially
     
     cia_init(&cia1, CIA1_PRA);
     cia_set_io_callbacks(&cia1, &ctx,
                       cia1_port_a_read, cia1_port_a_write,
                       cia1_port_b_read, cia1_port_b_write);
     
+    // Set DDR for port B as input for joystick reading
+    cia_write(&cia1, CIA1_DDRB, 0x00);  // All inputs
+    
     // Set joystick 1 state (up + fire pressed)
-    ctx.joystick1_state = 0xE7; // 11100111 (up cleared, fire cleared)
+    // Active low: 0 = pressed, 1 = released
+    // Bit 0 = Up, Bit 1 = Down, Bit 2 = Left, Bit 3 = Right, Bit 4 = Fire
+    ctx.joystick1_state = 0xEE;  // 11101110 = fire pressed (bit 4=0), up pressed (bit 0=0)
     
     uint8_t joy1 = cia1_joystick_read(&cia1, 1);
-    assert((joy1 & 0x01) == 0); // Up pressed
-    assert((joy1 & 0x10) == 0); // Fire pressed
-    assert((joy1 & 0x02) != 0); // Down not pressed
-    assert((joy1 & 0x04) != 0); // Left not pressed
-    assert((joy1 & 0x08) != 0); // Right not pressed
+    assert((joy1 & 0x01) == 0);  // Up pressed (bit 0 = 0)
+    assert((joy1 & 0x10) == 0);  // Fire pressed (bit 4 = 0)
+    assert((joy1 & 0x02) != 0);  // Down not pressed
+    assert((joy1 & 0x04) != 0);  // Left not pressed
+    assert((joy1 & 0x08) != 0);  // Right not pressed
     
-    // Test joystick 2
-    ctx.joystick2_state = 0xDB; // 11011011 (right + fire pressed)
+    // Set DDR for port A as input for joystick reading
+    cia_write(&cia1, CIA1_DDRA, 0x00);  // All inputs
+    
+    // Test joystick 2 (right + fire pressed)
+    ctx.joystick2_state = 0xE7;  // 11100111 = fire pressed (bit 4=0), right pressed (bit 3=0)
     
     uint8_t joy2 = cia1_joystick_read(&cia1, 2);
-    assert((joy2 & 0x08) == 0); // Right pressed
-    assert((joy2 & 0x10) == 0); // Fire pressed
-    assert((joy2 & 0x01) != 0); // Up not pressed
-    assert((joy2 & 0x02) != 0); // Down not pressed
-    assert((joy2 & 0x04) != 0); // Left not pressed
+    assert((joy2 & 0x08) == 0);  // Right pressed (bit 3 = 0)
+    assert((joy2 & 0x10) == 0);  // Fire pressed (bit 4 = 0)
+    assert((joy2 & 0x01) != 0);  // Up not pressed
+    assert((joy2 & 0x02) != 0);  // Down not pressed
+    assert((joy2 & 0x04) != 0);  // Left not pressed
     
     printf("✓ CIA1 joystick reading test passed\n\n");
 }
@@ -384,19 +405,25 @@ void test_cia1_serial_port() {
     assert(cia1.sdr == 0x55);
     assert(cia_read(&cia1, CIA1_SDR) == 0x55);
     
-    // Test serial interrupt (simplified)
+    // Enable serial output mode and serial interrupt
+    cia_write(&cia1, CIA1_CRA, CIA_CR_SPMODE);  // Set serial port output mode
     cia_write(&cia1, CIA1_ICR, CIA_ICR_SET | CIA_ICR_SDR);
+    
+    // Write to SDR to start transmission
     cia_write(&cia1, CIA1_SDR, 0xAA);
     
-    // Clock serial port
-    cia_clock_serial(&cia1);
+    // Enable serial output and clock 8 bits
+    cia1.serial_output_enabled = true;
+    for (int i = 0; i < 8; i++) {
+        cia_clock_serial(&cia1);
+    }
     
     assert(cia_get_irq(&cia1));
-    assert((cia1.icr & CIA_ICR_SDR) != 0);
+    assert((cia1.icr_data & CIA_ICR_SDR) != 0);
     
-    // Clear by reading
-    cia_read(&cia1, CIA1_SDR);
-    assert(!(cia1.icr & CIA_ICR_SDR));
+    // Clear by reading ICR
+    cia_read(&cia1, CIA1_ICR);
+    assert(cia1.icr_data == 0);
     
     printf("✓ CIA1 serial port test passed\n\n");
 }

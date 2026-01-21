@@ -21,7 +21,8 @@ void cia_init(CIA *cia, uint16_t base_address)
     // Clear all registers
     cia->pra = 0x03;  // Default to VIC bank 0 (bits 0-1 set for active low)
     cia->prb = 0x00;
-    cia->icr = 0x00;
+    cia->icr_data = 0x00;  // Interrupt data register (read-only)
+    cia->icr_mask = 0x00;  // Interrupt mask register (write-only)
     cia->cra = 0x00;
     cia->crb = 0x00;
     
@@ -110,19 +111,24 @@ uint8_t cia_read(CIA *cia, uint16_t addr)
             
         case 0x0B:  // TODHR - Time of Day Hours
             result = cia->tod_hr;
-            cia->icr &= ~CIA_ICR_TOD;  // Clear TOD interrupt
+            cia->icr_data &= ~CIA_ICR_TOD;  // Clear TOD interrupt
             break;
             
         case 0x0C:  // SDR - Serial Data Register
             result = cia->sdr;
-            cia->icr &= ~CIA_ICR_SDR;  // Clear serial interrupt
+            cia->icr_data &= ~CIA_ICR_SDR;  // Clear serial interrupt
             break;
             
-        case 0x0D:  // ICR - Interrupt Control Register
-            result = cia->icr | CIA_ICR_FLAG;  // Bit 7 always reads as 1 if IRQ occurred
-            if (!cia->irq_pending) {
-                result &= ~CIA_ICR_FLAG;
+        case 0x0D:  // ICR - Interrupt Control Register (DATA - read-only)
+            // Reading ICR returns interrupt status and clears it
+            result = cia->icr_data;
+            if (cia->irq_pending) {
+                result |= CIA_ICR_FLAG;  // Bit 7 set if any enabled interrupt occurred
             }
+            // Clear all interrupt bits and IRQ after read
+            cia->icr_data = 0x00;
+            cia->pending_interrupts = 0;
+            cia->irq_pending = false;
             break;
             
         case 0x0E:  // CRA - Control Register A
@@ -220,17 +226,16 @@ void cia_write(CIA *cia, uint16_t addr, uint8_t data)
             
         case 0x0C:  // SDR - Serial Data Register
             cia->sdr = data;
-            cia->icr &= ~CIA_ICR_SDR;  // Clear serial interrupt
+            cia->icr_data &= ~CIA_ICR_SDR;  // Clear serial interrupt
             break;
             
-        case 0x0D:  // ICR - Interrupt Control Register
+        case 0x0D:  // ICR - Interrupt Control Register (MASK - write-only)
             if (data & CIA_ICR_SET) {
-                // Set interrupt enable bits only (FLAG bit is read-only)
-                cia->icr = (cia->icr & CIA_ICR_FLAG) | (data & 0x7F);
+                // Set interrupt enable bits
+                cia->icr_mask |= (data & 0x1F);
             } else {
-                // Clear interrupt enable bits, corresponding pending interrupts, and FLAG bit
-                cia->icr &= ~(data & 0x7F);
-                cia->pending_interrupts &= ~(data & 0x7F);
+                // Clear interrupt enable bits
+                cia->icr_mask &= ~(data & 0x1F);
             }
             cia_update_irq(cia);
             break;
@@ -249,8 +254,8 @@ void cia_write(CIA *cia, uint16_t addr, uint8_t data)
                 cia_timer_a_stop(cia);
             }
             
-            cia->timer_a_one_shot = !(data & CIA_CR_OUTMODE);
-            cia->tod_50hz = !(data & CIA_CR_TODIN);
+            cia->timer_a_one_shot = (data & CIA_CR_RUNMODE) != 0;  // Bit 3: 1=one-shot, 0=continuous
+            cia->tod_50hz = (data & CIA_CR_TODIN) != 0;
             break;
             
         case 0x0F:  // CRB - Control Register B
@@ -267,7 +272,7 @@ void cia_write(CIA *cia, uint16_t addr, uint8_t data)
                 cia_timer_b_stop(cia);
             }
             
-            cia->timer_b_one_shot = !(data & CIA_CRB_OUTMODE);
+            cia->timer_b_one_shot = (data & CIA_CRB_RUNMODE) != 0;  // Bit 3: 1=one-shot, 0=continuous
             break;
     }
 }
@@ -377,7 +382,7 @@ void cia_timer_a_underflow(CIA *cia)
     
     cia->timer_a_underflow = true;
     cia->pending_interrupts |= CIA_ICR_TA;
-    cia->icr |= CIA_ICR_TA;
+    cia->icr_data |= CIA_ICR_TA;
     cia_update_irq(cia);
     
     // Toggle port B bit 6 if PBON is set
@@ -392,7 +397,7 @@ void cia_timer_b_underflow(CIA *cia)
     
     cia->timer_b_underflow = true;
     cia->pending_interrupts |= CIA_ICR_TB;
-    cia->icr |= CIA_ICR_TB;
+    cia->icr_data |= CIA_ICR_TB;
     cia_update_irq(cia);
     
     // Toggle port B bit 7 if PBON is set
@@ -445,30 +450,64 @@ void cia_clock_tod(CIA *cia)
         cia->tod_10th == cia->tod_alarm_10th) {
         
         cia->pending_interrupts |= CIA_ICR_TOD;
-        cia->icr |= CIA_ICR_TOD;
+        cia->icr_data |= CIA_ICR_TOD;
         cia_update_irq(cia);
-        return; // Don't increment time when alarm triggers
     }
     
+    // Increment 10ths (BCD: 0-9)
     cia->tod_10th++;
-    
-    if (cia->tod_10th >= 10) {
+    if (cia->tod_10th > 9) {
         cia->tod_10th = 0;
-        cia->tod_sec++;
         
-        if (cia->tod_sec >= 60) {
-            cia->tod_sec = 0;
-            cia->tod_min++;
-            
-            if (cia->tod_min >= 60) {
-                cia->tod_min = 0;
-                cia->tod_hr++;
-                
-                if (cia->tod_hr >= 24) {
-                    cia->tod_hr = 0;
-                }
-            }
+        // Increment seconds (BCD: 00-59)
+        uint8_t sec_lo = cia->tod_sec & 0x0F;
+        uint8_t sec_hi = (cia->tod_sec >> 4) & 0x07;
+        sec_lo++;
+        if (sec_lo > 9) {
+            sec_lo = 0;
+            sec_hi++;
         }
+        if (sec_hi > 5) {
+            sec_hi = 0;
+            sec_lo = 0;
+            
+            // Increment minutes (BCD: 00-59)
+            uint8_t min_lo = cia->tod_min & 0x0F;
+            uint8_t min_hi = (cia->tod_min >> 4) & 0x07;
+            min_lo++;
+            if (min_lo > 9) {
+                min_lo = 0;
+                min_hi++;
+            }
+            if (min_hi > 5) {
+                min_hi = 0;
+                min_lo = 0;
+                
+                // Increment hours (BCD: 01-12, with AM/PM in bit 7)
+                uint8_t hr_lo = cia->tod_hr & 0x0F;
+                uint8_t hr_hi = (cia->tod_hr >> 4) & 0x01;
+                uint8_t pm = cia->tod_hr & 0x80;
+                
+                hr_lo++;
+                if (hr_lo > 9) {
+                    hr_lo = 0;
+                    hr_hi++;
+                }
+                
+                // Handle 12-hour rollover
+                uint8_t hour_val = hr_hi * 10 + hr_lo;
+                if (hour_val == 12) {
+                    pm ^= 0x80;  // Toggle AM/PM
+                } else if (hour_val > 12) {
+                    hr_hi = 0;
+                    hr_lo = 1;
+                }
+                
+                cia->tod_hr = (pm | (hr_hi << 4) | hr_lo);
+            }
+            cia->tod_min = (min_hi << 4) | min_lo;
+        }
+        cia->tod_sec = (sec_hi << 4) | sec_lo;
     }
 }
 
@@ -498,7 +537,7 @@ void cia_clock_serial(CIA *cia)
     if (cia->serial_bit_count >= 8) {
         cia->serial_output_enabled = false;
         cia->pending_interrupts |= CIA_ICR_SDR;
-        cia->icr |= CIA_ICR_SDR;
+        cia->icr_data |= CIA_ICR_SDR;
         cia_update_irq(cia);
     }
 }
@@ -547,21 +586,20 @@ uint8_t cia1_joystick_read(CIA *cia1, uint8_t joystick_num)
 {
     if (cia1 == NULL) return 0xFF;
     
-    // Simplified joystick reading
-    // Joystick 1 uses CIA1 port A bits 0-4
-    // Joystick 2 uses CIA1 port B bits 0-4
-    
-    uint8_t joystick_data = 0xFF;
+    // C64 joystick reading:
+    // Joystick 1 uses CIA1 Port B bits 0-4 ($DC01)
+    // Joystick 2 uses CIA1 Port A bits 0-4 ($DC00)
+    // Bits are active-low (0 = pressed)
     
     if (joystick_num == 1) {
-        // Read from port A (active low)
-        joystick_data = ~(cia1->pra & 0x1F);
+        // Read from port B, return as-is (already active-low from port read)
+        return cia_read(cia1, cia1->base_address + 0x01) & 0x1F;
     } else if (joystick_num == 2) {
-        // Read from port B (active low)
-        joystick_data = ~(cia1->prb & 0x1F);
+        // Read from port A, return as-is (already active-low from port read)
+        return cia_read(cia1, cia1->base_address + 0x00) & 0x1F;
     }
     
-    return joystick_data;
+    return 0xFF;
 }
 
 // CIA2 specific functions
@@ -592,10 +630,6 @@ void cia_update_irq(CIA *cia)
 {
     if (cia == NULL) return;
     
-    cia->irq_pending = (cia->pending_interrupts & cia->icr & 0x7F) != 0;
-    if (cia->irq_pending) {
-        cia->icr |= CIA_ICR_FLAG;
-    } else {
-        cia->icr &= ~CIA_ICR_FLAG;
-    }
+    // IRQ is pending if any enabled interrupt source has occurred
+    cia->irq_pending = (cia->icr_data & cia->icr_mask & 0x1F) != 0;
 }

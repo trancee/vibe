@@ -93,7 +93,8 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
         break;
 
     case 0x11:                         // Control 1
-        result = vic->control1 | 0x80; // Bit 7 always reads as 1
+        // Bit 7 contains RC8 (MSB of current raster line)
+        result = (vic->control1 & 0x7F) | ((vic->current_raster >> 1) & 0x80);
         break;
 
     case 0x12: // Current raster line
@@ -525,6 +526,9 @@ void vic_render_sprites_line(VIC *vic, uint16_t line)
     if (!vic->sprite_enable)
         return;
 
+    // Get video matrix base for sprite pointer lookup
+    uint16_t screen_base = vic_get_screen_base(vic);
+
     for (int sprite = 0; sprite < VIC_NUM_SPRITES; sprite++)
     {
         if (!vic_is_sprite_enabled(vic, sprite))
@@ -543,10 +547,18 @@ void vic_render_sprites_line(VIC *vic, uint16_t line)
         {
             uint8_t sprite_line = y_expand ? ((line - sprite_y) / 2) : (line - sprite_y);
 
-            // Render sprite data
+            // Fetch sprite pointer from video matrix end (VM base + $3F8 + sprite number)
+            // Sprite pointers are located at the last 8 bytes of the video matrix
+            uint16_t sprite_pointer_addr = screen_base + 0x3F8 + sprite;
+            uint8_t sprite_pointer = read_mem(vic, sprite_pointer_addr);
+            
+            // Calculate sprite data base address (pointer * 64)
+            uint16_t sprite_data_base = sprite_pointer * 64;
+
+            // Render sprite data (3 bytes per line, 21 lines)
             for (int byte = 0; byte < 3; byte++)
             {
-                uint16_t sprite_data_addr = (sprite << 6) + sprite_line * 3 + byte;
+                uint16_t sprite_data_addr = sprite_data_base + sprite_line * 3 + byte;
                 uint8_t sprite_data = read_mem(vic, sprite_data_addr);
 
                 for (int bit = 7; bit >= 0; bit--)
@@ -636,19 +648,23 @@ bool vic_is_display_enabled(VIC *vic)
 
 uint16_t vic_get_screen_base(VIC *vic)
 {
-    uint16_t base = ((vic->mem_pointers & VIC_VM13) >> 5) << 10 |
-                    ((vic->mem_pointers & VIC_VM12) << 10);
-    return base + 0x400;
+    // Bits 4-7 of $D018 form video matrix address bits 10-13
+    // Video matrix base = (bits 4-7) << 10
+    uint16_t base = ((vic->mem_pointers >> 4) & 0x0F) << 10;
+    return base;
 }
 
 uint16_t vic_get_charset_base(VIC *vic)
 {
-    return ((vic->mem_pointers & VIC_CB13) << 9) + 0x1000;
+    // Bits 1-3 of $D018 form character generator address bits 11-13
+    // Character base = (bits 1-3) << 11
+    return ((vic->mem_pointers >> 1) & 0x07) << 11;
 }
 
 uint16_t vic_get_bitmap_base(VIC *vic)
 {
-    return (((vic->mem_pointers & VIC_VM13) >> 5) << 8) + 0x2000;
+    // Bit 3 of $D018 (CB13) selects bitmap base: 0=$0000, 1=$2000
+    return ((vic->mem_pointers >> 3) & 0x01) ? 0x2000 : 0x0000;
 }
 
 bool vic_is_sprite_enabled(VIC *vic, uint8_t sprite)

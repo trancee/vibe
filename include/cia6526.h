@@ -44,22 +44,24 @@
 #define CIA2_CRB      0xDD0F  // Control Register B
 
 // CIA Control Register A Bits ($DC0E/$DD0E)
-#define CIA_CR_START  0x01    // Bit 0: Start timer
-#define CIA_CR_PBON   0x02    // Bit 1: Output port B on count
-#define CIA_CR_OUTMODE 0x04   // Bit 2: Output mode (0=one-shot, 1=continuous)
-#define CIA_CR_RUNMODE 0x08   // Bit 3: Run mode (0=timer, 1= TOD)
-#define CIA_CR_LOAD   0x10    // Bit 4: Force load
-#define CIA_CR_INMODE 0x20    // Bit 5: Input mode (0=phi2, 0=cnt)
-#define CIA_CR_SPMODE 0x40    // Bit 6: Serial port mode
-#define CIA_CR_TODIN  0x80    // Bit 7: TOD 50/60 Hz
+#define CIA_CR_START  0x01    // Bit 0: Start timer (1=start, 0=stop)
+#define CIA_CR_PBON   0x02    // Bit 1: Timer output appears on PB6 (1=on, 0=off)
+#define CIA_CR_OUTMODE 0x04   // Bit 2: Output mode (1=toggle, 0=pulse)
+#define CIA_CR_RUNMODE 0x08   // Bit 3: Run mode (1=one-shot, 0=continuous)
+#define CIA_CR_LOAD   0x10    // Bit 4: Force load (strobe, always reads 0)
+#define CIA_CR_INMODE 0x20    // Bit 5: Input mode (1=CNT transitions, 0=phi2 pulses)
+#define CIA_CR_SPMODE 0x40    // Bit 6: Serial port mode (1=output, 0=input)
+#define CIA_CR_TODIN  0x80    // Bit 7: TOD input freq (1=50Hz, 0=60Hz)
 
 // CIA Control Register B Bits ($DC0F/$DD0F)
-#define CIA_CRB_START 0x01    // Bit 0: Start timer
-#define CIA_CRB_PBON  0x02    // Bit 1: Output port B on count
-#define CIA_CRB_OUTMODE 0x04  // Bit 2: Output mode (0=one-shot, 1=continuous)
-#define CIA_CRB_RUNMODE 0x08  // Bit 3: Run mode (0=timer, 1=alarm)
-#define CIA_CRB_LOAD  0x10    // Bit 4: Force load
-#define CIA_CRB_ALARM 0x80    // Bit 7: Alarm write enable
+#define CIA_CRB_START 0x01    // Bit 0: Start timer (1=start, 0=stop)
+#define CIA_CRB_PBON  0x02    // Bit 1: Timer output appears on PB7 (1=on, 0=off)
+#define CIA_CRB_OUTMODE 0x04  // Bit 2: Output mode (1=toggle, 0=pulse)
+#define CIA_CRB_RUNMODE 0x08  // Bit 3: Run mode (1=one-shot, 0=continuous)
+#define CIA_CRB_LOAD  0x10    // Bit 4: Force load (strobe, always reads 0)
+#define CIA_CRB_INMODE0 0x20  // Bit 5: Input mode bit 0
+#define CIA_CRB_INMODE1 0x40  // Bit 6: Input mode bit 1 (00=phi2, 01=CNT, 10=TA underflow, 11=TA underflow while CNT high)
+#define CIA_CRB_ALARM 0x80    // Bit 7: TOD register write (1=set alarm, 0=set TOD clock)
 
 // CIA Interrupt Control Register Bits ($DC0D/$DD0D)
 #define CIA_ICR_TA    0x01    // Bit 0: Timer A interrupt
@@ -122,7 +124,8 @@ typedef struct {
     uint8_t tod_alarm_hr;    // TOD alarm hours
     
     uint8_t sdr;      // Serial Data Register
-    uint8_t icr;      // Interrupt Control Register
+    uint8_t icr_data; // Interrupt Control Register - DATA (read-only: bits 0-4 are interrupt sources, bit 7 is IRQ flag)
+    uint8_t icr_mask; // Interrupt Control Register - MASK (write-only: bits 0-4 are interrupt enable)
     uint8_t cra;      // Control Register A
     uint8_t crb;      // Control Register B
     

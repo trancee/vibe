@@ -69,9 +69,9 @@
 #define VIC_CTRL2_XSCROLL   0x07  // Bits 0-2: X Scroll
 
 // VIC-II Memory Pointers Register Bits ($D018)
-#define VIC_VM13            0xE0  // Bits 5-7: Video matrix base (bits 13-15)
-#define VIC_CB13            0x0E  // Bits 1-3: Character base (bits 13-15)
-#define VIC_VM12            0x01  // Bit 0: Video matrix base (bit 10)
+#define VIC_VM13            0xF0  // Bits 4-7: Video matrix base address (bits 10-13 of address)
+#define VIC_CB13            0x0E  // Bits 1-3: Character/bitmap base address (bits 11-13 of address)
+// Note: Bit 0 is unused
 
 // VIC-II Interrupt Register Bits ($D019)
 #define VIC_IRQ_RST         0x80  // Bit 7: IRQ reset (set to 1 to clear)

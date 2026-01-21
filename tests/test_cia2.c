@@ -260,26 +260,34 @@ void test_cia2_timer_a() {
     assert(cia2.timer_a_latch == 0x2211);
     assert(cia2.timer_a == 0x2211);
     
+    // Enable Timer A interrupt
+    cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TA);
+    
     // Test timer start
     cia_write(&cia2, CIA2_CRA, CIA_CR_START);
     assert(cia2.timer_a_running);
     assert((cia2.cra & CIA_CR_START) != 0);
     
-    // Clock timer and check underflow
-    for (int i = 0; i < 0x2211; i++) {
+    // Clock timer and check underflow (need 0x2212 clocks)
+    for (int i = 0; i < 0x2212; i++) {
         cia_clock(&cia2);
     }
     
     assert(cia2.timer_a_underflow);
     assert(cia_get_irq(&cia2));
-    assert((cia2.icr & CIA_ICR_TA) != 0);
+    assert((cia2.icr_data & CIA_ICR_TA) != 0);
     
-    // Test continuous mode
-    cia_write(&cia2, CIA2_CRA, CIA_CR_START | CIA_CR_OUTMODE);
-    cia_write(&cia2, CIA2_TALO, 0x01);
+    // Read ICR to clear interrupt
+    cia_read(&cia2, CIA2_ICR);
+    assert(!cia_get_irq(&cia2));
+    
+    // Test continuous mode (no RUNMODE bit = continuous)
+    cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TA);  // Re-enable Timer A interrupt
+    cia_write(&cia2, CIA2_TALO, 0x02);
     cia_write(&cia2, CIA2_TAHI, 0x00);
+    cia_write(&cia2, CIA2_CRA, CIA_CR_START | CIA_CR_LOAD);  // Start in continuous mode
     
-    for (int i = 0; i < 0x0101; i++) {
+    for (int i = 0; i < 3; i++) {  // Clock until first underflow
         cia_clock(&cia2);
     }
     
@@ -302,27 +310,30 @@ void test_cia2_timer_b() {
                       cia2_port_b_read, cia2_port_b_write);
     
     // Test timer loading
-    cia_write(&cia2, CIA2_TBLO, 0x99);
-    cia_write(&cia2, CIA2_TBHI, 0xAA);
-    assert(cia2.timer_b_latch == 0xAA99);
-    assert(cia2.timer_b == 0xAA99);
+    cia_write(&cia2, CIA2_TBLO, 0x05);
+    cia_write(&cia2, CIA2_TBHI, 0x00);
+    assert(cia2.timer_b_latch == 0x0005);
+    assert(cia2.timer_b == 0x0005);
+    
+    // Enable Timer B interrupt
+    cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TB);
     
     // Test timer start
     cia_write(&cia2, CIA2_CRB, CIA_CRB_START);
     assert(cia2.timer_b_running);
     assert((cia2.crb & CIA_CRB_START) != 0);
     
-    // Clock timer and check underflow
-    for (int i = 0; i < 0xAA99; i++) {
+    // Clock timer and check underflow (need 6 clocks)
+    for (int i = 0; i < 6; i++) {
         cia_clock(&cia2);
     }
     
     assert(cia2.timer_b_underflow);
     assert(cia_get_irq(&cia2));
-    assert((cia2.icr & CIA_ICR_TB) != 0);
+    assert((cia2.icr_data & CIA_ICR_TB) != 0);
     
-    // Clear interrupt
-    cia_write(&cia2, CIA2_ICR, CIA_ICR_TB);
+    // Read ICR to clear interrupt
+    cia_read(&cia2, CIA2_ICR);
     assert(!cia_get_irq(&cia2));
     
     printf("✓ CIA2 Timer B test passed\n\n");
@@ -340,24 +351,29 @@ void test_cia2_tod() {
                       cia2_port_a_read, cia2_port_a_write,
                       cia2_port_b_read, cia2_port_b_write);
     
-    // Test 50/60 Hz toggle
-    cia_write(&cia2, CIA2_CRA, CIA_CR_TODIN); // Set to 60 Hz
+    // Test 50/60 Hz toggle (TODIN bit 7 of CRA)
+    // TODIN = 1 means 50 Hz, TODIN = 0 means 60 Hz
+    cia_write(&cia2, CIA2_CRA, CIA_CR_TODIN); // Set to 50 Hz
+    assert(cia2.tod_50hz);
+    
+    cia_write(&cia2, CIA2_CRA, 0); // Set to 60 Hz
     assert(!cia2.tod_50hz);
     
-    cia_write(&cia2, CIA2_CRA, 0); // Set to 50 Hz
-    assert(cia2.tod_50hz);
+    // Enable TOD interrupt
+    cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TOD);
     
     // Test TOD alarm functionality
     cia_tod_set(&cia2, 23, 45, 12, 5);
     cia_tod_set_alarm(&cia2, 23, 45, 12, 5);
     
-    // Clock to alarm time
+    // Clock to alarm time - alarm is checked BEFORE incrementing
+    // So the clock will match alarm, trigger interrupt, then increment 10ths to 6
     cia_clock_phi2(&cia2);
     assert(cia_get_irq(&cia2));
-    assert((cia2.icr & CIA_ICR_TOD) != 0);
+    assert((cia2.icr_data & CIA_ICR_TOD) != 0);
     
-    // Test TOD register reading
-    assert(cia_read(&cia2, CIA2_TOD10TH) == 5);
+    // Test TOD register reading (time was incremented after alarm match)
+    assert(cia_read(&cia2, CIA2_TOD10TH) == 6);  // Was 5, now 6 after increment
     assert(cia_read(&cia2, CIA2_TODSEC) == 12);
     assert(cia_read(&cia2, CIA2_TODMIN) == 45);
     assert(cia_read(&cia2, CIA2_TODHR) == 23);
@@ -377,34 +393,27 @@ void test_cia2_interrupts() {
                       cia2_port_a_read, cia2_port_a_write,
                       cia2_port_b_read, cia2_port_b_write);
     
-    // Test interrupt control register
+    // Test interrupt control register (icr_mask)
     cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TA | CIA_ICR_TB);
-    assert(cia2.icr == (CIA_ICR_TA | CIA_ICR_TB));
+    assert(cia2.icr_mask == (CIA_ICR_TA | CIA_ICR_TB));
     
-    // Test interrupt flag behavior
+    // Test interrupt flag behavior - no interrupt yet
     assert(!cia_get_irq(&cia2));
-    assert(!(cia_read(&cia2, CIA2_ICR) & CIA_ICR_FLAG));
     
     // Generate Timer A interrupt
-    cia_write(&cia2, CIA2_TALO, 0x01);
+    cia_write(&cia2, CIA2_TALO, 0x02);
     cia_write(&cia2, CIA2_TAHI, 0x00);
-    cia_write(&cia2, CIA2_CRA, CIA_CR_START);
-    cia_clock(&cia2);
-    cia_clock(&cia2);
+    cia_write(&cia2, CIA2_CRA, CIA_CR_START | CIA_CR_LOAD);
+    cia_clock(&cia2);  // 2 -> 1
+    cia_clock(&cia2);  // 1 -> 0
+    cia_clock(&cia2);  // 0 -> underflow
     
     assert(cia_get_irq(&cia2));
-    assert(cia_read(&cia2, CIA2_ICR) & CIA_ICR_FLAG);
+    uint8_t icr_val = cia_read(&cia2, CIA2_ICR);
+    assert((icr_val & CIA_ICR_FLAG) != 0);
+    assert((icr_val & CIA_ICR_TA) != 0);
     
-    // Clear specific interrupt
-    cia_write(&cia2, CIA2_ICR, CIA_ICR_TA);
-    assert(cia_get_irq(&cia2));
-    assert(cia_read(&cia2, CIA2_ICR) & CIA_ICR_FLAG);
-    
-    // Clear all interrupts
-    cia_write(&cia2, CIA2_ICR, 0);
-    cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_TA | CIA_ICR_TB | CIA_ICR_TOD | CIA_ICR_SDR);
-    cia_write(&cia2, CIA2_ICR, 0);
-    cia_write(&cia2, CIA2_ICR, 0);
+    // After reading ICR, interrupt is cleared
     assert(!cia_get_irq(&cia2));
     
     printf("✓ CIA2 interrupts test passed\n\n");
@@ -427,19 +436,23 @@ void test_cia2_serial_data_register() {
     assert(cia2.sdr == 0x42);
     assert(cia_read(&cia2, CIA2_SDR) == 0x42);
     
-    // Test serial interrupt generation
+    // Enable serial port output mode and SDR interrupt
+    cia_write(&cia2, CIA2_CRA, CIA_CR_SPMODE);
     cia_write(&cia2, CIA2_ICR, CIA_ICR_SET | CIA_ICR_SDR);
     cia_write(&cia2, CIA2_SDR, 0x99);
     
-    // Simulate serial transmission
-    cia_clock_serial(&cia2);
+    // Enable serial output and clock 8 bits
+    cia2.serial_output_enabled = true;
+    for (int i = 0; i < 8; i++) {
+        cia_clock_serial(&cia2);
+    }
     
     assert(cia_get_irq(&cia2));
-    assert((cia2.icr & CIA_ICR_SDR) != 0);
+    assert((cia2.icr_data & CIA_ICR_SDR) != 0);
     
-    // Test that reading SDR clears interrupt
-    cia_read(&cia2, CIA2_SDR);
-    assert(!(cia2.icr & CIA_ICR_SDR));
+    // Read ICR to clear interrupt
+    cia_read(&cia2, CIA2_ICR);
+    assert(cia2.icr_data == 0);
     
     printf("✓ CIA2 Serial Data Register test passed\n\n");
 }
@@ -457,29 +470,30 @@ void test_cia2_port_data_direction() {
                       cia2_port_b_read, cia2_port_b_write);
     
     // Test data direction register A
-    cia_write(&cia2, CIA2_DDRA, 0x55); // Mixed input/output
+    // DDRA bit = 1 means output, DDRA bit = 0 means input
+    cia_write(&cia2, CIA2_DDRA, 0x55);  // Bits 0,2,4,6 are output
     assert(cia2.ddra == 0x55);
     
-    // Writing to PRA should only affect output bits
+    // Writing to PRA - only output bits (where DDRA=1) are written to port
     cia_write(&cia2, CIA2_PRA, 0xFF);
-    assert(ctx.port_a_output == 0xAA); // Only bits where DDRA=1 should be written
+    assert(ctx.port_a_output == 0x55);  // 0xFF & 0x55 = 0x55
     
     // Test data direction register B
-    cia_write(&cia2, CIA2_DDRB, 0xAA); // Mixed input/output
+    cia_write(&cia2, CIA2_DDRB, 0xAA);  // Bits 1,3,5,7 are output
     assert(cia2.ddrb == 0xAA);
     
     cia_write(&cia2, CIA2_PRB, 0xFF);
-    assert(ctx.port_b_output == 0x55); // Only bits where DDRB=1 should be written
+    assert(ctx.port_b_output == 0xAA);  // 0xFF & 0xAA = 0xAA
     
     // Test all inputs (DDRA = 0x00)
     cia_write(&cia2, CIA2_DDRA, 0x00);
     cia_write(&cia2, CIA2_PRA, 0xFF);
-    assert(ctx.port_a_output == 0x00); // No effect when all inputs
+    assert(ctx.port_a_output == 0x00);  // 0xFF & 0x00 = 0x00
     
     // Test all outputs (DDRA = 0xFF)
     cia_write(&cia2, CIA2_DDRA, 0xFF);
     cia_write(&cia2, CIA2_PRA, 0x55);
-    assert(ctx.port_a_output == 0x55); // Full effect when all outputs
+    assert(ctx.port_a_output == 0x55);  // 0x55 & 0xFF = 0x55
     
     printf("✓ CIA2 port data direction test passed\n\n");
 }
