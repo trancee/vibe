@@ -9,17 +9,17 @@
 
 void reset_handler(CPU *cpu)
 {
-    printf("\u{1B}[31;1;6mRESET\u{1B}[0m");
+    printf("\x{1B}[31;1;6mRESET\x{1B}[0m");
     abort();
 }
 void nmi_handler(CPU *cpu)
 {
-    printf("\u{1B}[31;1;6mNMI\u{1B}[0m");
+    printf("\x{1B}[31;1;6mNMI\x{1B}[0m");
     abort();
 }
 void irq_handler(CPU *cpu)
 {
-    printf("\u{1B}[31;1;6mIRQ\u{1B}[0m");
+    printf("\x{1B}[31;1;6mIRQ\x{1B}[0m");
     abort();
 }
 

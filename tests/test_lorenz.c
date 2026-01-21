@@ -27,17 +27,17 @@ void print_handler(CPU *cpu)
     switch (a)
     {
     case 13:
-        printf("\u{1B}[0m");
+        printf("\x{1B}[0m");
         printf("\n");
         break;
     case 14:
-        printf("\u{1B}[33m");
+        printf("\x{1B}[33m");
         break;
     case 145:
-        printf("\u{1B}[1A\u{1B}[1m"); // ↑ up arrow
+        printf("\x{1B}[1A\x{1B}[1m"); // ↑ up arrow
         break;
     case 147:
-        printf("\u{1B}c"); // clear
+        printf("\x{1B}c"); // clear
         break;
     default:
         printf("%c",
@@ -85,12 +85,12 @@ void load_handler(CPU *cpu)
 }
 void warm_handler(CPU *cpu)
 {
-    printf("\u{1B}[31;1;6mWARM \u{1B}[0m\n");
+    printf("\x{1B}[31;1;6mWARM \x{1B}[0m\n");
     abort();
 }
 void ready_handler(CPU *cpu)
 {
-    printf("\u{1B}[31;1;6m[READY \u{1B}[0m\n");
+    printf("\x{1B}[31;1;6m[READY \x{1B}[0m\n");
     abort();
 }
 
