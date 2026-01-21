@@ -27,24 +27,77 @@ void ALR(CPU *cpu)
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
 }
 
+/*
+Binary mode (D flag clear):
+
+1. A = A AND immediate
+2. A = (A >> 1) | (C << 7) (ROR with carry)
+3. N = bit 7 of result
+4. Z = (result == 0)
+5. C = bit 6 of result
+6. V = bit 6 XOR bit 5 of result
+
+Decimal mode (D flag set):
+
+1. Perform AND and ROR as in binary mode
+2. N = initial C flag
+3. Z = (ROR result == 0)
+4. V = (bit 6 of AND result) XOR (bit 6 of ROR result)
+5. If (low nybble of AND + (low nybble & 1)) > 5, add 6 to low nybble of result
+6. If (high nybble of AND + (high nybble & 1)) > 5, add 6 to high nybble and set C, else clear C
+*/
 void ARR(CPU *cpu)
 {
     const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
     uint8_t value = fetch_operand(cpu, op->mode);
-    cpu->A = (cpu->A & value) >> 1 | (get_flag_carry(cpu) << 7);
-    set_flag_carry(cpu, cpu->A & 0x40);
-    set_flag_negative(cpu, cpu->A & 0x80);
-    set_flag_zero(cpu, cpu->A == 0);
+    uint8_t and_result = cpu->A & value;
+    bool old_carry = get_flag_carry(cpu);
+    
+    // Perform ROR on the AND result
+    uint8_t result = (and_result >> 1) | (old_carry << 7);
+    cpu->A = result;
+    
     if (get_flag_decimal(cpu))
     {
-        uint16_t temp = cpu->A;
-        temp = (temp & 0x0F) + (temp >> 4) + ((temp & 0x10) >> 4);
-        set_flag_carry(cpu, temp > 0x0F);
-        set_flag_zero(cpu, (temp & 0x0F) == 0);
-        temp = (temp & 0x0F) | ((temp & 0xF0) << 4);
-        cpu->A = temp & 0xFF;
-        set_flag_negative(cpu, cpu->A & 0x80);
+        // Decimal mode (per 64doc.txt)
+        // N = initial C flag
+        set_flag_negative(cpu, old_carry);
+        // Z = (ROR result == 0)
+        set_flag_zero(cpu, result == 0);
+        // V = bit 6 changed between AND and ROR result
+        set_flag_overflow(cpu, (and_result ^ result) & 0x40);
+        
+        uint8_t al = and_result & 0x0F;  // low nybble of AND result
+        uint8_t ah = and_result >> 4;     // high nybble of AND result
+        
+        // BCD fixup for low nybble: if (AL + (AL & 1)) > 5
+        if (al + (al & 1) > 5)
+        {
+            cpu->A = (cpu->A & 0xF0) | ((cpu->A + 6) & 0x0F);
+        }
+        
+        // BCD fixup for high nybble and set carry: if (AH + (AH & 1)) > 5
+        if (ah + (ah & 1) > 5)
+        {
+            cpu->A = (cpu->A + 0x60) & 0xFF;
+            set_flag_carry(cpu, true);
+        }
+        else
+        {
+            set_flag_carry(cpu, false);
+        }
     }
+    else
+    {
+        // Binary mode (per 64doc.txt)
+        set_flag_negative(cpu, result & 0x80);
+        set_flag_zero(cpu, result == 0);
+        // C = bit 6 of result
+        set_flag_carry(cpu, result & 0x40);
+        // V = bit 6 XOR bit 5 of result
+        set_flag_overflow(cpu, ((result >> 6) ^ (result >> 5)) & 0x01);
+    }
+    
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
     {

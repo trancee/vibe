@@ -1706,6 +1706,129 @@ static void test_ALR(CPU *cpu)
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "ALR sets carry from bit 0 of AND result");
 }
 
+// ============================================================================
+// ARR - AND then ROR with special flag behavior (per 64doc.txt)
+// ============================================================================
+
+static void test_ARR_binary_basic(CPU *cpu)
+{
+    // ARR in binary mode: AND then ROR, C from bit 6, V from bit6 XOR bit5
+    set_flag_decimal(cpu, false);
+    set_flag_carry(cpu, true);  // Carry will be rotated into bit 7
+    cpu->A = 0xFF;
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0xFF & 0xFF) >> 1 | (1 << 7) = 0x7F | 0x80 = 0xFF
+    TEST_ASSERT_EQ(0xFF, cpu->A, "ARR binary: 0xFF AND 0xFF ROR with C=1 = 0xFF");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "ARR binary: C = bit 6 of result (1)");
+    TEST_ASSERT_EQ(false, get_flag_overflow(cpu), "ARR binary: V = bit6 XOR bit5 (1^1=0)");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "ARR binary: N = bit 7 of result");
+}
+
+static void test_ARR_binary_carry_from_bit6(CPU *cpu)
+{
+    // Test that carry comes from bit 6
+    set_flag_decimal(cpu, false);
+    set_flag_carry(cpu, false);
+    cpu->A = 0x80;  // bit 7 set, bit 6 clear
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x80 & 0xFF) >> 1 | (0 << 7) = 0x40
+    TEST_ASSERT_EQ(0x40, cpu->A, "ARR binary: 0x80 ROR with C=0 = 0x40");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "ARR binary: C = bit 6 of result (0x40 has bit 6 set)");
+}
+
+static void test_ARR_binary_overflow_set(CPU *cpu)
+{
+    // V = bit6 XOR bit5, test case where they differ
+    set_flag_decimal(cpu, false);
+    set_flag_carry(cpu, false);
+    cpu->A = 0x40;  // AND result will be 0x40, ROR = 0x20, bit6=0, bit5=1
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x40 & 0xFF) >> 1 | (0 << 7) = 0x20
+    TEST_ASSERT_EQ(0x20, cpu->A, "ARR binary: 0x40 ROR with C=0 = 0x20");
+    TEST_ASSERT_EQ(false, get_flag_carry(cpu), "ARR binary: C = bit 6 of 0x20 = 0");
+    TEST_ASSERT_EQ(true, get_flag_overflow(cpu), "ARR binary: V = bit6(0) XOR bit5(1) = 1");
+}
+
+static void test_ARR_binary_zero_result(CPU *cpu)
+{
+    set_flag_decimal(cpu, false);
+    set_flag_carry(cpu, false);
+    cpu->A = 0x01;
+    uint8_t instr[] = {0x6B, 0x01}; // ARR #$01
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // A = (0x01 & 0x01) >> 1 | 0 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->A, "ARR binary: 0x01 AND 0x01 ROR = 0x00");
+    TEST_ASSERT_EQ(true, get_flag_zero(cpu), "ARR binary: Z set when result is 0");
+}
+
+static void test_ARR_decimal_basic(CPU *cpu)
+{
+    // ARR in decimal mode with no BCD fixup needed
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, true);
+    cpu->A = 0x22;
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // AND = 0x22, ROR = (0x22 >> 1) | 0x80 = 0x11 | 0x80 = 0x91
+    // AL = 2, AH = 2, neither (nybble + (nybble & 1)) > 5
+    TEST_ASSERT_EQ(0x91, cpu->A, "ARR decimal: 0x22 ROR with C=1, no fixup = 0x91");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "ARR decimal: N = initial carry (1)");
+    TEST_ASSERT_EQ(false, get_flag_carry(cpu), "ARR decimal: C cleared when high nybble fixup not needed");
+}
+
+static void test_ARR_decimal_low_nybble_fixup(CPU *cpu)
+{
+    // Low nybble BCD fixup: AL + (AL & 1) > 5 means AL >= 5
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, false);
+    cpu->A = 0x0A;  // Low nybble = 0xA, (0xA + 0) = 10 > 5
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // AND = 0x0A, ROR = 0x05
+    // AL = 0xA, AL + (AL & 1) = 10 + 0 = 10 > 5, so add 6 to low nybble
+    // Result = 0x05 -> (0x05 + 6) & 0x0F = 0x0B
+    TEST_ASSERT_EQ(0x0B, cpu->A, "ARR decimal: low nybble BCD fixup adds 6");
+}
+
+static void test_ARR_decimal_high_nybble_fixup(CPU *cpu)
+{
+    // High nybble BCD fixup: AH + (AH & 1) > 5
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, false);
+    cpu->A = 0xA0;  // High nybble = 0xA
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // AND = 0xA0, ROR = 0x50
+    // AH = 0xA, AH + (AH & 1) = 10 + 0 = 10 > 5, so add 0x60 and set carry
+    // Result = 0x50 + 0x60 = 0xB0
+    TEST_ASSERT_EQ(0xB0, cpu->A, "ARR decimal: high nybble BCD fixup adds 0x60");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "ARR decimal: C set when high nybble fixup applied");
+}
+
+static void test_ARR_decimal_v_flag(CPU *cpu)
+{
+    // V flag = bit 6 changed between AND and ROR
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, true);  // This will be rotated into bit 7
+    cpu->A = 0x40;  // bit 6 = 1 in AND result
+    uint8_t instr[] = {0x6B, 0xFF}; // ARR #$FF
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // AND = 0x40 (bit 6 = 1), ROR = 0xA0 (bit 6 = 0)
+    // V = (0x40 ^ 0xA0) & 0x40 = 0xE0 & 0x40 = 0x40 (set)
+    TEST_ASSERT_EQ(true, get_flag_overflow(cpu), "ARR decimal: V set when bit 6 changes");
+}
+
 static void test_SBX(CPU *cpu)
 {
     // SBX: X = (A & X) - immediate (carry ignored, sets carry like CMP)
@@ -1889,6 +2012,14 @@ static const test_case_t opcode_tests[] = {
     {0x67, "RRA", test_RRA},
     {0x0B, "ANC", test_ANC},
     {0x4B, "ALR", test_ALR},
+    {0x6B, "ARR", test_ARR_binary_basic},
+    {0x6B, "ARR", test_ARR_binary_carry_from_bit6},
+    {0x6B, "ARR", test_ARR_binary_overflow_set},
+    {0x6B, "ARR", test_ARR_binary_zero_result},
+    {0x6B, "ARR", test_ARR_decimal_basic},
+    {0x6B, "ARR", test_ARR_decimal_low_nybble_fixup},
+    {0x6B, "ARR", test_ARR_decimal_high_nybble_fixup},
+    {0x6B, "ARR", test_ARR_decimal_v_flag},
     {0xCB, "SBX", test_SBX},
 };
 
