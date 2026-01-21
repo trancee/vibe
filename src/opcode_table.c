@@ -82,7 +82,7 @@ const instruction_t instructions[256] = {
     {0x48, "PHA", PHA, Implied, 1, 3, false},
     {0x49, "EOR", EOR, Immediate, 2, 2, false},
     {0x4A, "LSR", LSR, Accumulator, 1, 2, false},
-    {0x4B, "ASR", NOP, Immediate, 2, 2, true}, // ALR
+    {0x4B, "ALR", ALR, Immediate, 2, 2, true}, // 6502: ASR
     {0x4C, "JMP", JMP, Absolute, 3, 3, false},
     {0x4D, "EOR", EOR, Absolute, 3, 4, false},
     {0x4E, "LSR", LSR, Absolute, 3, 6, false},
@@ -218,7 +218,7 @@ const instruction_t instructions[256] = {
     {0xC8, "INY", INY, Implied, 1, 2, false},
     {0xC9, "CMP", CMP, Immediate, 2, 2, false},
     {0xCA, "DEX", DEX, Implied, 1, 2, false},
-    {0xCB, "SBX", NOP, Immediate, 2, 2, true}, // AXS
+    {0xCB, "SBX", SBX, Immediate, 2, 2, true},
     {0xCC, "CPY", CPY, Absolute, 3, 4, false},
     {0xCD, "CMP", CMP, Absolute, 3, 4, false},
     {0xCE, "DEC", DEC, Absolute, 3, 6, false},
@@ -481,7 +481,7 @@ const opcode_t opcode_table[256] = {
     {0xC8, "INY", ADDR_IMP, 2, INY},
     {0xC9, "CMP", ADDR_IMM, 2, CMP},
     {0xCA, "DEX", ADDR_IMP, 2, DEX},
-    {0xCB, "AXS", ADDR_IMM, 2, NOP},
+    {0xCB, "SBX", ADDR_IMM, 2, SBX}, // 6502: AXS
     {0xCC, "CPY", ADDR_ABS, 4, CPY},
     {0xCD, "CMP", ADDR_ABS, 4, CMP},
     {0xCE, "DEC", ADDR_ABS, 6, DEC},

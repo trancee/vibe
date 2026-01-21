@@ -363,6 +363,7 @@ void TYA(CPU *cpu);
 
 // Illegal opcodes (supported for completeness)
 void ANC(CPU *cpu);
+void ALR(CPU *cpu);
 void ARR(CPU *cpu);
 void DCP(CPU *cpu);
 void ISC(CPU *cpu);
@@ -375,6 +376,7 @@ void SLO(CPU *cpu);
 void SRE(CPU *cpu);
 void TAS(CPU *cpu);
 void XAA(CPU *cpu);
+void SBX(CPU *cpu);
 
 // Global opcode table declaration
 extern const instruction_t instructions[256];
