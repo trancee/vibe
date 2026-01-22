@@ -7,8 +7,8 @@
 
 #define DEBUG true
 
-#define TESTCASE "shaay"
-#define MAX_STEPS 120//1000000000
+#define TESTCASE "shaiy"
+#define MAX_STEPS 200//1000000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 

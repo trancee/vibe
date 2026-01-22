@@ -159,7 +159,7 @@ const instruction_t instructions[256] = {
     {0x90, "BCC", BCC, Relative, 2, 2, false},
     {0x91, "STA", STA, IndirectIndexed, 2, 6, false},
     {0x92, "JAM", NOP, Implied, 0, 2 /* 1 */, true},
-    {0x93, "AHX", NOP, IndirectIndexed, 2, 6, true}, // 6502: SHA
+    {0x93, "AHX", AHX, IndirectIndexed, 2, 6, true}, // 6502: SHA
     {0x94, "STY", STY, ZeroPageX, 2, 4, false},
     {0x95, "STA", STA, ZeroPageX, 2, 4, false},
     {0x96, "STX", STX, ZeroPageY, 2, 4, false},
@@ -171,7 +171,7 @@ const instruction_t instructions[256] = {
     {0x9C, "SHY", NOP, AbsoluteX, 3, 5, true},
     {0x9D, "STA", STA, AbsoluteX, 3, 5, false},
     {0x9E, "SHX", NOP, AbsoluteY, 3, 5, true},
-    {0x9F, "AHX", NOP, AbsoluteY, 3, 5, true}, // 6502: SHA
+    {0x9F, "AHX", AHX, AbsoluteY, 3, 5, true}, // 6502: SHA
     // 0xA0
     {0xA0, "LDY", LDY, Immediate, 2, 2, false},
     {0xA1, "LDA", LDA, IndexedIndirect, 2, 6, false},

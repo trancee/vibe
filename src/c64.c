@@ -2,9 +2,18 @@
 
 #include "c64.h"
 
+uint8_t c64_read(void *c64, uint16_t addr)
+{
+    return c64_read_byte((C64 *)c64, addr);
+}
+void c64_write(void *c64, uint16_t addr, uint8_t data)
+{
+    c64_write_byte((C64 *)c64, addr, data);
+}
+
 void c64_init(C64 *c64, bool debug)
 {
-    cpu_init(&c64->cpu, debug);
+    cpu_init(&c64->cpu, debug, c64_read, c64_write);
 
     /* Load ROMs */
     c64_load_rom(c64, "roms/basic.901226-01.bin", 0xA000, 0x2000);
@@ -42,12 +51,13 @@ void c64_set_pc(C64 *c64, uint16_t addr)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
-    printf("C64 READ $%04X\n", addr);
-    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END) {
+    // printf("C64 READ #$%04X\n", addr);
+    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
+    {
         return vic_read(&c64->vic, addr);
     }
 
-    return cpu_read_byte(&c64->cpu, addr);
+    return cpu_read(&c64->cpu, addr);
 }
 uint16_t c64_read_word(C64 *c64, uint16_t addr)
 {
@@ -56,11 +66,13 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    if (addr >= VIC_MEM_START || addr <= VIC_MEM_END) {
+    // printf("C64 WRITE #$%04X = $%02X\n", addr, data);
+    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
+    {
         return vic_write(&c64->vic, addr, data);
     }
 
-    cpu_write_byte(&c64->cpu, addr, data);
+    cpu_write(&c64->cpu, addr, data);
 }
 void c64_write_word(C64 *c64, uint16_t addr, uint16_t data)
 {

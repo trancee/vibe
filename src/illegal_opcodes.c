@@ -1,5 +1,34 @@
 #include "mos6510.h"
 
+/*
+SHA (AHX, AXA)
+Stores A AND X AND (high-byte of addr. + 1) at addr.
+
+unstable: sometimes 'AND (H+1)' is dropped, page boundary crossings may not work (with the high-byte of the value used as the high-byte of the address)
+
+A AND X AND (H+1) -> M
+
+N	Z	C	I	D	V
+-	-	-	-	-	-
+
+addressing    assembler   	opc  bytes	cycles
+----------------------------------------------------
+absolute,Y    SHA oper,Y  	9F 	   3 	   5   †
+(indirect),Y  SHA (oper),Y	93	   2       6   †
+*/
+void AHX(CPU *cpu)
+{
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint8_t high_byte = (addr >> 8) + 1;
+    cpu->memory[addr] = cpu->A & cpu->X & high_byte;
+    cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
+    if (instruction->mode == AbsoluteY || instruction->mode == IndirectIndexed)
+    {
+        cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
+    }
+}
+
 // Illegal opcodes implementation
 void ANC(CPU *cpu)
 {
@@ -52,11 +81,11 @@ void ARR(CPU *cpu)
     uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t and_result = cpu->A & value;
     bool old_carry = get_flag_carry(cpu);
-    
+
     // Perform ROR on the AND result
     uint8_t result = (and_result >> 1) | (old_carry << 7);
     cpu->A = result;
-    
+
     if (get_flag_decimal(cpu))
     {
         // Decimal mode (per 64doc.txt)
@@ -66,16 +95,16 @@ void ARR(CPU *cpu)
         set_flag_zero(cpu, result == 0);
         // V = bit 6 changed between AND and ROR result
         set_flag_overflow(cpu, (and_result ^ result) & 0x40);
-        
-        uint8_t al = and_result & 0x0F;  // low nybble of AND result
-        uint8_t ah = and_result >> 4;     // high nybble of AND result
-        
+
+        uint8_t al = and_result & 0x0F; // low nybble of AND result
+        uint8_t ah = and_result >> 4;   // high nybble of AND result
+
         // BCD fixup for low nybble: if (AL + (AL & 1)) > 5
         if (al + (al & 1) > 5)
         {
             cpu->A = (cpu->A & 0xF0) | ((cpu->A + 6) & 0x0F);
         }
-        
+
         // BCD fixup for high nybble and set carry: if (AH + (AH & 1)) > 5
         if (ah + (ah & 1) > 5)
         {
@@ -97,7 +126,7 @@ void ARR(CPU *cpu)
         // V = bit 6 XOR bit 5 of result
         set_flag_overflow(cpu, ((result >> 6) ^ (result >> 5)) & 0x01);
     }
-    
+
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {

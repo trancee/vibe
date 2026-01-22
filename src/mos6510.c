@@ -225,7 +225,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
     printf("\n");
 }
 
-void cpu_init(CPU *cpu, bool debug)
+void cpu_init(CPU *cpu, bool debug, read_t read, write_t write)
 {
     memset(cpu, 0, sizeof(CPU));
 
@@ -233,6 +233,9 @@ void cpu_init(CPU *cpu, bool debug)
     cpu->SP = 0xFF;
 
     cpu->debug = debug;
+
+    cpu->read = read;
+    cpu->write = write;
 }
 
 void cpu_reset(CPU *cpu)
@@ -252,19 +255,21 @@ void cpu_reset_pc(CPU *cpu, uint16_t addr)
 
 uint16_t cpu_get_pc(CPU *cpu)
 {
-    // return cpu->PC | (cpu->PCH << 8);
     return cpu->pc;
 }
 void cpu_set_pc(CPU *cpu, uint16_t addr)
 {
-    // cpu->PC = addr & 0xFF;
-    // cpu->PCH = (addr >> 8) & 0xFF;
     cpu->pc = addr;
 }
 
+uint8_t cpu_read(CPU *cpu, uint16_t addr)
+{
+    // printf("CPU READ #$%04X\n", addr);
+    return cpu->memory[addr];
+}
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr)
 {
-    return cpu->memory[addr];
+    return cpu->read != NULL ? cpu->read(cpu, addr) : cpu_read(cpu, addr);
 }
 uint16_t cpu_read_word(CPU *cpu, uint16_t addr)
 {
@@ -275,9 +280,14 @@ uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr)
     return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
 }
 
+void cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
+{
+    // printf("CPU WRITE #$%04X = $%02X\n", addr, data);
+    cpu->memory[addr] = data;
+}
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data)
 {
-    cpu->memory[addr] = data;
+    cpu->write != NULL ? cpu->write(cpu, addr, data) : cpu_write(cpu, addr, data);
 }
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data)
 {

@@ -58,7 +58,7 @@ void write_mem(VIC *vic, uint16_t addr, uint8_t data)
 
 uint8_t vic_read(VIC *vic, uint16_t addr)
 {
-    printf("VIC READ $%04X\n", addr);
+    // printf("VIC READ #$%04X\n", addr);
     if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
         return 0;
 
@@ -195,6 +195,7 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
 
 void vic_write(VIC *vic, uint16_t addr, uint8_t data)
 {
+    printf("VIC WRITE #$%04X = $%02X\n", addr, data);
     if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
         return;
 

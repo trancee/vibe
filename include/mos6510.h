@@ -5,15 +5,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef uint8_t (*read_t)(void *ptr, uint16_t addr);
+typedef void (*write_t)(void *ptr, uint16_t addr, uint8_t data);
+
 typedef struct
 {
-    uint8_t A;             // Accumulator
-    uint8_t X;             // X Index Register
-    uint8_t Y;             // Y Index Register
-    uint8_t SP;            // Stack Pointer
-    uint8_t P;             // Status Register
+    uint8_t A;  // Accumulator
+    uint8_t X;  // X Index Register
+    uint8_t Y;  // Y Index Register
+    uint8_t SP; // Stack Pointer
+    uint8_t P;  // Status Register
     //
-    uint16_t pc;           // Program Counter
+    uint16_t pc; // Program Counter
     //
     uint8_t memory[65536]; // 64KB memory
     //
@@ -22,6 +25,9 @@ typedef struct
     bool has_interrupts;
     //
     bool debug;
+    //
+    read_t read;
+    write_t write;
 } CPU;
 
 #define PCL 0x01FE
@@ -113,15 +119,17 @@ typedef struct
 } trap_t;
 
 // CPU functions
-void cpu_init(CPU *cpu, bool debug);
+void cpu_init(CPU *cpu, bool debug, read_t read, write_t write);
 void cpu_reset(CPU *cpu);
 void cpu_reset_pc(CPU *cpu, uint16_t pc);
 uint8_t cpu_step(CPU *cpu);
 uint16_t cpu_get_pc(CPU *cpu);
 void cpu_set_pc(CPU *cpu, uint16_t addr);
+uint8_t cpu_read(CPU *cpu, uint16_t addr);
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr);
+void cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
 void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
@@ -335,6 +343,7 @@ void TXS(CPU *cpu);
 void TYA(CPU *cpu);
 
 // Illegal opcodes (supported for completeness)
+void AHX(CPU *cpu);
 void ANC(CPU *cpu);
 void ALR(CPU *cpu);
 void ARR(CPU *cpu);
