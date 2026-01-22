@@ -228,8 +228,10 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 void cpu_init(CPU *cpu, bool debug)
 {
     memset(cpu, 0, sizeof(CPU));
+
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
+
     cpu->debug = debug;
 }
 
@@ -320,46 +322,46 @@ bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
     return add_trap(&trap);
 }
 
-uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
+uint16_t get_operand_address(CPU *cpu, addr_mode_t mode)
 {
     uint16_t addr;
     uint8_t low_byte, high_byte;
 
     switch (mode)
     {
-    case ADDR_IMP:
+    case Implied:
         return 0; // Not used for implied addressing
 
-    case ADDR_IMM:
+    case Immediate:
         return cpu_get_pc(cpu) + 1;
 
-    case ADDR_ZP:
+    case ZeroPage:
         return cpu->memory[cpu_get_pc(cpu) + 1];
 
-    case ADDR_ZPX:
+    case ZeroPageX:
         return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X) & 0xFF;
 
-    case ADDR_ZPY:
+    case ZeroPageY:
         return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->Y) & 0xFF;
 
-    case ADDR_ABS:
+    case Absolute:
         low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
         high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         return (high_byte << 8) | low_byte;
 
-    case ADDR_ABSX:
+    case AbsoluteX:
         low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
         high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->X;
 
-    case ADDR_ABSY:
+    case AbsoluteY:
         low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
         high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->Y;
 
-    case ADDR_IND:
+    case Indirect:
         low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
         high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
         addr = (high_byte << 8) | low_byte;
@@ -375,7 +377,7 @@ uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
             return cpu_read_word(cpu, addr);
         }
 
-    case ADDR_INDX:
+    case IndexedIndirect:
     {
         uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X;
         low_byte = cpu->memory[ptr];
@@ -383,7 +385,7 @@ uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
         return (high_byte << 8) | low_byte;
     }
 
-    case ADDR_INDY:
+    case IndirectIndexed:
     {
         uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1];
         low_byte = cpu->memory[ptr];
@@ -392,7 +394,7 @@ uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
         return addr + cpu->Y;
     }
 
-    case ADDR_REL:
+    case Relative:
         return cpu_get_pc(cpu) + 1;
 
     default:
@@ -400,10 +402,10 @@ uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode)
     }
 }
 
-uint8_t fetch_operand(CPU *cpu, addressing_mode_t mode)
+uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
 {
     uint16_t addr = get_operand_address(cpu, mode);
-    return cpu->memory[addr];
+    return cpu_read_byte(cpu, addr); // cpu->memory[addr];
 }
 
 /// triggers a NMI IRQ in the processor
@@ -463,32 +465,32 @@ uint8_t cpu_step(CPU *cpu)
     uint8_t opcode = cpu->memory[pc];
     const instruction_t *instruction = &instructions[opcode];
 
-    // if (op->execute == NOP) {
+    // if (instruction->execute == NOP) {
     //     // Handle JMP for NOP opcodes that should be JMP
     //     if (opcode == 0x4C || opcode == 0x6C) {
     //         JMP(cpu);
     //     } else {
     //         // Just skip the opcode and any operands
     //         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    //         switch (op->mode) {
-    //             case ADDR_IMM:
-    //             case ADDR_ZP:
-    //             case ADDR_ZPX:
-    //             case ADDR_ZPY:
-    //             case ADDR_REL:
+    //         switch (instruction->mode) {
+    //             case Immediate:
+    //             case ZeroPage:
+    //             case ZeroPageX:
+    //             case ZeroPageY:
+    //             case Relative:
     //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     //                 break;
-    //             case ADDR_ABS:
-    //             case ADDR_ABSX:
-    //             case ADDR_ABSY:
-    //             case ADDR_IND:
+    //             case Absolute:
+    //             case AbsoluteX:
+    //             case AbsoluteY:
+    //             case Indirect:
     //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     //                 break;
     //             default:
     //                 break;
     //         }
     //     }
-    //     return op->cycles;
+    //     return instruction->cycles;
     // }
 
     if (cpu->debug)

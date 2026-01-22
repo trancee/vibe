@@ -24,7 +24,7 @@ mos6510/
 │   ├── mos6510.c         # Core CPU implementation
 │   ├── opcodes.c         # Legal opcode implementations
 │   ├── illegal_opcodes.c # Illegal opcode implementations
-│   ├── opcode_table.c    # Complete opcode table
+│   ├── instructions.c    # Complete opcode table
 │   └── example.c         # Example usage
 ├── tests/
 │   └── test_opcodes.c    # Comprehensive test suite
@@ -129,18 +129,18 @@ typedef struct {
 
 All 13 addressing modes are supported:
 
-- `ADDR_IMP` - Implied
-- `ADDR_IMM` - Immediate
-- `ADDR_ZP` - Zero Page
-- `ADDR_ZPX` - Zero Page, X
-- `ADDR_ZPY` - Zero Page, Y
-- `ADDR_ABS` - Absolute
-- `ADDR_ABSX` - Absolute, X
-- `ADDR_ABSY` - Absolute, Y
-- `ADDR_IND` - Indirect
-- `ADDR_INDX` - Indexed Indirect
-- `ADDR_INDY` - Indirect Indexed
-- `ADDR_REL` - Relative
+- `Implied` - Implied
+- `Immediate` - Immediate
+- `ZeroPage` - Zero Page
+- `ZeroPageX` - Zero Page, X
+- `ZeroPageY` - Zero Page, Y
+- `Absolute` - Absolute
+- `AbsoluteX` - Absolute, X
+- `AbsoluteY` - Absolute, Y
+- `Indirect` - Indirect
+- `IndexedIndirect` - Indexed Indirect
+- `IndirectIndexed` - Indirect Indexed
+- `Relative` - Relative
 
 ## Opcode Coverage
 

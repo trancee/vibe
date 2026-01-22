@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define VIC_MEM_START 0xD000
+#define VIC_MEM_END 0xD03E
+
 // VIC-II Register Addresses (at $D000-$D03E)
 #define VIC_SPRITE0_X       0xD000
 #define VIC_SPRITE0_Y       0xD001

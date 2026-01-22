@@ -192,4 +192,4 @@ Various no-operation opcodes with different addressing modes and cycle counts.
 4. **Flags**: All flag changes follow original 6510 specifications
 5. **Stack**: Stack operations use the $0100-$01FF memory region as per spec
 
-For complete opcode table with all 256 entries, see `src/opcode_table.c`.
+For complete opcode table with all 256 entries, see `src/instructions.c`.

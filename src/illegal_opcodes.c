@@ -3,13 +3,13 @@
 // Illegal opcodes implementation
 void ANC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A &= fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A &= fetch_operand(cpu, instruction->mode);
     set_flag_carry(cpu, cpu->A & 0x80);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -17,9 +17,9 @@ void ANC(CPU *cpu)
 
 void ALR(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     // A = (A & #{imm}) / 2
-    cpu->A &= fetch_operand(cpu, op->mode);
+    cpu->A &= fetch_operand(cpu, instruction->mode);
     set_flag_carry(cpu, cpu->A & 0x01); // The carry flag has the value of accumulator's bit 0 if bit 0 of the mask is 1 or cleared otherwise.
     cpu->A = cpu->A >> 1;
     set_flag_negative(cpu, 0);       // The negative flag is always cleared.
@@ -48,8 +48,8 @@ Decimal mode (D flag set):
 */
 void ARR(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t and_result = cpu->A & value;
     bool old_carry = get_flag_carry(cpu);
     
@@ -99,7 +99,7 @@ void ARR(CPU *cpu)
     }
     
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -107,15 +107,15 @@ void ARR(CPU *cpu)
 
 void DCP(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr]--;
     uint8_t result = cpu->A - cpu->memory[addr];
     set_flag_carry(cpu, cpu->A >= cpu->memory[addr]);
     set_flag_negative(cpu, result & 0x80);
     set_flag_zero(cpu, result == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -124,12 +124,12 @@ void DCP(CPU *cpu)
 // https://www.masswerk.at/6502/6502_instruction_set.html#ISC
 void ISC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr]++;
     cpu->A = subtract_with_borrow(cpu, cpu->A, cpu->memory[addr]);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -137,8 +137,8 @@ void ISC(CPU *cpu)
 
 void LAS(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     uint8_t value = cpu->memory[addr];
     cpu->A = cpu->X = cpu->SP = value & cpu->SP;
     set_flag_negative(cpu, cpu->A & 0x80);
@@ -148,13 +148,13 @@ void LAS(CPU *cpu)
 
 void LAX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     cpu->A = cpu->X = value;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -166,8 +166,8 @@ void LXA(CPU *cpu)
     // Per 64doc.txt: A = X = (A | #$EE) & #byte
     // This is an unstable opcode similar to ANE but loads both A and X
     // The #$EE constant is the most common value on C64 (6510)
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t imm = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t imm = fetch_operand(cpu, instruction->mode);
     uint8_t result = (cpu->A | 0xEE) & imm;
     cpu->A = cpu->X = result;
     set_flag_negative(cpu, result & 0x80);
@@ -177,8 +177,8 @@ void LXA(CPU *cpu)
 
 void RLA(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     bool carry_in = get_flag_carry(cpu);
     uint8_t value = cpu->memory[addr];
     set_flag_carry(cpu, value & 0x80);
@@ -188,7 +188,7 @@ void RLA(CPU *cpu)
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -196,8 +196,8 @@ void RLA(CPU *cpu)
 
 void RRA(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     bool carry_in = get_flag_carry(cpu);
     uint8_t value = cpu->memory[addr];
     set_flag_carry(cpu, value & 0x01);
@@ -205,7 +205,7 @@ void RRA(CPU *cpu)
     cpu->memory[addr] = value;
     cpu->A = add_with_carry(cpu, cpu->A, value);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -213,11 +213,11 @@ void RRA(CPU *cpu)
 
 void SAX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->A & cpu->X;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -225,8 +225,8 @@ void SAX(CPU *cpu)
 
 void SLO(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     uint8_t value = cpu->memory[addr];
     set_flag_carry(cpu, value & 0x80);
     value <<= 1;
@@ -235,7 +235,7 @@ void SLO(CPU *cpu)
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -243,8 +243,8 @@ void SLO(CPU *cpu)
 
 void SRE(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     uint8_t value = cpu->memory[addr];
     set_flag_carry(cpu, value & 0x01);
     value >>= 1;
@@ -253,7 +253,7 @@ void SRE(CPU *cpu)
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -261,8 +261,8 @@ void SRE(CPU *cpu)
 
 void TAS(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->SP = cpu->A & cpu->X;
     cpu->memory[addr & 0xFF00] = cpu->SP & ((addr >> 8) + 1);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 3);
@@ -274,13 +274,13 @@ void ANE(CPU *cpu)
     // Per 64doc.txt: A = (A | #$EE) & X & #byte
     // The #$EE constant is the most common value on C64 (6510)
     // This is an unstable opcode - behavior varies by chip revision
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t imm = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t imm = fetch_operand(cpu, instruction->mode);
     cpu->A = (cpu->A | 0xEE) & cpu->X & imm;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -288,8 +288,8 @@ void ANE(CPU *cpu)
 
 void SBX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
 
     uint8_t ax = cpu->A & cpu->X;
     uint8_t result = ax - value;
@@ -304,7 +304,7 @@ void SBX(CPU *cpu)
 
     /* Advance PC: immediate/zero-page/absolute sizing handled elsewhere by opcode table patterns */
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }

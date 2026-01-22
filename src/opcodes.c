@@ -3,16 +3,16 @@
 // Load/Store Operations
 void LDA(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A = fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -20,16 +20,16 @@ void LDA(CPU *cpu)
 
 void LDX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->X = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->X = fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->X & 0x80);
     set_flag_zero(cpu, cpu->X == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -37,16 +37,16 @@ void LDX(CPU *cpu)
 
 void LDY(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->Y = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->Y = fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->Y & 0x80);
     set_flag_zero(cpu, cpu->Y == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -54,15 +54,15 @@ void LDY(CPU *cpu)
 
 void STA(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->A;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -70,15 +70,15 @@ void STA(CPU *cpu)
 
 void STX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->X;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -86,15 +86,15 @@ void STX(CPU *cpu)
 
 void STY(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->Y;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -178,16 +178,16 @@ void PLP(CPU *cpu)
 // Logical Operations
 void AND(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A &= fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A &= fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -195,16 +195,16 @@ void AND(CPU *cpu)
 
 void ORA(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A |= fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A |= fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -212,16 +212,16 @@ void ORA(CPU *cpu)
 
 void EOR(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A ^= fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A ^= fetch_operand(cpu, instruction->mode);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -229,18 +229,18 @@ void EOR(CPU *cpu)
 
 void BIT(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t result = cpu->A & value;
     set_flag_zero(cpu, result == 0);
     set_flag_negative(cpu, value & 0x80);
     set_flag_overflow(cpu, value & 0x40);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -249,14 +249,14 @@ void BIT(CPU *cpu)
 // Arithmetic Operations
 void ADC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A = add_with_carry(cpu, cpu->A, fetch_operand(cpu, op->mode));
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A = add_with_carry(cpu, cpu->A, fetch_operand(cpu, instruction->mode));
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -264,14 +264,14 @@ void ADC(CPU *cpu)
 
 void SBC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    cpu->A = subtract_with_borrow(cpu, cpu->A, fetch_operand(cpu, op->mode));
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    cpu->A = subtract_with_borrow(cpu, cpu->A, fetch_operand(cpu, instruction->mode));
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -279,18 +279,18 @@ void SBC(CPU *cpu)
 
 void CMP(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t result = cpu->A - value;
     set_flag_carry(cpu, cpu->A >= value);
     set_flag_negative(cpu, result & 0x80);
     set_flag_zero(cpu, result == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -298,18 +298,18 @@ void CMP(CPU *cpu)
 
 void CPX(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t result = cpu->X - value;
     set_flag_carry(cpu, cpu->X >= value);
     set_flag_negative(cpu, result & 0x80);
     set_flag_zero(cpu, result == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -317,18 +317,18 @@ void CPX(CPU *cpu)
 
 void CPY(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint8_t value = fetch_operand(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint8_t value = fetch_operand(cpu, instruction->mode);
     uint8_t result = cpu->Y - value;
     set_flag_carry(cpu, cpu->Y >= value);
     set_flag_negative(cpu, result & 0x80);
     set_flag_zero(cpu, result == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -337,17 +337,17 @@ void CPY(CPU *cpu)
 // Increment/Decrement Operations
 void INC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr]++;
     set_flag_negative(cpu, cpu->memory[addr] & 0x80);
     set_flag_zero(cpu, cpu->memory[addr] == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -371,17 +371,17 @@ void INY(CPU *cpu)
 
 void DEC(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu->memory[addr]--;
     set_flag_negative(cpu, cpu->memory[addr] & 0x80);
     set_flag_zero(cpu, cpu->memory[addr] == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -406,11 +406,11 @@ void DEY(CPU *cpu)
 // Shift Operations
 void ASL(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     uint8_t value;
     uint16_t addr;
 
-    if (op->mode == ADDR_IMP)
+    if (instruction->mode == Accumulator)
     {
         value = cpu->A;
         set_flag_carry(cpu, value & 0x80);
@@ -419,7 +419,7 @@ void ASL(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, op->mode);
+        addr = get_operand_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x80);
         value <<= 1;
@@ -429,11 +429,11 @@ void ASL(CPU *cpu)
     set_flag_negative(cpu, value & 0x80);
     set_flag_zero(cpu, value == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Accumulator /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -441,11 +441,11 @@ void ASL(CPU *cpu)
 
 void LSR(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     uint8_t value;
     uint16_t addr;
 
-    if (op->mode == ADDR_IMP)
+    if (instruction->mode == Accumulator)
     {
         value = cpu->A;
         set_flag_carry(cpu, value & 0x01);
@@ -454,7 +454,7 @@ void LSR(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, op->mode);
+        addr = get_operand_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x01);
         value >>= 1;
@@ -464,11 +464,11 @@ void LSR(CPU *cpu)
     set_flag_negative(cpu, value & 0x80);
     set_flag_zero(cpu, value == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Accumulator /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -476,12 +476,12 @@ void LSR(CPU *cpu)
 
 void ROL(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     uint8_t value;
     uint16_t addr;
     bool carry_in = get_flag_carry(cpu);
 
-    if (op->mode == ADDR_IMP)
+    if (instruction->mode == Accumulator)
     {
         value = cpu->A;
         set_flag_carry(cpu, value & 0x80);
@@ -490,7 +490,7 @@ void ROL(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, op->mode);
+        addr = get_operand_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x80);
         value = (value << 1) | carry_in;
@@ -500,11 +500,11 @@ void ROL(CPU *cpu)
     set_flag_negative(cpu, value & 0x80);
     set_flag_zero(cpu, value == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Accumulator /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -512,12 +512,12 @@ void ROL(CPU *cpu)
 
 void ROR(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     uint8_t value;
     uint16_t addr;
     bool carry_in = get_flag_carry(cpu);
 
-    if (op->mode == ADDR_IMP)
+    if (instruction->mode == Accumulator)
     {
         value = cpu->A;
         set_flag_carry(cpu, value & 0x01);
@@ -526,7 +526,7 @@ void ROR(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, op->mode);
+        addr = get_operand_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x01);
         value = (value >> 1) | (carry_in << 7);
@@ -536,11 +536,11 @@ void ROR(CPU *cpu)
     set_flag_negative(cpu, value & 0x80);
     set_flag_zero(cpu, value == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Accumulator /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
@@ -549,8 +549,8 @@ void ROR(CPU *cpu)
 // Jump Operations
 void JMP(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, op->mode);
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
+    uint16_t addr = get_operand_address(cpu, instruction->mode);
     cpu_set_pc(cpu, addr);
 }
 
@@ -560,7 +560,7 @@ void JSR(CPU *cpu)
     cpu_push(cpu, (return_addr >> 8) & 0xFF);
     cpu_push(cpu, return_addr & 0xFF);
 
-    uint16_t addr = get_operand_address(cpu, ADDR_ABS);
+    uint16_t addr = get_operand_address(cpu, Absolute);
     cpu_set_pc(cpu, addr);
 }
 
@@ -758,13 +758,13 @@ void RTI(CPU *cpu)
 
 void NOP(CPU *cpu)
 {
-    const opcode_t *op = &opcode_table[cpu->memory[cpu_get_pc(cpu)]];
+    const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    if (op->mode != ADDR_IMP /*&& op->mode != ADDR_IMM*/)
+    if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }
-    if (op->mode == ADDR_ABS || op->mode == ADDR_ABSX || op->mode == ADDR_ABSY || op->mode == ADDR_IND)
+    if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     }

@@ -58,10 +58,11 @@ void write_mem(VIC *vic, uint16_t addr, uint8_t data)
 
 uint8_t vic_read(VIC *vic, uint16_t addr)
 {
-    if (vic == NULL || addr < 0xD000 || addr > 0xD02E)
+    printf("VIC READ $%04X\n", addr);
+    if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
         return 0;
 
-    uint16_t offset = addr - 0xD000;
+    uint16_t offset = addr - VIC_MEM_START;
     uint8_t result = 0;
 
     switch (offset)
@@ -194,10 +195,10 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
 
 void vic_write(VIC *vic, uint16_t addr, uint8_t data)
 {
-    if (vic == NULL || addr < 0xD000 || addr > 0xD02E)
+    if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
         return;
 
-    uint16_t offset = addr - 0xD000;
+    uint16_t offset = addr - VIC_MEM_START;
 
     switch (offset)
     {

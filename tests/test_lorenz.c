@@ -5,9 +5,10 @@
 
 #include "c64.h"
 
-#define DEBUG false
+#define DEBUG true
 
-#define TESTCASE "start"
+#define TESTCASE "shaay"
+#define MAX_STEPS 120//1000000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -208,7 +209,7 @@ int main()
         cycles += c64_step(&c64);
 
         step++;
-        if (step > 1000000000)
+        if (step > MAX_STEPS)
         { // Safety limit
             printf("Too many steps, stopping...\n");
             break;

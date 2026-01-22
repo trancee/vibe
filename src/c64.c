@@ -42,6 +42,11 @@ void c64_set_pc(C64 *c64, uint16_t addr)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
+    printf("C64 READ $%04X\n", addr);
+    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END) {
+        return vic_read(&c64->vic, addr);
+    }
+
     return cpu_read_byte(&c64->cpu, addr);
 }
 uint16_t c64_read_word(C64 *c64, uint16_t addr)
@@ -51,6 +56,10 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
+    if (addr >= VIC_MEM_START || addr <= VIC_MEM_END) {
+        return vic_write(&c64->vic, addr, data);
+    }
+
     cpu_write_byte(&c64->cpu, addr, data);
 }
 void c64_write_word(C64 *c64, uint16_t addr, uint16_t data)

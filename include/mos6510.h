@@ -41,23 +41,6 @@ typedef struct
 #define FLAG_OVERFLOW 0x40
 #define FLAG_NEGATIVE 0x80
 
-// Addressing modes
-typedef enum
-{
-    ADDR_IMP,  // Implied
-    ADDR_IMM,  // Immediate
-    ADDR_ZP,   // Zero Page
-    ADDR_ZPX,  // Zero Page, X
-    ADDR_ZPY,  // Zero Page, Y
-    ADDR_ABS,  // Absolute
-    ADDR_ABSX, // Absolute, X
-    ADDR_ABSY, // Absolute, Y
-    ADDR_IND,  // Indirect
-    ADDR_INDX, // Indexed Indirect
-    ADDR_INDY, // Indirect Indexed
-    ADDR_REL   // Relative
-} addressing_mode_t;
-
 typedef enum
 {
     /// Absolute $nnnn
@@ -109,16 +92,6 @@ typedef enum
                      /// Additionally, due to the "Zero Page" addressing nature of this mode, no carry is added to the high order 8 bits of memory and crossing of page boundaries does not occur.
     ZeroPageY,       // 12
 } addr_mode_t;
-
-// Opcode structure
-typedef struct
-{
-    uint8_t opcode;
-    char name[4];
-    addressing_mode_t mode;
-    uint8_t cycles;
-    void (*execute)(CPU *cpu);
-} opcode_t;
 
 typedef struct
 {
@@ -300,8 +273,8 @@ uint8_t cpu_pull(CPU *cpu);
 uint16_t cpu_pull16(CPU *cpu);
 
 // Addressing mode helpers
-uint16_t get_operand_address(CPU *cpu, addressing_mode_t mode);
-uint8_t fetch_operand(CPU *cpu, addressing_mode_t mode);
+uint16_t get_operand_address(CPU *cpu, addr_mode_t mode);
+uint8_t fetch_operand(CPU *cpu, addr_mode_t mode);
 
 // Opcode declarations
 void ADC(CPU *cpu);
@@ -381,6 +354,6 @@ void SBX(CPU *cpu);
 
 // Global opcode table declaration
 extern const instruction_t instructions[256];
-extern const opcode_t opcode_table[256];
+// extern const opcode_t instructions[256];
 
 #endif // CPU_H

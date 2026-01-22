@@ -49,8 +49,8 @@ int main() {
         if (opcode <= 0xFF) {
             const char *name = "???";
             for (int i = 0; i < 256; i++) {
-                if (opcode_table[i].opcode == opcode) {
-                    name = opcode_table[i].name;
+                if (instructions[i].opcode == opcode) {
+                    name = instructions[i].name;
                     break;
                 }
             }
