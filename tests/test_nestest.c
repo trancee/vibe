@@ -33,7 +33,7 @@
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, DEBUG);
+    cpu_init(cpu, DEBUG, NULL, NULL);
     return cpu;
 }
 

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define page_boundary(a, b) ((a & 0xFF00) != (b & 0xFF00))
+
 typedef uint8_t (*read_t)(void *ptr, uint16_t addr);
 typedef void (*write_t)(void *ptr, uint16_t addr, uint8_t data);
 
@@ -281,7 +283,7 @@ uint8_t cpu_pull(CPU *cpu);
 uint16_t cpu_pull16(CPU *cpu);
 
 // Addressing mode helpers
-uint16_t get_operand_address(CPU *cpu, addr_mode_t mode);
+uint16_t fetch_address(CPU *cpu, addr_mode_t mode);
 uint8_t fetch_operand(CPU *cpu, addr_mode_t mode);
 
 // Opcode declarations
@@ -343,23 +345,25 @@ void TXS(CPU *cpu);
 void TYA(CPU *cpu);
 
 // Illegal opcodes (supported for completeness)
-void AHX(CPU *cpu);
 void ANC(CPU *cpu);
-void ALR(CPU *cpu);
+void ANE(CPU *cpu);
 void ARR(CPU *cpu);
+void ASR(CPU *cpu);
 void DCP(CPU *cpu);
-void ISC(CPU *cpu);
+void ISB(CPU *cpu);
 void LAS(CPU *cpu);
 void LAX(CPU *cpu);
 void LXA(CPU *cpu);
 void RLA(CPU *cpu);
 void RRA(CPU *cpu);
 void SAX(CPU *cpu);
+void SBX(CPU *cpu);
+void SHA(CPU *cpu);
+void SHS(CPU *cpu);
+void SHX(CPU *cpu);
+void SHY(CPU *cpu);
 void SLO(CPU *cpu);
 void SRE(CPU *cpu);
-void TAS(CPU *cpu);
-void ANE(CPU *cpu);
-void SBX(CPU *cpu);
 
 // Global opcode table declaration
 extern const instruction_t instructions[256];

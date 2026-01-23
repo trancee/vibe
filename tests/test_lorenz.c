@@ -5,10 +5,10 @@
 
 #include "c64.h"
 
-#define DEBUG true
+#define DEBUG false
 
-#define TESTCASE "shaiy"
-#define MAX_STEPS 200//1000000000
+#define TESTCASE "shsay"
+#define MAX_STEPS 1000000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -86,7 +86,7 @@ void load_handler(CPU *cpu)
 }
 void warm_handler(CPU *cpu)
 {
-    printf("\x{1B}[31;1;6mWARM \x{1B}[0m\n");
+    printf("\x{1B}[31;1;6m[WARM \x{1B}[0m\n");
     abort();
 }
 void ready_handler(CPU *cpu)
@@ -163,7 +163,7 @@ uint16_t load_testcase(CPU *cpu, const char *testcase)
     FILE *stream = fopen(test_path, "rb");
     if (stream == NULL)
     {
-        fprintf(stderr, "Error: Could not open test binary.\n");
+        fprintf(stderr, "Error: could not open \"%s\" testcase.\n", testcase);
         exit(1);
     }
 

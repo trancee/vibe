@@ -27,7 +27,7 @@ void irq_handler(CPU *cpu)
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, DEBUG);
+    cpu_init(cpu, DEBUG, NULL, NULL);
 
     cpu_trap(cpu, RESET, reset_handler);
     cpu_trap(cpu, NMI, nmi_handler);

@@ -62,7 +62,7 @@ static int total_tests = 0;
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, false);
+    cpu_init(cpu, false, NULL, NULL);
     return cpu;
 }
 
@@ -1962,6 +1962,323 @@ static void test_LXA_zero_result(CPU *cpu)
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "LXA sets zero flag");
 }
 
+// ============================================================================
+// SBX Edge Cases (per 64doc.txt)
+// "SBX does not affect the V flag" and "does not have any decimal mode"
+// ============================================================================
+
+static void test_SBX_does_not_affect_v_flag(CPU *cpu)
+{
+    // Per 64doc.txt: SBX does NOT affect the V flag
+    // Set V flag, then run SBX - V should remain unchanged
+    cpu->A = 0x80;
+    cpu->X = 0x80;
+    set_flag_overflow(cpu, true);
+    uint8_t instr[] = {0xCB, 0x01}; // SBX #$01
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    TEST_ASSERT_EQ(0x7F, cpu->X, "SBX: (0x80 & 0x80) - 0x01 = 0x7F");
+    TEST_ASSERT_EQ(true, get_flag_overflow(cpu), "SBX does NOT clear V flag");
+    
+    // Now test with V=false
+    cpu->A = 0xFF;
+    cpu->X = 0xFF;
+    set_flag_overflow(cpu, false);
+    uint8_t instr2[] = {0xCB, 0x80}; // SBX #$80
+    write_instruction(cpu, 0x1000, instr2, 2);
+    cpu_step(cpu);
+    TEST_ASSERT_EQ(0x7F, cpu->X, "SBX: (0xFF & 0xFF) - 0x80 = 0x7F");
+    TEST_ASSERT_EQ(false, get_flag_overflow(cpu), "SBX does NOT set V flag");
+}
+
+static void test_SBX_ignores_decimal_mode(CPU *cpu)
+{
+    // Per 64doc.txt: SBX does not have any decimal mode
+    // The D flag should be ignored during subtraction
+    set_flag_decimal(cpu, true);
+    cpu->A = 0x10;
+    cpu->X = 0x10;
+    uint8_t instr[] = {0xCB, 0x01}; // SBX #$01
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // If decimal mode were used: 0x10 - 0x01 in BCD would be 0x09
+    // In binary mode: 0x10 - 0x01 = 0x0F
+    TEST_ASSERT_EQ(0x0F, cpu->X, "SBX ignores decimal mode: 0x10 - 0x01 = 0x0F (binary)");
+}
+
+static void test_SBX_carry_like_cmp(CPU *cpu)
+{
+    // Per 64doc.txt: Carry is set according to the result (like CMP, not SBC)
+    // Carry ignored in calculation but set according to result
+    cpu->A = 0xFF;
+    cpu->X = 0xFF;
+    set_flag_carry(cpu, false); // This should be ignored
+    uint8_t instr[] = {0xCB, 0x10}; // SBX #$10
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    TEST_ASSERT_EQ(0xEF, cpu->X, "SBX: (0xFF & 0xFF) - 0x10 = 0xEF");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SBX sets carry (no borrow needed)");
+    
+    // Test borrow case
+    cpu->A = 0x00;
+    cpu->X = 0x00;
+    set_flag_carry(cpu, true); // This should still be ignored
+    uint8_t instr2[] = {0xCB, 0x01}; // SBX #$01
+    write_instruction(cpu, 0x1000, instr2, 2);
+    cpu_step(cpu);
+    TEST_ASSERT_EQ(0xFF, cpu->X, "SBX: (0x00 & 0x00) - 0x01 = 0xFF (wrap)");
+    TEST_ASSERT_EQ(false, get_flag_carry(cpu), "SBX clears carry (borrow needed)");
+}
+
+// ============================================================================
+// SHA/SHX/SHY Edge Cases (per 64doc.txt)
+// Store (A & X & (ADDR_HI + 1)), (X & (ADDR_HI + 1)), (Y & (ADDR_HI + 1))
+// ============================================================================
+
+static void test_SHA_stores_correct_value(CPU *cpu)
+{
+    // SHA: Store A & X & (high byte of address + 1)
+    cpu->A = 0xFF;
+    cpu->X = 0xFF;
+    cpu->Y = 0x01;
+    cpu->memory[0x20] = 0x00;  // Low byte of base address
+    cpu->memory[0x21] = 0x30;  // High byte of base address
+    uint8_t instr[] = {0x93, 0x20}; // SHA ($20),Y - target = $3001
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // Value = A & X & ($30 + 1) = 0xFF & 0xFF & 0x31 = 0x31
+    TEST_ASSERT_EQ(0x31, cpu->memory[0x3001], "SHA stores A & X & (ADDR_HI + 1)");
+}
+
+static void test_SHA_absy(CPU *cpu)
+{
+    // SHA absolute,Y mode
+    cpu->A = 0xFF;
+    cpu->X = 0x0F;
+    cpu->Y = 0x10;
+    uint8_t instr[] = {0x9F, 0x00, 0x40}; // SHA $4000,Y - target = $4010
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = A & X & ($40 + 1) = 0xFF & 0x0F & 0x41 = 0x01
+    TEST_ASSERT_EQ(0x01, cpu->memory[0x4010], "SHA absolute,Y stores A & X & (ADDR_HI + 1)");
+}
+
+static void test_SHA_absy_page_crossing(CPU *cpu)
+{
+    // SHA absolute,Y with page boundary crossing
+    // Per 64doc.txt: ADDR_HI is the base address high byte, NOT effective address
+    cpu->A = 0xFF;
+    cpu->X = 0xFF;
+    cpu->Y = 0x50;  // causes page crossing: $40F0 + $50 = $4140
+    uint8_t instr[] = {0x9F, 0xF0, 0x40}; // SHA $40F0,Y - target = $4140
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Base high byte = $40 (NOT $41 from effective address)
+    // Value = A & X & ($40 + 1) = 0xFF & 0xFF & 0x41 = 0x41
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHA page crossing uses base ADDR_HI");
+}
+
+// ============================================================================
+// SHX/SHY Edge Cases (per 64doc.txt)
+// SHX $9E: Store (X & (ADDR_HI + 1)) - AbsoluteY mode
+// SHY $9C: Store (Y & (ADDR_HI + 1)) - AbsoluteX mode
+// ============================================================================
+
+static void test_SHX_basic(CPU *cpu)
+{
+    // SHX absolute,Y mode: stores X & (ADDR_HI + 1)
+    cpu->X = 0xFF;
+    cpu->Y = 0x10;
+    uint8_t instr[] = {0x9E, 0x00, 0x40}; // SHX $4000,Y - target = $4010
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = X & ($40 + 1) = 0xFF & 0x41 = 0x41
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHX stores X & (ADDR_HI + 1)");
+}
+
+static void test_SHX_page_crossing(CPU *cpu)
+{
+    // SHX absolute,Y with page boundary crossing
+    // Per 64doc.txt: on page crossing, value becomes X & effective_high_byte
+    // and that value is also used as the high byte of effective address
+    cpu->X = 0xFF;
+    cpu->Y = 0x50;  // causes page crossing: $40F0 + $50 = $4140
+    uint8_t instr[] = {0x9E, 0xF0, 0x40}; // SHX $40F0,Y
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Page crossing: effective addr hi = $41
+    // Value = X & $41 = 0xFF & 0x41 = 0x41
+    // Address becomes $4140 with high byte = value = $41, so still $4140
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHX page crossing stores X & effective_hi");
+}
+
+static void test_SHX_no_flags_affected(CPU *cpu)
+{
+    // SHX should not affect any flags
+    cpu->X = 0x00;  // Zero value
+    cpu->Y = 0x10;
+    set_flag_zero(cpu, false);
+    set_flag_negative(cpu, true);
+    set_flag_carry(cpu, true);
+    uint8_t instr[] = {0x9E, 0x00, 0x40}; // SHX $4000,Y
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = 0x00 & 0x41 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHX stores zero");
+    TEST_ASSERT_EQ(false, get_flag_zero(cpu), "SHX does not set Z flag");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "SHX does not clear N flag");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SHX does not affect C flag");
+}
+
+static void test_SHY_basic(CPU *cpu)
+{
+    // SHY absolute,X mode: stores Y & (ADDR_HI + 1)
+    cpu->X = 0x10;
+    cpu->Y = 0xFF;
+    uint8_t instr[] = {0x9C, 0x00, 0x40}; // SHY $4000,X - target = $4010
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = Y & ($40 + 1) = 0xFF & 0x41 = 0x41
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHY stores Y & (ADDR_HI + 1)");
+}
+
+static void test_SHY_page_crossing(CPU *cpu)
+{
+    // SHY absolute,X with page boundary crossing
+    // Per 64doc.txt: on page crossing, value becomes Y & effective_high_byte
+    // and that value is also used as the high byte of effective address
+    cpu->X = 0x50;  // causes page crossing: $40F0 + $50 = $4140
+    cpu->Y = 0xFF;
+    uint8_t instr[] = {0x9C, 0xF0, 0x40}; // SHY $40F0,X
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Page crossing: effective addr hi = $41
+    // Value = Y & $41 = 0xFF & 0x41 = 0x41
+    // Address becomes $4140 with high byte = value = $41, so still $4140
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHY page crossing stores Y & effective_hi");
+}
+
+static void test_SHY_no_flags_affected(CPU *cpu)
+{
+    // SHY should not affect any flags
+    cpu->X = 0x10;
+    cpu->Y = 0x00;  // Zero value
+    set_flag_zero(cpu, false);
+    set_flag_negative(cpu, true);
+    set_flag_carry(cpu, true);
+    uint8_t instr[] = {0x9C, 0x00, 0x40}; // SHY $4000,X
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = 0x00 & 0x41 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHY stores zero");
+    TEST_ASSERT_EQ(false, get_flag_zero(cpu), "SHY does not set Z flag");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "SHY does not clear N flag");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SHY does not affect C flag");
+}
+
+static void test_SHY_value_masking(CPU *cpu)
+{
+    // Test that only relevant bits survive the AND operation
+    cpu->X = 0x10;
+    cpu->Y = 0x55;  // 0b01010101
+    uint8_t instr[] = {0x9C, 0x00, 0x40}; // SHY $4000,X - target = $4010
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = Y & ($40 + 1) = 0x55 & 0x41 = 0x41
+    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHY correctly ANDs Y with ADDR_HI+1");
+}
+
+static void test_SHX_value_masking(CPU *cpu)
+{
+    // Test that only relevant bits survive the AND operation
+    cpu->X = 0xAA;  // 0b10101010
+    cpu->Y = 0x10;
+    uint8_t instr[] = {0x9E, 0x00, 0x40}; // SHX $4000,Y - target = $4010
+    write_instruction(cpu, 0x1000, instr, 3);
+    cpu_step(cpu);
+    // Value = X & ($40 + 1) = 0xAA & 0x41 = 0x00
+    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHX correctly ANDs X with ADDR_HI+1");
+}
+
+// ============================================================================
+// ISB/RRA Decimal Mode Edge Cases (per 64doc.txt)
+// "RRA and ISB have inherited also the decimal operation from ADC and SBC"
+// ============================================================================
+
+static void test_RRA_decimal_mode(CPU *cpu)
+{
+    // Per 64doc.txt: RRA inherits decimal operation from ADC
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, true);
+    cpu->A = 0x10;
+    cpu->memory[0x20] = 0x12;  // Will become 0x89 after ROR with carry
+    uint8_t instr[] = {0x67, 0x20}; // RRA $20
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // ROR: 0x12 with carry=1 becomes 0x89 (carry out = 0)
+    TEST_ASSERT_EQ(0x89, cpu->memory[0x20], "RRA rotates memory right with carry");
+    // ADC in decimal mode: 0x10 + 0x89 + 0 (no carry after ROR)
+    // The addition should use BCD
+}
+
+static void test_ISB_decimal_mode(CPU *cpu)
+{
+    // Per 64doc.txt: ISB inherits decimal operation from SBC
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, true);
+    cpu->A = 0x20;
+    cpu->memory[0x20] = 0x09;
+    uint8_t instr[] = {0xE7, 0x20}; // ISB $20
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // INC: 0x09 becomes 0x0A
+    TEST_ASSERT_EQ(0x0A, cpu->memory[0x20], "ISB increments memory");
+    // SBC in decimal mode: 0x20 - 0x0A (with C=1) in BCD
+    // 0x20 - 0x0A = 0x10 in BCD
+    TEST_ASSERT_EQ(0x10, cpu->A, "ISB subtracts in decimal mode");
+}
+
+// ============================================================================
+// ADC/SBC Decimal Mode NVZ Flags (per 64doc.txt)
+// N and V are set after fixing lower nybble but before fixing upper
+// Z is set before any BCD fixup
+// ============================================================================
+
+static void test_ADC_decimal_nv_flags_timing(CPU *cpu)
+{
+    // Per 64doc.txt: N and V flags are set after fixing lower nybble 
+    // but before fixing upper nybble
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, false);
+    cpu->A = 0x79;
+    uint8_t instr[] = {0x69, 0x79}; // ADC #$79
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // Binary: 0x79 + 0x79 = 0xF2
+    // BCD: 79 + 79 = 158 = 0x58 with carry
+    TEST_ASSERT_EQ(0x58, cpu->A, "ADC decimal 79+79=158 (BCD 0x58 with carry)");
+    TEST_ASSERT_EQ(true, get_flag_carry(cpu), "ADC decimal sets carry on overflow");
+    // Z flag is based on binary result (0xF2 != 0)
+    TEST_ASSERT_EQ(false, get_flag_zero(cpu), "ADC decimal Z based on binary result");
+    // N flag should be based on value after low nybble fix but before high
+}
+
+static void test_SBC_decimal_flags_same_as_binary(CPU *cpu)
+{
+    // Per 64doc.txt: SBC's flags are not affected by the Decimal mode flag
+    set_flag_decimal(cpu, true);
+    set_flag_carry(cpu, true);
+    cpu->A = 0x10;
+    uint8_t instr[] = {0xE9, 0x20}; // SBC #$20
+    write_instruction(cpu, 0x1000, instr, 2);
+    cpu_step(cpu);
+    // Result in BCD: 10 - 20 = -10 = 90 with borrow
+    TEST_ASSERT_EQ(0x90, cpu->A, "SBC decimal 10-20=90 (BCD with borrow)");
+    // Flags should be set like binary mode
+    TEST_ASSERT_EQ(false, get_flag_carry(cpu), "SBC decimal clears carry on borrow");
+    TEST_ASSERT_EQ(true, get_flag_negative(cpu), "SBC decimal N flag from binary result");
+}
+
 // Test array for all opcodes
 static const test_case_t opcode_tests[] = {
     // ADC tests
@@ -1975,6 +2292,7 @@ static const test_case_t opcode_tests[] = {
     {0x69, "ADC", test_ADC_decimal_carry},
     {0x69, "ADC", test_ADC_decimal_with_carry_in},
     {0x69, "ADC", test_ADC_decimal_zero_flag},
+    {0x69, "ADC", test_ADC_decimal_nv_flags_timing},
     {0x65, "ADC", test_ADC_zp},
     {0x75, "ADC", test_ADC_zpx},
     {0x75, "ADC", test_ADC_zpx_wrap},
@@ -1994,6 +2312,7 @@ static const test_case_t opcode_tests[] = {
     {0xE9, "SBC", test_SBC_decimal_simple},
     {0xE9, "SBC", test_SBC_decimal_borrow},
     {0xE9, "SBC", test_SBC_decimal_underflow},
+    {0xE9, "SBC", test_SBC_decimal_flags_same_as_binary},
     
     // Logical tests
     {0x29, "AND", test_AND_imm},
@@ -2151,6 +2470,22 @@ static const test_case_t opcode_tests[] = {
     {0xAB, "LXA", test_LXA_a_contributes_low_bits},
     {0xAB, "LXA", test_LXA_zero_result},
     {0xCB, "SBX", test_SBX},
+    {0xCB, "SBX", test_SBX_does_not_affect_v_flag},
+    {0xCB, "SBX", test_SBX_ignores_decimal_mode},
+    {0xCB, "SBX", test_SBX_carry_like_cmp},
+    {0x93, "SHA", test_SHA_stores_correct_value},
+    {0x9F, "SHA", test_SHA_absy},
+    {0x9F, "SHA", test_SHA_absy_page_crossing},
+    {0x9E, "SHX", test_SHX_basic},
+    {0x9E, "SHX", test_SHX_page_crossing},
+    {0x9E, "SHX", test_SHX_no_flags_affected},
+    {0x9E, "SHX", test_SHX_value_masking},
+    {0x9C, "SHY", test_SHY_basic},
+    {0x9C, "SHY", test_SHY_page_crossing},
+    {0x9C, "SHY", test_SHY_no_flags_affected},
+    {0x9C, "SHY", test_SHY_value_masking},
+    {0x67, "RRA", test_RRA_decimal_mode},
+    {0xE7, "ISB", test_ISB_decimal_mode},
 };
 
 // Comprehensive addressing mode tests

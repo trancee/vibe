@@ -332,7 +332,7 @@ bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
     return add_trap(&trap);
 }
 
-uint16_t get_operand_address(CPU *cpu, addr_mode_t mode)
+uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
 {
     uint16_t addr;
     uint8_t low_byte, high_byte;
@@ -414,7 +414,7 @@ uint16_t get_operand_address(CPU *cpu, addr_mode_t mode)
 
 uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
 {
-    uint16_t addr = get_operand_address(cpu, mode);
+    uint16_t addr = fetch_address(cpu, mode);
     return cpu_read_byte(cpu, addr); // cpu->memory[addr];
 }
 

@@ -55,7 +55,7 @@ void LDY(CPU *cpu)
 void STA(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->A;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
@@ -71,7 +71,7 @@ void STA(CPU *cpu)
 void STX(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->X;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
@@ -87,7 +87,7 @@ void STX(CPU *cpu)
 void STY(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu->memory[addr] = cpu->Y;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
@@ -338,7 +338,7 @@ void CPY(CPU *cpu)
 void INC(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu->memory[addr]++;
     set_flag_negative(cpu, cpu->memory[addr] & 0x80);
     set_flag_zero(cpu, cpu->memory[addr] == 0);
@@ -372,7 +372,7 @@ void INY(CPU *cpu)
 void DEC(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu->memory[addr]--;
     set_flag_negative(cpu, cpu->memory[addr] & 0x80);
     set_flag_zero(cpu, cpu->memory[addr] == 0);
@@ -419,7 +419,7 @@ void ASL(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, instruction->mode);
+        addr = fetch_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x80);
         value <<= 1;
@@ -454,7 +454,7 @@ void LSR(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, instruction->mode);
+        addr = fetch_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x01);
         value >>= 1;
@@ -490,7 +490,7 @@ void ROL(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, instruction->mode);
+        addr = fetch_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x80);
         value = (value << 1) | carry_in;
@@ -526,7 +526,7 @@ void ROR(CPU *cpu)
     }
     else
     {
-        addr = get_operand_address(cpu, instruction->mode);
+        addr = fetch_address(cpu, instruction->mode);
         value = cpu->memory[addr];
         set_flag_carry(cpu, value & 0x01);
         value = (value >> 1) | (carry_in << 7);
@@ -550,7 +550,7 @@ void ROR(CPU *cpu)
 void JMP(CPU *cpu)
 {
     const instruction_t *instruction = &instructions[cpu->memory[cpu_get_pc(cpu)]];
-    uint16_t addr = get_operand_address(cpu, instruction->mode);
+    uint16_t addr = fetch_address(cpu, instruction->mode);
     cpu_set_pc(cpu, addr);
 }
 
@@ -560,7 +560,7 @@ void JSR(CPU *cpu)
     cpu_push(cpu, (return_addr >> 8) & 0xFF);
     cpu_push(cpu, return_addr & 0xFF);
 
-    uint16_t addr = get_operand_address(cpu, Absolute);
+    uint16_t addr = fetch_address(cpu, Absolute);
     cpu_set_pc(cpu, addr);
 }
 

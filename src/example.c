@@ -10,7 +10,7 @@ int main() {
     
     // Initialize CPU
     CPU cpu;
-    cpu_init(&cpu, DEBUG);
+    cpu_init(&cpu, DEBUG, NULL, NULL);
     
     printf("Initial CPU state:\n");
     printf("  PC: $%04X\n", cpu_get_pc(&cpu));

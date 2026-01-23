@@ -82,7 +82,7 @@ const instruction_t instructions[256] = {
     {0x48, "PHA", PHA, Implied, 1, 3, false},
     {0x49, "EOR", EOR, Immediate, 2, 2, false},
     {0x4A, "LSR", LSR, Accumulator /* Implied */, 1, 2, false},
-    {0x4B, "ALR", ALR, Immediate, 2, 2, true}, // 6502: ASR
+    {0x4B, "ASR", ASR, Immediate, 2, 2, true}, // 6502: ALR
     {0x4C, "JMP", JMP, Absolute, 3, 3, false},
     {0x4D, "EOR", EOR, Absolute, 3, 4, false},
     {0x4E, "LSR", LSR, Absolute, 3, 6, false},
@@ -159,7 +159,7 @@ const instruction_t instructions[256] = {
     {0x90, "BCC", BCC, Relative, 2, 2, false},
     {0x91, "STA", STA, IndirectIndexed, 2, 6, false},
     {0x92, "JAM", NOP, Implied, 0, 2 /* 1 */, true},
-    {0x93, "AHX", AHX, IndirectIndexed, 2, 6, true}, // 6502: SHA
+    {0x93, "SHA", SHA, IndirectIndexed, 2, 6, true}, // 6502: AHX
     {0x94, "STY", STY, ZeroPageX, 2, 4, false},
     {0x95, "STA", STA, ZeroPageX, 2, 4, false},
     {0x96, "STX", STX, ZeroPageY, 2, 4, false},
@@ -167,11 +167,11 @@ const instruction_t instructions[256] = {
     {0x98, "TYA", TYA, Implied, 1, 2, false},
     {0x99, "STA", STA, AbsoluteY, 3, 5, false},
     {0x9A, "TXS", TXS, Implied, 1, 2, false},
-    {0x9B, "TAS", TAS, AbsoluteY, 3, 5, true}, // 6502: SHS
-    {0x9C, "SHY", NOP, AbsoluteX, 3, 5, true},
+    {0x9B, "SHS", SHS, AbsoluteY, 3, 5, true}, // 6502: TAS
+    {0x9C, "SHY", SHY, AbsoluteX, 3, 5, true},
     {0x9D, "STA", STA, AbsoluteX, 3, 5, false},
-    {0x9E, "SHX", NOP, AbsoluteY, 3, 5, true},
-    {0x9F, "AHX", AHX, AbsoluteY, 3, 5, true}, // 6502: SHA
+    {0x9E, "SHX", SHX, AbsoluteY, 3, 5, true},
+    {0x9F, "SHA", SHA, AbsoluteY, 3, 5, true}, // 6502: AHX
     // 0xA0
     {0xA0, "LDY", LDY, Immediate, 2, 2, false},
     {0xA1, "LDA", LDA, IndexedIndirect, 2, 6, false},
@@ -244,11 +244,11 @@ const instruction_t instructions[256] = {
     {0xE0, "CPX", CPX, Immediate, 2, 2, false},
     {0xE1, "SBC", SBC, IndexedIndirect, 2, 6, false},
     {0xE2, "NOP", NOP, Immediate, 2, 2, true},
-    {0xE3, "ISC", ISC, IndexedIndirect, 2, 8, true}, // 6502: ISB
+    {0xE3, "ISB", ISB, IndexedIndirect, 2, 8, true}, // 6502: ISC
     {0xE4, "CPX", CPX, ZeroPage, 2, 3, false},
     {0xE5, "SBC", SBC, ZeroPage, 2, 3, false},
     {0xE6, "INC", INC, ZeroPage, 2, 5, false},
-    {0xE7, "ISC", ISC, ZeroPage, 2, 5, true}, // 6502: ISB
+    {0xE7, "ISB", ISB, ZeroPage, 2, 5, true}, // 6502: ISC
     {0xE8, "INX", INX, Implied, 1, 2, false},
     {0xE9, "SBC", SBC, Immediate, 2, 2, false},
     {0xEA, "NOP", NOP, Implied, 1, 2, false},
@@ -256,22 +256,22 @@ const instruction_t instructions[256] = {
     {0xEC, "CPX", CPX, Absolute, 3, 4, false},
     {0xED, "SBC", SBC, Absolute, 3, 4, false},
     {0xEE, "INC", INC, Absolute, 3, 6, false},
-    {0xEF, "ISC", ISC, Absolute, 3, 6, true}, // 6502: ISB
+    {0xEF, "ISB", ISB, Absolute, 3, 6, true}, // 6502: ISC
     // 0xF0
     {0xF0, "BEQ", BEQ, Relative, 2, 2, false},
     {0xF1, "SBC", SBC, IndirectIndexed, 2, 5, false},
     {0xF2, "JAM", NOP, Implied, 0, 2 /* 1 */, true},
-    {0xF3, "ISC", ISC, IndirectIndexed, 2, 8, true}, // 6502: ISB
+    {0xF3, "ISB", ISB, IndirectIndexed, 2, 8, true}, // 6502: ISC
     {0xF4, "NOP", NOP, ZeroPageX, 2, 4, true},
     {0xF5, "SBC", SBC, ZeroPageX, 2, 4, false},
     {0xF6, "INC", INC, ZeroPageX, 2, 6, false},
-    {0xF7, "ISC", ISC, ZeroPageX, 2, 6, true}, // 6502: ISB
+    {0xF7, "ISB", ISB, ZeroPageX, 2, 6, true}, // 6502: ISC
     {0xF8, "SED", SED, Implied, 1, 2, false},
     {0xF9, "SBC", SBC, AbsoluteY, 3, 4, false},
     {0xFA, "NOP", NOP, Implied, 1, 2, true},
-    {0xFB, "ISC", ISC, AbsoluteY, 3, 7, true}, // 6502: ISB
+    {0xFB, "ISB", ISB, AbsoluteY, 3, 7, true}, // 6502: ISC
     {0xFC, "NOP", NOP, AbsoluteX, 3, 4, true},
     {0xFD, "SBC", SBC, AbsoluteX, 3, 4, false},
     {0xFE, "INC", INC, AbsoluteX, 3, 7, false},
-    {0xFF, "ISC", ISC, AbsoluteX, 3, 7, true}, // 6502: ISB
+    {0xFF, "ISB", ISB, AbsoluteX, 3, 7, true}, // 6502: ISC
 };
