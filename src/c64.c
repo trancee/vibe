@@ -42,11 +42,11 @@ void c64_reset_pc(C64 *c64, uint16_t addr)
 
 uint16_t c64_get_pc(C64 *c64)
 {
-    return c64->cpu.pc;
+    return cpu_get_pc(&c64->cpu);
 }
 void c64_set_pc(C64 *c64, uint16_t addr)
 {
-    c64->cpu.pc = addr;
+    cpu_set_pc(&c64->cpu, addr);
 }
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cpu.h"
 #include "mos6510.h"
 
 #define read8() cpu_read_byte(cpu, pc + 1)
@@ -127,7 +128,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, JMP, JSR, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
         printf(" $%04X", read16());
-        if (instruction->execute == JSR || instruction->execute == JMP)
+        if (instruction->opcode == 0x20 || instruction->opcode == 0x4C || instruction->opcode == 0x6C) // JSR or JMP
             printf("     ");
         else
             printf(" = %02X", cpu_read_byte(cpu, read16()));
@@ -249,17 +250,16 @@ void cpu_reset_pc(CPU *cpu, uint16_t addr)
     cpu->Y = 0x00;
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
-
-    cpu_set_pc(cpu, addr);
+    cpu->PC = addr;
 }
 
 uint16_t cpu_get_pc(CPU *cpu)
 {
-    return cpu->pc;
+    return cpu->PC;
 }
 void cpu_set_pc(CPU *cpu, uint16_t addr)
 {
-    cpu->pc = addr;
+    cpu->PC = addr;
 }
 
 uint8_t cpu_read(CPU *cpu, uint16_t addr)
@@ -418,6 +418,12 @@ uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
     return cpu_read_byte(cpu, addr); // cpu->memory[addr];
 }
 
+const instruction_t *fetch_instruction(CPU *cpu)
+{
+    uint8_t opcode = cpu->memory[cpu_get_pc(cpu)];
+    return &instructions[opcode];
+}
+
 /// triggers a NMI IRQ in the processor
 /// this is very similar to the BRK instruction
 void cpu_nmi(CPU *cpu)
@@ -475,34 +481,6 @@ uint8_t cpu_step(CPU *cpu)
     uint8_t opcode = cpu->memory[pc];
     const instruction_t *instruction = &instructions[opcode];
 
-    // if (instruction->execute == NOP) {
-    //     // Handle JMP for NOP opcodes that should be JMP
-    //     if (opcode == 0x4C || opcode == 0x6C) {
-    //         JMP(cpu);
-    //     } else {
-    //         // Just skip the opcode and any operands
-    //         cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    //         switch (instruction->mode) {
-    //             case Immediate:
-    //             case ZeroPage:
-    //             case ZeroPageX:
-    //             case ZeroPageY:
-    //             case Relative:
-    //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
-    //                 break;
-    //             case Absolute:
-    //             case AbsoluteX:
-    //             case AbsoluteY:
-    //             case Indirect:
-    //                 cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
-    //                 break;
-    //             default:
-    //                 break;
-    //         }
-    //     }
-    //     return instruction->cycles;
-    // }
-
     if (cpu->debug)
         dump_step(cpu, instruction);
 
@@ -512,12 +490,6 @@ uint8_t cpu_step(CPU *cpu)
     handler_t handler = find_trap(pc);
     if (handler != NULL)
         handler(cpu);
-
-    // if (cpu_get_pc(cpu) != pc + instruction->size)
-    // {
-    //     printf("*** PC:$%04X != $%04X ($%04X +%d)\n", cpu_get_pc(cpu), pc + instruction->size, pc, instruction->size);
-    //     // exit(1);
-    // }
 
     return instruction->cycles;
 }
