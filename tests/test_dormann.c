@@ -5,7 +5,7 @@
 
 #include "mos6510.h"
 
-#define DEBUG false
+#define DEBUG true
 
 void reset_handler(CPU *cpu)
 {
@@ -64,18 +64,95 @@ void load_test(uint8_t *memory, const char *test_name)
     fclose(stream);
 }
 
+typedef int (*test_t)(CPU *, void *test_case);
+
 typedef struct
 {
     char test_name[32];
     uint16_t start_address;
     uint16_t end_address;
-    uint16_t test_case_address;
+    // uint16_t test_case_address;
+    test_t test_function;
     int exact_cycles;
 } test_case_t;
 
+uint8_t last_test = -1;
+uint16_t test_case_address = 0x0200;
+
+int functional_test(CPU *cpu, test_case_t test_case)
+{
+    uint8_t pc = cpu_get_pc(cpu);
+
+    if (cpu->memory[test_case_address] != last_test)
+    {
+        last_test = cpu->memory[test_case_address];
+        printf("test case #$%02X at $%04X\n", last_test, pc);
+    }
+
+    return cpu_step(cpu);
+}
+
+uint16_t feedback_address = 0xBFFC;
+uint8_t irq_bit = 1 << 0;
+uint8_t nmi_bit = 1 << 1;
+uint16_t nmi_count_address = 0x0200;
+uint16_t irq_count_address = 0x0201;
+uint16_t brk_count_address = 0x0202;
+
+int interrupt_test(CPU *cpu, test_case_t test_case)
+{
+    uint8_t pc = cpu_get_pc(cpu);
+
+    if (pc == test_case.start_address)
+    {
+        // Reset counts
+        cpu_write(cpu, nmi_count_address, 0x00);
+        cpu_write(cpu, irq_count_address, 0x00);
+        cpu_write(cpu, brk_count_address, 0x00);
+
+        cpu_write(cpu, feedback_address, 0x00);
+    }
+
+    int cycles = cpu_step(cpu);
+
+    uint8_t feedback = cpu_read(cpu, feedback_address);
+
+    if ((feedback & nmi_bit))
+    {
+        printf("*** Triggering NMI\n");
+        cpu_write(cpu, feedback_address, feedback & ~nmi_bit);
+        cpu_nmi(cpu);
+    }
+    else if ((feedback & irq_bit))
+    {
+        printf("*** Triggering IRQ\n");
+        cpu_write(cpu, feedback_address, feedback & ~irq_bit);
+        cpu_irq(cpu);
+    }
+
+    if (cpu_get_pc(cpu) == pc) // End of test
+    {
+        printf("---\n");
+        printf("NMI count: $%02X\n", cpu_read(cpu, nmi_count_address));
+        printf("IRQ count: $%02X\n", cpu_read(cpu, irq_count_address));
+        printf("BRK count: $%02X\n", cpu_read(cpu, brk_count_address));
+    }
+
+    return cycles;
+}
+
+int extended_opcodes_test(CPU *cpu, test_case_t test_case)
+{
+    uint16_t test_case_address = 0x0202;
+
+    printf("65C02 Extended Opcodes Test Handler\n");
+    abort();
+}
+
 static const test_case_t opcode_tests[] = {
-    {"6502_functional_test", 0x0400, 0x3469, 0x0200, 96247422},        // 05-jan-2020
-    {"65C02_extended_opcodes_test", 0x0400, 0x24F1, 0x0202, 95340970}, // 04-dec-2017
+    // {"6502_functional_test", 0x0400, 0x3469, functional_test, 96247422},              // 05-jan-2020
+    {"6502_interrupt_test", 0x0400, 0x06F5, (void *)interrupt_test, 2929}, // 15-aug-2014
+    // {"65C02_extended_opcodes_test", 0x0400, 0x24F1, extended_opcodes_test, 95340970}, // 04-dec-2017
 };
 
 int main()
@@ -96,19 +173,12 @@ int main()
 
         int step = 1;
         uint16_t pc;
-        uint8_t last_test = -1;
+        last_test = -1;
         do
         {
             pc = cpu_get_pc(cpu);
-            if (cpu->memory[test_case.test_case_address] != last_test)
-            {
-                last_test = cpu->memory[test_case.test_case_address];
-                printf("test case #$%02X at $%04X\n", last_test, pc);
-            }
 
-            uint8_t opcode = cpu->memory[pc];
-
-            cycles += cpu_step(cpu);
+            cycles += test_case.test_function(cpu, &test_case);
 
             step++;
             if (step > 100000000)

@@ -7,10 +7,17 @@
 
 #define DEBUG false
 
-#define TESTCASE "shsay"
+#define TESTCASE "start"
 #define MAX_STEPS 1000000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
+
+#define petscii_to_ascii(c)                                                                      \
+    ((c) >= 0xC1 && (c) <= 0xDA ? (c) - 0xC1 + 65 : (c) >= 0x41 && (c) <= 0x5A ? (c) - 0x41 + 97 \
+                                                : (c) < 32 || (c) >= 127       ? '.'             \
+                                                                               : (c))
+
+// https://www.softwolves.com/arkiv/cbm-hackers/7/7114.html
 
 // Helper functions
 void print_handler(CPU *cpu)
@@ -41,17 +48,7 @@ void print_handler(CPU *cpu)
         printf("\x{1B}c"); // clear
         break;
     default:
-        printf("%c",
-               (a >= 0xC1 && a <= 0xDA) ? //
-                   a - 0xC1 + 65
-                                        :     //
-                   (a >= 0x41 && a <= 0x5A) ? //
-                       a - 0x41 + 97
-                                            : //
-                       (a < 32 || a >= 127) ? //
-                           '.'
-                                            : //
-                           a);
+        printf("%c", petscii_to_ascii(a));
     }
 }
 void load_handler(CPU *cpu)
@@ -78,7 +75,7 @@ void load_handler(CPU *cpu)
 
     char testcase[size + 1];
     for (size_t i = 0; i < size; i++)
-        testcase[i] = cpu_read_byte(cpu, addr + i) - 0x41 + 97;
+        testcase[i] = petscii_to_ascii(cpu_read_byte(cpu, addr + i));
     testcase[size] = 0;
 
     load_testcase(cpu, testcase);
@@ -86,12 +83,12 @@ void load_handler(CPU *cpu)
 }
 void warm_handler(CPU *cpu)
 {
-    printf("\x{1B}[31;1;6m[WARM \x{1B}[0m\n");
+    printf("\x{1B}[31;1;6mWARM\x{1B}[0m\n");
     abort();
 }
 void ready_handler(CPU *cpu)
 {
-    printf("\x{1B}[31;1;6m[READY \x{1B}[0m\n");
+    printf("\x{1B}[31;1;6mREADY\x{1B}[0m\n");
     abort();
 }
 

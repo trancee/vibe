@@ -136,8 +136,8 @@ void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
 void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
 
-// void cpu_nmi(CPU *cpu);
-// void cpu_irq(CPU *cpu);
+void cpu_nmi(CPU *cpu);
+void cpu_irq(CPU *cpu);
 // bool cpu_interrupts(CPU *cpu);
 
 bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
