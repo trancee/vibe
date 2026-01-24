@@ -27,7 +27,9 @@ void irq_handler(CPU *cpu)
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, DEBUG, NULL, NULL);
+    cpu_init(cpu);
+
+    cpu_set_debug(cpu, DEBUG, NULL);
 
     cpu_trap(cpu, RESET, reset_handler);
     cpu_trap(cpu, NMI, nmi_handler);
@@ -41,7 +43,7 @@ static void teardown_cpu(CPU *cpu)
     free(cpu);
 }
 
-void load_test(uint8_t *memory, const char *test_name)
+void load_test(uint8_t *memory, uint16_t address, const char *test_name)
 {
     char test_path[256];
     snprintf(test_path, sizeof(test_path), "tests/dormann/%s.bin", test_name);
@@ -58,7 +60,7 @@ void load_test(uint8_t *memory, const char *test_name)
 
     for (size_t i = 0; i < read; i++)
     {
-        memory[i] = buffer[i];
+        memory[address + i] = buffer[i];
     }
 
     fclose(stream);
@@ -71,7 +73,7 @@ typedef struct
     char test_name[32];
     uint16_t start_address;
     uint16_t end_address;
-    // uint16_t test_case_address;
+    uint16_t load_address;
     test_t test_function;
     int exact_cycles;
 } test_case_t;
@@ -81,7 +83,7 @@ uint16_t test_case_address = 0x0200;
 
 int functional_test(CPU *cpu, test_case_t test_case)
 {
-    uint8_t pc = cpu_get_pc(cpu);
+    uint16_t pc = cpu_get_pc(cpu);
 
     if (cpu->memory[test_case_address] != last_test)
     {
@@ -90,6 +92,23 @@ int functional_test(CPU *cpu, test_case_t test_case)
     }
 
     return cpu_step(cpu);
+}
+
+uint16_t error_address = 0x000B;
+
+int decimal_test(CPU *cpu, test_case_t test_case)
+{
+    uint16_t pc = cpu_get_pc(cpu);
+
+    int cycles = cpu_step(cpu);
+
+    if (cpu_get_pc(cpu) == pc || cpu_get_pc(cpu) == test_case.end_address) // End of test
+    {
+        printf("---\n");
+        printf("error: #$%02X\n", cpu_read(cpu, error_address));
+    }
+
+    return cycles;
 }
 
 uint16_t feedback_address = 0xBFFC;
@@ -101,7 +120,7 @@ uint16_t brk_count_address = 0x0202;
 
 int interrupt_test(CPU *cpu, test_case_t test_case)
 {
-    uint8_t pc = cpu_get_pc(cpu);
+    uint16_t pc = cpu_get_pc(cpu);
 
     if (pc == test_case.start_address)
     {
@@ -130,7 +149,7 @@ int interrupt_test(CPU *cpu, test_case_t test_case)
         cpu_irq(cpu);
     }
 
-    if (cpu_get_pc(cpu) == pc) // End of test
+    if (cpu_get_pc(cpu) == pc || cpu_get_pc(cpu) == test_case.end_address) // End of test
     {
         printf("---\n");
         printf("NMI count: $%02X\n", cpu_read(cpu, nmi_count_address));
@@ -145,14 +164,22 @@ int extended_opcodes_test(CPU *cpu, test_case_t test_case)
 {
     uint16_t test_case_address = 0x0202;
 
-    printf("65C02 Extended Opcodes Test Handler\n");
-    abort();
+    uint16_t pc = cpu_get_pc(cpu);
+
+    if (cpu->memory[test_case_address] != last_test)
+    {
+        last_test = cpu->memory[test_case_address];
+        printf("test case #$%02X at $%04X\n", last_test, pc);
+    }
+
+    return cpu_step(cpu);
 }
 
 static const test_case_t opcode_tests[] = {
-    // {"6502_functional_test", 0x0400, 0x3469, functional_test, 96247422},              // 05-jan-2020
-    {"6502_interrupt_test", 0x0400, 0x06F5, (void *)interrupt_test, 2929}, // 15-aug-2014
-    // {"65C02_extended_opcodes_test", 0x0400, 0x24F1, extended_opcodes_test, 95340970}, // 04-dec-2017
+    // {"6502_functional_test", 0x0400, 0x3469, 0x0000, (void *)functional_test, 96247422}, // 05-jan-2020
+    // {"6502_decimal_test", 0x0200, 0x024B, 0x0200, (void *)decimal_test, 46089505},
+    // {"6502_interrupt_test", 0x0400, 0x06F5, 0x0000, (void *)interrupt_test, 2929}, // 15-aug-2014
+    {"65C02_extended_opcodes_test", 0x0400, 0x24F1, 0x0000, (void *)extended_opcodes_test, 95340970}, // 04-dec-2017
 };
 
 int main()
@@ -165,7 +192,7 @@ int main()
         printf("\n--- %s\n", test_case.test_name);
 
         CPU *cpu = setup_cpu();
-        load_test(cpu->memory, test_case.test_name);
+        load_test(cpu->memory, test_case.load_address, test_case.test_name);
 
         cpu_set_pc(cpu, test_case.start_address);
 

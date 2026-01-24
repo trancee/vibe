@@ -13,7 +13,10 @@ void c64_write(void *c64, uint16_t addr, uint8_t data)
 
 void c64_init(C64 *c64, bool debug)
 {
-    cpu_init(&c64->cpu, debug, c64_read, c64_write);
+    cpu_init(&c64->cpu);
+
+    cpu_set_read_write(&c64->cpu, c64_read, c64_write);
+    cpu_set_debug(&c64->cpu, debug, NULL);
 
     /* Load ROMs */
     c64_load_rom(c64, "roms/basic.901226-01.bin", 0xA000, 0x2000);

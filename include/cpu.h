@@ -25,7 +25,10 @@ typedef struct
     bool irq;
     bool has_interrupts;
     //
+    bool decimal_mode;
+    //
     bool debug;
+    FILE *debug_file;
     //
     read_t read;
     write_t write;
@@ -120,17 +123,17 @@ typedef struct
 #define FLAG_NEGATIVE 0x80
 
 // CPU functions
-void cpu_init(CPU *cpu, bool debug, read_t read, write_t write);
+void cpu_init(CPU *cpu);
 void cpu_reset(CPU *cpu);
 void cpu_reset_pc(CPU *cpu, uint16_t pc);
 uint8_t cpu_step(CPU *cpu);
 uint16_t cpu_get_pc(CPU *cpu);
 void cpu_set_pc(CPU *cpu, uint16_t addr);
-uint8_t cpu_read(CPU *cpu, uint16_t addr);
+uint8_t cpu_read(void *cpu, uint16_t addr);
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr);
-void cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
+void cpu_write(void *cpu, uint16_t addr, uint8_t data);
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
 void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
@@ -138,6 +141,15 @@ void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
 void cpu_nmi(CPU *cpu);
 void cpu_irq(CPU *cpu);
 // bool cpu_interrupts(CPU *cpu);
+
+void cpu_set_read_write(CPU *cpu, read_t read, write_t write);
+
+bool cpu_get_debug(CPU *cpu);
+void cpu_set_debug(CPU *cpu, bool debug, FILE *debug_file);
+FILE *cpu_get_debug_file(CPU *cpu);
+
+bool cpu_get_decimal_mode(CPU *cpu);
+void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode);
 
 bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
 

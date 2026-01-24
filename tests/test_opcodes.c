@@ -62,7 +62,7 @@ static int total_tests = 0;
 static CPU *setup_cpu()
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, false, NULL, NULL);
+    cpu_init(cpu);
     return cpu;
 }
 

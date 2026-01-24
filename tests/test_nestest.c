@@ -30,10 +30,15 @@
     } while (0)
 
 // Helper functions
-static CPU *setup_cpu()
+static CPU *setup_cpu(FILE *stream)
 {
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu, DEBUG, NULL, NULL);
+
+    cpu_init(cpu);
+
+    cpu_set_decimal_mode(cpu, false);
+    cpu_set_debug(cpu, DEBUG, stream);
+
     return cpu;
 }
 
@@ -66,7 +71,19 @@ int main()
 {
     printf("=== 6502 NESTEST Test Suite ===\n\n");
 
-    CPU *cpu = setup_cpu();
+    FILE *log = fopen("tests/nestest/nestest.log", "r");
+    if (log == NULL)
+    {
+        fprintf(stderr, "Error: Could not open nestest.log\n");
+        exit(1);
+    }
+
+    char *buffer = NULL;
+    size_t buffer_size = 0;
+    size_t buffer_position = 0;
+    FILE *stream = open_memstream(&buffer, &buffer_size);
+
+    CPU *cpu = setup_cpu(stream);
 
     load_test(cpu->memory);
 
@@ -91,6 +108,28 @@ int main()
 
         cycles += cpu_step(cpu);
 
+        {
+            char *line = NULL;
+            size_t length = 0;
+            ssize_t read;
+
+            if ((read = getline(&line, &length, log)) != -1)
+            {
+                fflush(stream);
+
+                if (strncmp(buffer + buffer_position, line, read - 1 - 1) != 0)
+                {
+                    printf("%s\x{1B}[31;1;6m✗ differ\x{1B}[0m\n", line);
+                    exit(1);
+                }
+
+                buffer_position += read - 1;
+            }
+
+            if (line)
+                free(line);
+        }
+
         step++;
         if (step > 9000)
         { // Safety limit
@@ -100,11 +139,16 @@ int main()
     } while (pc != cpu_get_pc(cpu) && cycles < EXACT_CYCLES &&
              cpu_get_pc(cpu) != END_ADDRESS);
 
+    fclose(stream);
+    free(buffer);
+
     printf("---\n");
     printf("$02 #$%02X %s\n", cpu->memory[0x02], cpu->memory[0x02] == 0x00 ? "OK" : "FAIL");
     printf("$03 #$%02X %s\n", cpu->memory[0x03], cpu->memory[0x03] == 0x00 ? "OK" : "FAIL");
 
     teardown_cpu(cpu);
+
+    fclose(log);
 
     return 0;
 }

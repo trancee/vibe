@@ -13,7 +13,7 @@ static inline uint8_t add_with_carry(CPU *cpu, uint8_t a, uint8_t b)
     uint8_t c = get_flag_carry(cpu);
     uint16_t sum = a + b + c;
 
-    if (get_flag_decimal(cpu))
+    if (cpu->decimal_mode && get_flag_decimal(cpu))
     {
         uint8_t lo = (a & 0x0F) + (b & 0x0F) + c;
         uint16_t hi = (a & 0xF0) + (b & 0xF0);
@@ -62,7 +62,7 @@ static inline uint8_t subtract_with_borrow(CPU *cpu, uint8_t a, uint8_t b)
     set_flag_negative(cpu, sum & 0x80);
     set_flag_zero(cpu, (sum & 0xFF) == 0);
 
-    if (get_flag_decimal(cpu))
+    if (cpu->decimal_mode && get_flag_decimal(cpu))
     {
         uint8_t lo = (a & 0x0F) - (b & 0x0F) - (1 - c);
         uint16_t hi = (a & 0xF0) - (b & 0xF0);

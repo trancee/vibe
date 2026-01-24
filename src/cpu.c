@@ -35,21 +35,26 @@ handler_t find_trap(const uint16_t address)
     return NULL;
 }
 
+#define DUMP_BUFFER_SIZE 128
+
 void dump_step(CPU *cpu, const instruction_t *instruction)
 {
-    uint16_t pc = cpu_get_pc(cpu);
+    char *buffer = NULL;
+    size_t buffer_size = 0;
+    FILE *stream = open_memstream(&buffer, &buffer_size);
 
-    printf("%04X ", pc);
+    uint16_t pc = cpu_get_pc(cpu);
+    fprintf(stream, "%04X ", pc);
 
     for (int i = 0; i < 3; i++)
     {
         if (i < instruction->size)
-            printf(" %02X", cpu_read_byte(cpu, pc + i));
+            fprintf(stream, " %02X", cpu_read_byte(cpu, pc + i));
         else
-            printf("   ");
+            fprintf(stream, "   ");
     }
 
-    printf(" %c%s", instruction->illegal ? '*' : ' ', instruction->name);
+    fprintf(stream, " %c%s", instruction->illegal ? '*' : ' ', instruction->name);
 
     switch (instruction->mode)
     {
@@ -60,7 +65,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // Does not require the specification of any additional information.
         // BRK, CLC, CLD, CLI, CLV, DEX, DEY, INX, INY, NOP, PHA, PHP, PLA, PLP, RTI, RTS, SEC, SED, SEI, TAX, TAY, TSX, TXA, TXS, and TYA.
 
-        printf("%28s", ""); // 28 - 0 = 28
+        fprintf(stream, "%28s", ""); // 28 - 0 = 28
         break;
     case Accumulator:
         // Accumulator Addressing
@@ -69,8 +74,8 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The input for the shift operation is picked up from the CPU's accumulator, and the output is stored back into the accumulator.
         // ASL, LSR, ROL, and ROR.
 
-        printf(" A");
-        printf("%26s", ""); // 28 - 1 - 1 = 26
+        fprintf(stream, " A");
+        fprintf(stream, "%26s", ""); // 28 - 1 - 1 = 26
         break;
     case Immediate:
         // Immediate Addressing
@@ -79,8 +84,8 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The byte value to be used or retrieved in the instruction, located immediately after the opcode for the instruction itself.
         // ADC, AND, CMP, CPX, CPY, EOR, LDA, LDX, LDY, ORA, and SBC.
 
-        printf(" #$%02X", read8());
-        printf("%23s", ""); // 28 - 1 - 4 = 23
+        fprintf(stream, " #$%02X", read8());
+        fprintf(stream, "%23s", ""); // 28 - 1 - 4 = 23
         break;
     case Indirect:
         // Absolute-Indirect Addressing
@@ -89,9 +94,9 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The given address is a vector to the effective address.
         // JMP
 
-        printf(" ($%04X)", read16());
-        printf(" = %04X", cpu_read_word_zp(cpu, read16()));
-        printf("%13s", ""); // 28 - 1 - 7 - 3 - 4 = 13
+        fprintf(stream, " ($%04X)", read16());
+        fprintf(stream, " = %04X", cpu_read_word_zp(cpu, read16()));
+        fprintf(stream, "%13s", ""); // 28 - 1 - 7 - 3 - 4 = 13
         break;
     case IndexedIndirect:
         // Indexed-Indirect Addressing
@@ -100,11 +105,11 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The X index register is used to offset the zero page vector used to determine the effective address.
         // ADC, AND, CMP, EOR, LDA, ORA, SBC, STA.
 
-        printf(" ($%02X,X)", read8());
-        printf(" @ %02X", (read8() + cpu->X) & 0xFF);
-        printf(" = %04X", cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
-        printf(" = %02X", cpu_read_byte(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
-        printf("%3s", ""); // 28 - 1 - 7 - 3 - 2 - 3 - 4 - 3 - 2 = 3
+        fprintf(stream, " ($%02X,X)", read8());
+        fprintf(stream, " @ %02X", (read8() + cpu->X) & 0xFF);
+        fprintf(stream, " = %04X", cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
+        fprintf(stream, "%3s", ""); // 28 - 1 - 7 - 3 - 2 - 3 - 4 - 3 - 2 = 3
         break;
     case IndirectIndexed:
         // Indirect-Indexed Addressing
@@ -114,11 +119,11 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The effective address is calculated as the vector plus the value in Y.
         // ADC, AND, CMP, EOR, LDA, ORA, SBC, and STA.
 
-        printf(" ($%02X),Y", read8());
-        printf(" = %04X", cpu_read_word_zp(cpu, read8()));
-        printf(" @ %04X", (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
-        printf(" = %02X", cpu_read_byte(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
-        printf("%1s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 4 - 3 - 2 = 1
+        fprintf(stream, " ($%02X),Y", read8());
+        fprintf(stream, " = %04X", cpu_read_word_zp(cpu, read8()));
+        fprintf(stream, " @ %04X", (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
+        fprintf(stream, "%1s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 4 - 3 - 2 = 1
         break;
     case Absolute:
         // Absolute Addressing
@@ -127,12 +132,12 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // Specifies an address in memory which is to be the "object" of the instruction.
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, JMP, JSR, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
-        printf(" $%04X", read16());
+        fprintf(stream, " $%04X", read16());
         if (instruction->opcode == 0x20 || instruction->opcode == 0x4C || instruction->opcode == 0x6C) // JSR or JMP
-            printf("     ");
+            fprintf(stream, "     ");
         else
-            printf(" = %02X", cpu_read_byte(cpu, read16()));
-        printf("%17s", ""); // 28 - 1 - 5 - 3 - 2 = 17
+            fprintf(stream, " = %02X", cpu_read_byte(cpu, read16()));
+        fprintf(stream, "%17s", ""); // 28 - 1 - 5 - 3 - 2 = 17
         break;
     case AbsoluteX:
         // Indexed Absolute Addressing
@@ -141,10 +146,10 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The contents of the X index register is added to a given base address.
         // ADC, AND, ASL, CMP, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA.
 
-        printf(" $%04X,X", read16());
-        printf(" @ %04X", (read16() + cpu->X) & 0xFFFF);
-        printf(" = %02X", cpu_read_byte(cpu, (read16() + cpu->X) & 0xFFFF));
-        printf("%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
+        fprintf(stream, " $%04X,X", read16());
+        fprintf(stream, " @ %04X", (read16() + cpu->X) & 0xFFFF);
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read16() + cpu->X) & 0xFFFF));
+        fprintf(stream, "%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case AbsoluteY:
         // Indexed Absolute Addressing
@@ -153,10 +158,10 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The contents of the Y index register is added to a given base address.
         // ADC, AND, ASL, CMP, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA.
 
-        printf(" $%04X,Y", read16());
-        printf(" @ %04X", (read16() + cpu->Y) & 0xFFFF);
-        printf(" = %02X", cpu_read_byte(cpu, (read16() + cpu->Y) & 0xFFFF));
-        printf("%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
+        fprintf(stream, " $%04X,Y", read16());
+        fprintf(stream, " @ %04X", (read16() + cpu->Y) & 0xFFFF);
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read16() + cpu->Y) & 0xFFFF));
+        fprintf(stream, "%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case ZeroPage:
         // Zeropage Addressing
@@ -165,9 +170,9 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // Specifies an address in zero-page which is to be the "object" of the instruction.
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
-        printf(" $%02X", read8());
-        printf(" = %02X", cpu_read_byte(cpu, read8()));
-        printf("%19s", ""); // 28 - 1 - 3 - 3 - 2 = 19
+        fprintf(stream, " $%02X", read8());
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, read8()));
+        fprintf(stream, "%19s", ""); // 28 - 1 - 3 - 3 - 2 = 19
         break;
     case ZeroPageX:
         // Indexed Zeropage Addressing
@@ -176,10 +181,10 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The contents of the X index register is added to a given base address in zero-page.
         // ADC, AND, ASL, CMP, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, STY.
 
-        printf(" $%02X,X", read8());
-        printf(" @ %02X", (read8() + cpu->X) & 0xFF);
-        printf(" = %02X", cpu_read_byte(cpu, (read8() + cpu->X) & 0xFF));
-        printf("%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
+        fprintf(stream, " $%02X,X", read8());
+        fprintf(stream, " @ %02X", (read8() + cpu->X) & 0xFF);
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read8() + cpu->X) & 0xFF));
+        fprintf(stream, "%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case ZeroPageY:
         // Indexed Zeropage Addressing
@@ -188,10 +193,10 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // The contents of the Y index register is added to a given base address in zero-page.
         // ADC, AND, ASL, CMP, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, STY.
 
-        printf(" $%02X,Y", read8());
-        printf(" @ %02X", (read8() + cpu->Y) & 0xFF);
-        printf(" = %02X", cpu_read_byte(cpu, (read8() + cpu->Y) & 0xFF));
-        printf("%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
+        fprintf(stream, " $%02X,Y", read8());
+        fprintf(stream, " @ %02X", (read8() + cpu->Y) & 0xFF);
+        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read8() + cpu->Y) & 0xFF));
+        fprintf(stream, "%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case Relative:
         // Relative Addressing
@@ -201,17 +206,17 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // This signed 8-bit figure is called the offset.
         // BCC, BCS, BEQ, BMI, BNE, BPL, BVC, and BVS.
 
-        printf(" $%04X", (pc + 2 + (int8_t)read8()) & 0xFFFF);
-        printf("%22s", ""); // 28 - 1 - 5 = 22
+        fprintf(stream, " $%04X", (pc + 2 + (int8_t)read8()) & 0xFFFF);
+        fprintf(stream, "%22s", ""); // 28 - 1 - 5 = 22
         break;
     default:
-        printf(" ???");
-        printf("%24s", ""); // 28 - 1 - 3 = 24
+        fprintf(stream, " ???");
+        fprintf(stream, "%24s", ""); // 28 - 1 - 3 = 24
         break;
     }
 
-    printf(" A:%02X X:%02X Y:%02X P:%02X SP:%02X",
-           cpu->A, cpu->X, cpu->Y, cpu->P, cpu->SP);
+    fprintf(stream, " A:%02X X:%02X Y:%02X P:%02X SP:%02X",
+            cpu->A, cpu->X, cpu->Y, cpu->P, cpu->SP);
 
     // printf(" P:%c%c%c%c%c%c%c%c",
     //        (get_flag_negative(cpu) ? 'N' : '-'),
@@ -223,20 +228,26 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
     //        (get_flag_zero(cpu) ? 'Z' : '-'),
     //        (get_flag_carry(cpu) ? 'C' : '-'));
 
-    printf("\n");
+    fprintf(stream, "\n");
+    fclose(stream);
+
+    if (cpu->debug_file != NULL)
+        fprintf(cpu->debug_file, "%s", buffer);
+
+    printf("%s", buffer);
+
+    free(buffer);
 }
 
-void cpu_init(CPU *cpu, bool debug, read_t read, write_t write)
+void cpu_init(CPU *cpu)
 {
     memset(cpu, 0, sizeof(CPU));
 
     cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
     cpu->SP = 0xFF;
 
-    cpu->debug = debug;
-
-    cpu->read = read;
-    cpu->write = write;
+    cpu_set_decimal_mode(cpu, true);
+    cpu_set_read_write(cpu, NULL, NULL);
 }
 
 void cpu_reset(CPU *cpu)
@@ -262,10 +273,10 @@ void cpu_set_pc(CPU *cpu, uint16_t addr)
     cpu->PC = addr;
 }
 
-uint8_t cpu_read(CPU *cpu, uint16_t addr)
+uint8_t cpu_read(void *cpu, uint16_t addr)
 {
     // printf("CPU READ #$%04X\n", addr);
-    return cpu->memory[addr];
+    return ((CPU *)cpu)->memory[addr];
 }
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr)
 {
@@ -280,10 +291,10 @@ uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr)
     return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
 }
 
-void cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
+void cpu_write(void *cpu, uint16_t addr, uint8_t data)
 {
     // printf("CPU WRITE #$%04X = $%02X\n", addr, data);
-    cpu->memory[addr] = data;
+    ((CPU *)cpu)->memory[addr] = data;
 }
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data)
 {
@@ -321,6 +332,35 @@ uint8_t cpu_pull(CPU *cpu)
 uint16_t cpu_pull16(CPU *cpu)
 {
     return cpu_pull(cpu) | (cpu_pull(cpu) << 8);
+}
+
+void cpu_set_read_write(CPU *cpu, read_t read, write_t write)
+{
+    cpu->read = read != NULL ? read : cpu_read;
+    cpu->write = write != NULL ? write : cpu_write;
+}
+
+bool cpu_get_debug(CPU *cpu)
+{
+    return cpu->debug;
+}
+void cpu_set_debug(CPU *cpu, bool debug, FILE *debug_file)
+{
+    cpu->debug = debug;
+    cpu->debug_file = debug_file;
+}
+FILE *cpu_get_debug_file(CPU *cpu)
+{
+    return cpu->debug_file;
+}
+
+bool cpu_get_decimal_mode(CPU *cpu)
+{
+    return cpu->decimal_mode;
+}
+void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode)
+{
+    cpu->decimal_mode = decimal_mode;
 }
 
 bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
