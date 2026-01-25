@@ -9,12 +9,41 @@
 // #include "sid6581.h"
 #include "vic.h"
 
+#define BASIC_ROM_START 0xA000
+#define BASIC_ROM_END BASIC_ROM_START + BASIC_ROM_SIZE - 1
+#define BASIC_ROM_SIZE 0x2000
+#define CHAR_ROM_START 0xD000
+#define CHAR_ROM_END CHAR_ROM_START + CHAR_ROM_SIZE - 1
+#define CHAR_ROM_SIZE 0x1000
+#define KERNAL_ROM_START 0xE000
+#define KERNAL_ROM_END KERNAL_ROM_START + KERNAL_ROM_SIZE - 1
+#define KERNAL_ROM_SIZE 0x2000
+
+#define BANKS 8
+
+#define BANK_BASIC 3
+#define BANK_CHARACTERS 5
+#define BANK_KERNAL 6
+
+typedef enum
+{
+    RAM,
+    ROM,
+    IO,
+} bank_t;
+
 typedef struct
 {
     CPU cpu;
     CIA cia1, cia2;
     // SID6581 sid;
     VIC vic;
+
+    uint8_t basic[BASIC_ROM_SIZE];
+    uint8_t characters[CHAR_ROM_SIZE];
+    uint8_t kernal[KERNAL_ROM_SIZE];
+
+    bank_t bank[BANKS];
 } C64;
 
 void c64_init(C64 *c64, bool debug);
@@ -30,7 +59,33 @@ void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size);
 bool c64_trap(C64 *c64, uint16_t addr, handler_t handler);
 uint8_t c64_step(C64 *c64);
 
-void c64_load_rom(C64 *c64, const char *path, uint16_t addr, size_t size);
+void c64_load_rom(C64 *c64, const char *path, uint8_t *memory, size_t size);
+
+/*
+         MOS 6510 Micro-Processor
+           On-Chip I/O Port
+  0      /LORAM Signal (0=Switch BASIC ROM Out)
+  1      /HIRAM Signal (0=Switch Kernal ROM Out)
+  2      /CHAREN Signal (0=Switch Char. ROM In)
+  3      Cassette Data Output Line
+  4      Cassette Switch Sense: 1 = Switch Closed
+  5      Cassette Motor Control 0 = ON, 1 = OFF
+  6-7    Undefined
+*/
+#define IO_PORT_LORAM 0x01
+#define IO_PORT_HIRAM 0x02
+#define IO_PORT_CHAREN 0x04
+
+// typedef struct R6510
+// {
+//     uint8_t loram : 1;  // BASIC ROM enable
+//     uint8_t hiram : 1;  // KERNAL ROM enable
+//     uint8_t charen : 1; // Character ROM enable
+//     uint8_t cas_out : 1; // Cassette data output
+//     uint8_t cas_sense : 1; // Cassette switch sense
+//     uint8_t cas_motor : 1; // Cassette motor control
+//     uint8_t unused : 2; // Undefined bits
+// } io_port_t;
 
 /// Page 0
 

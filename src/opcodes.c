@@ -57,7 +57,7 @@ void STA(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr] = cpu->A;
+    cpu_write_byte(cpu, addr, cpu->A);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
@@ -73,7 +73,7 @@ void STX(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr] = cpu->X;
+    cpu_write_byte(cpu, addr, cpu->X);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
@@ -89,7 +89,7 @@ void STY(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr] = cpu->Y;
+    cpu_write_byte(cpu, addr, cpu->Y);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
@@ -340,9 +340,9 @@ void INC(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr]++;
-    set_flag_negative(cpu, cpu->memory[addr] & 0x80);
-    set_flag_zero(cpu, cpu->memory[addr] == 0);
+    cpu_write_byte(cpu, addr, cpu_read_byte(cpu, addr) + 1);
+    set_flag_negative(cpu, cpu_read_byte(cpu, addr) & 0x80);
+    set_flag_zero(cpu, cpu_read_byte(cpu, addr) == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
@@ -374,9 +374,9 @@ void DEC(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr]--;
-    set_flag_negative(cpu, cpu->memory[addr] & 0x80);
-    set_flag_zero(cpu, cpu->memory[addr] == 0);
+    cpu_write_byte(cpu, addr, cpu_read_byte(cpu, addr) - 1);
+    set_flag_negative(cpu, cpu_read_byte(cpu, addr) & 0x80);
+    set_flag_zero(cpu, cpu_read_byte(cpu, addr) == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
     if (instruction->mode != Implied /*&& instruction->mode != Immediate*/)
     {
@@ -421,10 +421,10 @@ void ASL(CPU *cpu)
     else
     {
         addr = fetch_address(cpu, instruction->mode);
-        value = cpu->memory[addr];
+        value = cpu_read_byte(cpu, addr);
         set_flag_carry(cpu, value & 0x80);
         value <<= 1;
-        cpu->memory[addr] = value;
+        cpu_write_byte(cpu, addr, value);
     }
 
     set_flag_negative(cpu, value & 0x80);
@@ -456,10 +456,10 @@ void LSR(CPU *cpu)
     else
     {
         addr = fetch_address(cpu, instruction->mode);
-        value = cpu->memory[addr];
+        value = cpu_read_byte(cpu, addr);
         set_flag_carry(cpu, value & 0x01);
         value >>= 1;
-        cpu->memory[addr] = value;
+        cpu_write_byte(cpu, addr, value);
     }
 
     set_flag_negative(cpu, value & 0x80);
@@ -492,10 +492,10 @@ void ROL(CPU *cpu)
     else
     {
         addr = fetch_address(cpu, instruction->mode);
-        value = cpu->memory[addr];
+        value = cpu_read_byte(cpu, addr);
         set_flag_carry(cpu, value & 0x80);
         value = (value << 1) | carry_in;
-        cpu->memory[addr] = value;
+        cpu_write_byte(cpu, addr, value);
     }
 
     set_flag_negative(cpu, value & 0x80);
@@ -528,10 +528,10 @@ void ROR(CPU *cpu)
     else
     {
         addr = fetch_address(cpu, instruction->mode);
-        value = cpu->memory[addr];
+        value = cpu_read_byte(cpu, addr);
         set_flag_carry(cpu, value & 0x01);
         value = (value >> 1) | (carry_in << 7);
-        cpu->memory[addr] = value;
+        cpu_write_byte(cpu, addr, value);
     }
 
     set_flag_negative(cpu, value & 0x80);
@@ -579,8 +579,8 @@ void BCC(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (!get_flag_carry(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -594,8 +594,8 @@ void BCS(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (get_flag_carry(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -609,8 +609,8 @@ void BEQ(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (get_flag_zero(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -624,8 +624,8 @@ void BMI(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (get_flag_negative(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -639,8 +639,8 @@ void BNE(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (!get_flag_zero(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -654,8 +654,8 @@ void BPL(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (!get_flag_negative(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -669,8 +669,8 @@ void BVC(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (!get_flag_overflow(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else
@@ -684,8 +684,8 @@ void BVS(CPU *cpu)
     uint16_t pc = cpu_get_pc(cpu);
     if (get_flag_overflow(cpu))
     {
-        int8_t offset = (int8_t)cpu->memory[pc + 1]; // Get operand directly
-        uint16_t new_pc = pc + 2 + offset;           // Offset relative to next instruction
+        int8_t offset = (int8_t)cpu_read_byte(cpu, pc + 1); // Get operand directly
+        uint16_t new_pc = pc + 2 + offset;             // Offset relative to next instruction
         cpu_set_pc(cpu, new_pc);
     }
     else

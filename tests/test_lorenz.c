@@ -5,10 +5,10 @@
 
 #include "c64.h"
 
-#define DEBUG false
+#define DEBUG true
 
-#define TESTCASE "start"
-#define MAX_STEPS 1000000000
+#define TESTCASE "trap4"
+#define MAX_STEPS 800 // 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -70,8 +70,8 @@ void load_handler(CPU *cpu)
     // }
     // printf("\n");
 
-    uint16_t addr = cpu_read_byte(cpu, 0xBB) | (cpu_read_byte(cpu, 0xBC) << 8);
-    uint8_t size = cpu_read_word(cpu, 0xB7);
+    uint16_t addr = cpu_read_word(cpu, 0xBB);
+    uint8_t size = cpu_read_byte(cpu, 0xB7);
 
     char testcase[size + 1];
     for (size_t i = 0; i < size; i++)
@@ -79,15 +79,19 @@ void load_handler(CPU *cpu)
     testcase[size] = 0;
 
     load_testcase(cpu, testcase);
-    cpu_reset_pc(cpu, 0x0816);
+    cpu_set_pc(cpu, 0x0816);
 }
 void warm_handler(CPU *cpu)
 {
+    cpu_get_pc(cpu);
+
     printf("\x{1B}[31;1;6mWARM\x{1B}[0m\n");
     abort();
 }
 void ready_handler(CPU *cpu)
 {
+    cpu_get_pc(cpu);
+
     printf("\x{1B}[31;1;6mREADY\x{1B}[0m\n");
     abort();
 }
@@ -150,6 +154,11 @@ void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 
     // scan keyboard is LDA #3: RTS
     cpu_write_data(cpu, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
+
+    cpu_reset_pc(cpu, addr);
+    cpu_push16(cpu, 0x7FFF); // Return to WARM trap
+
+    cpu->P = 0x04; // Interrupt Disable
 }
 
 uint16_t load_testcase(CPU *cpu, const char *testcase)
@@ -191,17 +200,15 @@ int main()
     C64 c64;
     setup_c64(&c64);
 
-    uint16_t addr = load_testcase(&c64.cpu, TESTCASE);
-    c64_reset_pc(&c64, addr);
+    load_testcase(&c64.cpu, TESTCASE);
 
-    int cycles = 0;
+    size_t cycles = 0;
 
-    int step = 1;
+    size_t step = 1;
     uint16_t pc;
     do
     {
         pc = c64_get_pc(&c64);
-        uint8_t opcode = c64_get_pc(&c64);
 
         cycles += c64_step(&c64);
 
@@ -211,9 +218,9 @@ int main()
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != c64_get_pc(&c64) && cycles < 10000000000);
+    } while (pc != c64_get_pc(&c64) /* && cycles < 10000000000*/);
 
-    printf("cycles: %d\n", cycles);
+    printf("cycles: %ld\n", cycles);
 
     return 0;
 }

@@ -49,7 +49,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
     for (int i = 0; i < 3; i++)
     {
         if (i < instruction->size)
-            fprintf(stream, " %02X", cpu_read_byte(cpu, pc + i));
+            fprintf(stream, " %02X", cpu_read(cpu, pc + i));
         else
             fprintf(stream, "   ");
     }
@@ -108,7 +108,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         fprintf(stream, " ($%02X,X)", read8());
         fprintf(stream, " @ %02X", (read8() + cpu->X) & 0xFF);
         fprintf(stream, " = %04X", cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
+        fprintf(stream, " = %02X", cpu_read(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
         fprintf(stream, "%3s", ""); // 28 - 1 - 7 - 3 - 2 - 3 - 4 - 3 - 2 = 3
         break;
     case IndirectIndexed:
@@ -122,7 +122,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         fprintf(stream, " ($%02X),Y", read8());
         fprintf(stream, " = %04X", cpu_read_word_zp(cpu, read8()));
         fprintf(stream, " @ %04X", (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
+        fprintf(stream, " = %02X", cpu_read(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
         fprintf(stream, "%1s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 4 - 3 - 2 = 1
         break;
     case Absolute:
@@ -136,7 +136,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         if (instruction->opcode == 0x20 || instruction->opcode == 0x4C || instruction->opcode == 0x6C) // JSR or JMP
             fprintf(stream, "     ");
         else
-            fprintf(stream, " = %02X", cpu_read_byte(cpu, read16()));
+            fprintf(stream, " = %02X", cpu_read(cpu, read16()));
         fprintf(stream, "%17s", ""); // 28 - 1 - 5 - 3 - 2 = 17
         break;
     case AbsoluteX:
@@ -148,7 +148,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 
         fprintf(stream, " $%04X,X", read16());
         fprintf(stream, " @ %04X", (read16() + cpu->X) & 0xFFFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read16() + cpu->X) & 0xFFFF));
+        fprintf(stream, " = %02X", cpu_read(cpu, (read16() + cpu->X) & 0xFFFF));
         fprintf(stream, "%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case AbsoluteY:
@@ -160,7 +160,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 
         fprintf(stream, " $%04X,Y", read16());
         fprintf(stream, " @ %04X", (read16() + cpu->Y) & 0xFFFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read16() + cpu->Y) & 0xFFFF));
+        fprintf(stream, " = %02X", cpu_read(cpu, (read16() + cpu->Y) & 0xFFFF));
         fprintf(stream, "%8s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 2 = 8
         break;
     case ZeroPage:
@@ -171,7 +171,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // ADC, AND, ASL, BIT, CMP, CPX, CPY, DEC, EOR, INC, LDA, LDX, LDY, LSR, ORA, ROL, ROR, SBC, STA, STX, and STY.
 
         fprintf(stream, " $%02X", read8());
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, read8()));
+        fprintf(stream, " = %02X", cpu_read(cpu, read8()));
         fprintf(stream, "%19s", ""); // 28 - 1 - 3 - 3 - 2 = 19
         break;
     case ZeroPageX:
@@ -183,7 +183,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 
         fprintf(stream, " $%02X,X", read8());
         fprintf(stream, " @ %02X", (read8() + cpu->X) & 0xFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read8() + cpu->X) & 0xFF));
+        fprintf(stream, " = %02X", cpu_read(cpu, (read8() + cpu->X) & 0xFF));
         fprintf(stream, "%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case ZeroPageY:
@@ -195,7 +195,7 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 
         fprintf(stream, " $%02X,Y", read8());
         fprintf(stream, " @ %02X", (read8() + cpu->Y) & 0xFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (read8() + cpu->Y) & 0xFF));
+        fprintf(stream, " = %02X", cpu_read(cpu, (read8() + cpu->Y) & 0xFF));
         fprintf(stream, "%12s", ""); // 28 - 1 - 5 - 3 - 2 - 3 - 2 = 12
         break;
     case Relative:
@@ -247,7 +247,7 @@ void cpu_init(CPU *cpu)
     cpu->SP = 0xFF;
 
     cpu_set_decimal_mode(cpu, true);
-    cpu_set_read_write(cpu, NULL, NULL);
+    cpu_set_read_write(cpu, cpu_read, cpu_write);
 }
 
 void cpu_reset(CPU *cpu)
@@ -275,12 +275,13 @@ void cpu_set_pc(CPU *cpu, uint16_t addr)
 
 uint8_t cpu_read(void *cpu, uint16_t addr)
 {
-    // printf("CPU READ #$%04X\n", addr);
+    // printf("C64 #$%04X → $%02X\n", addr, ((CPU *)cpu)->memory[addr]);
+
     return ((CPU *)cpu)->memory[addr];
 }
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr)
 {
-    return cpu->read != NULL ? cpu->read(cpu, addr) : cpu_read(cpu, addr);
+    return cpu->read(cpu, addr);
 }
 uint16_t cpu_read_word(CPU *cpu, uint16_t addr)
 {
@@ -293,12 +294,13 @@ uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr)
 
 void cpu_write(void *cpu, uint16_t addr, uint8_t data)
 {
-    // printf("CPU WRITE #$%04X = $%02X\n", addr, data);
+    // printf("C64 #$%04X ← $%02X\n", addr, data);
+
     ((CPU *)cpu)->memory[addr] = data;
 }
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data)
 {
-    cpu->write != NULL ? cpu->write(cpu, addr, data) : cpu_write(cpu, addr, data);
+    cpu->write(cpu, addr, data);
 }
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data)
 {
@@ -386,60 +388,55 @@ uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
         return cpu_get_pc(cpu) + 1;
 
     case ZeroPage:
-        return cpu->memory[cpu_get_pc(cpu) + 1];
+        return cpu_read(cpu, cpu_get_pc(cpu) + 1);
 
     case ZeroPageX:
-        return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X) & 0xFF;
+        return (cpu_read(cpu, cpu_get_pc(cpu) + 1) + cpu->X) & 0xFF;
 
     case ZeroPageY:
-        return (cpu->memory[cpu_get_pc(cpu) + 1] + cpu->Y) & 0xFF;
+        return (cpu_read(cpu, cpu_get_pc(cpu) + 1) + cpu->Y) & 0xFF;
 
     case Absolute:
-        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
-        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
+        low_byte = cpu_read(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read(cpu, cpu_get_pc(cpu) + 2);
         return (high_byte << 8) | low_byte;
 
     case AbsoluteX:
-        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
-        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
+        low_byte = cpu_read(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read(cpu, cpu_get_pc(cpu) + 2);
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->X;
 
     case AbsoluteY:
-        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
-        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
+        low_byte = cpu_read(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read(cpu, cpu_get_pc(cpu) + 2);
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->Y;
 
     case Indirect:
-        low_byte = cpu->memory[cpu_get_pc(cpu) + 1];
-        high_byte = cpu->memory[cpu_get_pc(cpu) + 2];
+        low_byte = cpu_read(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read(cpu, cpu_get_pc(cpu) + 2);
         addr = (high_byte << 8) | low_byte;
+
         // 6502 bug: if page boundary crossed, high byte wraps
         if (low_byte == 0xFF)
-        {
-            // return (cpu->memory[addr] << 8) | cpu->memory[addr & 0xFF00];
             return cpu_read_word_zp(cpu, addr);
-        }
         else
-        {
-            // return (cpu->memory[addr + 1] << 8) | cpu->memory[addr];
             return cpu_read_word(cpu, addr);
-        }
 
     case IndexedIndirect:
     {
-        uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1] + cpu->X;
-        low_byte = cpu->memory[ptr];
-        high_byte = cpu->memory[(ptr + 1) & 0xFF];
+        uint8_t ptr = cpu_read(cpu, cpu_get_pc(cpu) + 1) + cpu->X;
+        low_byte = cpu_read(cpu, ptr);
+        high_byte = cpu_read(cpu, (ptr + 1) & 0xFF);
         return (high_byte << 8) | low_byte;
     }
 
     case IndirectIndexed:
     {
-        uint8_t ptr = cpu->memory[cpu_get_pc(cpu) + 1];
-        low_byte = cpu->memory[ptr];
-        high_byte = cpu->memory[(ptr + 1) & 0xFF];
+        uint8_t ptr = cpu_read(cpu, cpu_get_pc(cpu) + 1);
+        low_byte = cpu_read(cpu, ptr);
+        high_byte = cpu_read(cpu, (ptr + 1) & 0xFF);
         addr = (high_byte << 8) | low_byte;
         return addr + cpu->Y;
     }
@@ -455,12 +452,12 @@ uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
 uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
 {
     uint16_t addr = fetch_address(cpu, mode);
-    return cpu_read_byte(cpu, addr); // cpu->memory[addr];
+    return cpu_read_byte(cpu, addr);
 }
 
 const instruction_t *fetch_instruction(CPU *cpu)
 {
-    uint8_t opcode = cpu->memory[cpu_get_pc(cpu)];
+    uint8_t opcode = cpu_read(cpu, cpu_get_pc(cpu));
     return &instructions[opcode];
 }
 
@@ -482,6 +479,9 @@ void cpu_nmi(CPU *cpu)
 /// this is very similar to the BRK instruction
 void cpu_irq(CPU *cpu)
 {
+    if (has_interrupt(cpu))
+        return;
+
     printf("*** IRQ $%04X #$%04X\n", IRQ, cpu_read_word(cpu, IRQ));
 
     cpu_push16(cpu, cpu_get_pc(cpu));
@@ -500,7 +500,7 @@ bool cpu_interrupts(CPU *cpu)
         cpu_nmi(cpu);
         return true;
     }
-    else if (cpu->irq && !cpu->has_interrupts)
+    else if (cpu->irq && !has_interrupt(cpu))
     {
         cpu->irq = false;
         cpu_irq(cpu);
@@ -518,7 +518,7 @@ uint8_t cpu_step(CPU *cpu)
 
     uint16_t pc = cpu_get_pc(cpu);
 
-    uint8_t opcode = cpu->memory[pc];
+    uint8_t opcode = cpu_read(cpu, pc);
     const instruction_t *instruction = &instructions[opcode];
 
     if (cpu->debug)

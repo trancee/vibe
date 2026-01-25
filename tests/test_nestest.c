@@ -57,7 +57,7 @@ void load_test(uint8_t *memory)
     }
 
     uint8_t buffer[65536];
-    size_t read = fread(buffer, 1, sizeof(buffer), stream);
+    fread(buffer, 1, sizeof(buffer), stream);
 
     for (size_t i = 0; i < PAYLOAD_LENGTH; i++)
     {
@@ -97,9 +97,9 @@ int main()
 
     cpu_set_pc(cpu, START_ADDRESS);
 
-    int cycles = 0;
+    size_t cycles = 0;
 
-    int step = 1;
+    size_t step = 1;
     uint16_t pc;
     do
     {

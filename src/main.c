@@ -50,6 +50,9 @@
 
 int main(int argc, char **argv)
 {
+    for (int i = 0; i < argc; i++)
+        printf("\t%d: %s\n", i, argv[i]);
+
     C64 c64;
     c64_init(&c64, DEBUG);
 
@@ -92,7 +95,7 @@ int main(int argc, char **argv)
         // uint32_t start = SDL_GetTicks();
 
         /* One PAL frame */
-        for (int i = 0; i < CYCLES_PER_FRAME; i++)
+        for (size_t i = 0; i < CYCLES_PER_FRAME; i++)
         {
             c64_step(&c64);
         }

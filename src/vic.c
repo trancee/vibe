@@ -93,7 +93,7 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
         result = vic->sprite_x_msb;
         break;
 
-    case 0x11:                         // Control 1
+    case 0x11: // Control 1
         // Bit 7 contains RC8 (MSB of current raster line)
         result = (vic->control1 & 0x7F) | ((vic->current_raster >> 1) & 0x80);
         break;
@@ -195,7 +195,7 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
 
 void vic_write(VIC *vic, uint16_t addr, uint8_t data)
 {
-    printf("VIC WRITE #$%04X = $%02X\n", addr, data);
+    // printf("VIC WRITE #$%04X = $%02X\n", addr, data);
     if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
         return;
 
@@ -553,7 +553,7 @@ void vic_render_sprites_line(VIC *vic, uint16_t line)
             // Sprite pointers are located at the last 8 bytes of the video matrix
             uint16_t sprite_pointer_addr = screen_base + 0x3F8 + sprite;
             uint8_t sprite_pointer = read_mem(vic, sprite_pointer_addr);
-            
+
             // Calculate sprite data base address (pointer * 64)
             uint16_t sprite_data_base = sprite_pointer * 64;
 

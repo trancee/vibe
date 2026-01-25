@@ -128,9 +128,9 @@ void DCP(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr]--;
-    uint8_t result = cpu->A - cpu->memory[addr];
-    set_flag_carry(cpu, cpu->A >= cpu->memory[addr]);
+    cpu_write_byte(cpu, addr, cpu_read_byte(cpu, addr) - 1);
+    uint8_t result = cpu->A - cpu_read_byte(cpu, addr);
+    set_flag_carry(cpu, cpu->A >= cpu_read_byte(cpu, addr));
     set_flag_negative(cpu, result & 0x80);
     set_flag_zero(cpu, result == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
@@ -145,8 +145,8 @@ void ISB(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr]++;
-    cpu->A = subtract_with_borrow(cpu, cpu->A, cpu->memory[addr]);
+    cpu_write_byte(cpu, addr, cpu_read_byte(cpu, addr) + 1);
+    cpu->A = subtract_with_borrow(cpu, cpu->A, cpu_read_byte(cpu, addr));
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
@@ -158,7 +158,7 @@ void LAS(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    uint8_t value = cpu->memory[addr];
+    uint8_t value = cpu_read_byte(cpu, addr);
     cpu->A = cpu->X = cpu->SP = value & cpu->SP;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
@@ -199,10 +199,10 @@ void RLA(CPU *cpu)
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
     bool carry_in = get_flag_carry(cpu);
-    uint8_t value = cpu->memory[addr];
+    uint8_t value = cpu_read_byte(cpu, addr);
     set_flag_carry(cpu, value & 0x80);
     value = (value << 1) | carry_in;
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
     cpu->A &= value;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
@@ -218,10 +218,10 @@ void RRA(CPU *cpu)
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
     bool carry_in = get_flag_carry(cpu);
-    uint8_t value = cpu->memory[addr];
+    uint8_t value = cpu_read_byte(cpu, addr);
     set_flag_carry(cpu, value & 0x01);
     value = (value >> 1) | (carry_in << 7);
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
     cpu->A = add_with_carry(cpu, cpu->A, value);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
@@ -234,7 +234,7 @@ void SAX(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    cpu->memory[addr] = cpu->A & cpu->X;
+    cpu_write_byte(cpu, addr, cpu->A & cpu->X);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (instruction->mode == Absolute || instruction->mode == AbsoluteX || instruction->mode == AbsoluteY || instruction->mode == Indirect)
     {
@@ -299,7 +299,7 @@ void SHA(CPU *cpu)
         value &= (addr >> 8) + 1;
     }
 
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
 
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 2);
     if (instruction->mode == AbsoluteY)
@@ -308,6 +308,21 @@ void SHA(CPU *cpu)
     }
 }
 
+/*
+TAS (XAS, SHS)
+Puts A AND X in SP and stores A AND X AND (high-byte of addr. + 1) at addr.
+
+unstable: sometimes 'AND (H+1)' is dropped, page boundary crossings may not work (with the high-byte of the value used as the high-byte of the address)
+
+A AND X -> SP, A AND X AND (H+1) -> M
+
+N	Z	C	I	D	V
+-	-	-	-	-	-
+
+addressing	  assembler	    opc	 bytes	cycles
+----------------------------------------------------
+absolute,Y	  TAS oper,Y    9B	   3	   5   †
+*/
 void SHS(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
@@ -317,15 +332,20 @@ void SHS(CPU *cpu)
 
     uint8_t value = cpu->SP;
 
-    if (page_boundary((addr - cpu->X), addr))
+    if (page_boundary((addr - cpu->Y), addr))
     {
+        // Page crossing: value = X & effective_addr_hi
+        // And effective address high byte becomes value
         value &= addr >> 8;
         addr = value << 8 | (addr & 0x00FF);
-    } else {
+    }
+    else
+    {
+        // No page crossing: value = X & (base_addr_hi + 1)
         value &= (addr >> 8) + 1;
     }
 
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
 
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 3);
 }
@@ -365,7 +385,7 @@ void SHX(CPU *cpu)
         value &= (addr >> 8) + 1;
     }
 
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
 
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 3);
 }
@@ -405,7 +425,7 @@ void SHY(CPU *cpu)
         value &= (addr >> 8) + 1;
     }
 
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
 
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 3);
 }
@@ -414,10 +434,10 @@ void SLO(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    uint8_t value = cpu->memory[addr];
+    uint8_t value = cpu_read_byte(cpu, addr);
     set_flag_carry(cpu, value & 0x80);
     value <<= 1;
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
     cpu->A |= value;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
@@ -432,10 +452,10 @@ void SRE(CPU *cpu)
 {
     const instruction_t *instruction = fetch_instruction(cpu);
     uint16_t addr = fetch_address(cpu, instruction->mode);
-    uint8_t value = cpu->memory[addr];
+    uint8_t value = cpu_read_byte(cpu, addr);
     set_flag_carry(cpu, value & 0x01);
     value >>= 1;
-    cpu->memory[addr] = value;
+    cpu_write_byte(cpu, addr, value);
     cpu->A ^= value;
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);

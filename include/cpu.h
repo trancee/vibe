@@ -23,7 +23,6 @@ typedef struct
     //
     bool nmi;
     bool irq;
-    bool has_interrupts;
     //
     bool decimal_mode;
     //
@@ -129,11 +128,11 @@ void cpu_reset_pc(CPU *cpu, uint16_t pc);
 uint8_t cpu_step(CPU *cpu);
 uint16_t cpu_get_pc(CPU *cpu);
 void cpu_set_pc(CPU *cpu, uint16_t addr);
-uint8_t cpu_read(void *cpu, uint16_t addr);
+uint8_t cpu_read(void *cpu, uint16_t addr); // internal use
 uint8_t cpu_read_byte(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word(CPU *cpu, uint16_t addr);
 uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr);
-void cpu_write(void *cpu, uint16_t addr, uint8_t data);
+void cpu_write(void *cpu, uint16_t addr, uint8_t data); // internal use
 void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
 void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
 void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
@@ -161,6 +160,8 @@ static inline bool get_flag_decimal(CPU *cpu) { return cpu->P & FLAG_DECIMAL; }
 static inline bool get_flag_break(CPU *cpu) { return cpu->P & FLAG_BREAK; }
 static inline bool get_flag_overflow(CPU *cpu) { return cpu->P & FLAG_OVERFLOW; }
 static inline bool get_flag_negative(CPU *cpu) { return cpu->P & FLAG_NEGATIVE; }
+
+#define has_interrupt(cpu) get_flag_interrupt(cpu)
 
 static inline void set_flag_carry(CPU *cpu, bool set)
 {
