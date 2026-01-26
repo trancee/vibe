@@ -452,7 +452,7 @@ uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
 uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
 {
     uint16_t addr = fetch_address(cpu, mode);
-    return cpu_read_byte(cpu, addr);
+    return cpu_read(cpu, addr);
 }
 
 const instruction_t *fetch_instruction(CPU *cpu)

@@ -207,7 +207,7 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
     data_register_t port = (data_register_t)cpu_read(&c64->cpu, R6510);
 
-    if (addr >= BASIC_ROM_START && addr < BASIC_ROM_END)
+    if (addr >= BASIC_ROM_START && addr <= BASIC_ROM_END)
     {
         if (
             (port.loram && port.hiram && port.charen) // Mode 31 / 15
@@ -219,7 +219,7 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
             return c64->basic[addr - BASIC_ROM_START];
         }
     }
-    else if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
+    else if (addr >= CHAR_ROM_START && addr <= CHAR_ROM_END)
     {
         if (
             (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11 / 3
@@ -258,7 +258,7 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
             }
         }
     }
-    else if (addr >= KERNAL_ROM_START && addr < KERNAL_ROM_END)
+    else if (addr >= KERNAL_ROM_START && addr <= KERNAL_ROM_END)
     {
         if (
             (port.loram && port.hiram && port.charen) // Mode 31 / 15 / 7
@@ -285,6 +285,9 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
+    if (addr == R6510)
+        printf("----  #$%02X C%d H%d L%d\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
+
     if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
     {
         printf("VIC #$%04X ← $%02X\n", addr, data);
