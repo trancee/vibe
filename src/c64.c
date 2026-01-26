@@ -47,18 +47,6 @@ void c64_reset(C64 *c64)
 
     // https://sta.c64.org/cbm64mem.html
 
-    /// 0             $0             D6510
-    /// 6510 On-Chip I/O DATA Direction Register
-    ///
-    /// Bit 0: Direction of Bit 0 I/O on port at next address.  Default = 1 (output)
-    /// Bit 1: Direction of Bit 1 I/O on port at next address.  Default = 1 (output)
-    /// Bit 2: Direction of Bit 2 I/O on port at next address.  Default = 1 (output)
-    /// Bit 3: Direction of Bit 3 I/O on port at next address.  Default = 1 (output)
-    /// Bit 4: Direction of Bit 4 I/O on port at next address.  Default = 0 (input)
-    /// Bit 5: Direction of Bit 5 I/O on port at next address.  Default = 1 (output)
-    /// Bit 6: Direction of Bit 6 I/O on port at next address.  Not used.
-    /// Bit 7: Direction of Bit 7 I/O on port at next address.  Not used.
-
     /// Processor port data direction register.
     c64_write_byte(c64, D6510, 0x2F); // %00101111
 
@@ -169,47 +157,6 @@ void c64_set_pc(C64 *c64, uint16_t addr)
 }
 
 /*
-                               The area at $d000-$dfff with
-                                  CHAREN=1     CHAREN=0
-
- $ffff +--------------+  /$e000 +----------+  +----------+
-       |  Kernal ROM  | /       |  I/O  2  |  |          |
- $e000 +--------------+/  $df00 +----------+  |          |
-       |I/O, Char ROM |         |  I/O  1  |  |          |
- $d000 +--------------+\  $de00 +----------+  |          |
-       |     RAM      | \       |  CIA  2  |  |          |
- $c000 +--------------+  \$dd00 +----------+  |          |
-       |  Basic ROM   |         |  CIA  1  |  |          |
- $a000 +--------------+   $dc00 +----------+  | Char ROM |
-       |              |         |Color RAM |  |          |
-       .     RAM      .         |          |  |          |
-       .              .   $d800 +----------+  |          |
-       |              |         |   SID    |  |          |
- $0002 +--------------+         |registers |  |          |
-       | I/O port DR  |   $d400 +----------+  |          |
- $0001 +--------------+         |   VIC    |  |          |
-       | I/O port DDR |         |registers |  |          |
- $0000 +--------------+   $d000 +----------+  +----------+
-
-  +---------+---+------------+--------------------------------------------+
-  |  NAME   |BIT| DIRECTION  |                 DESCRIPTION                |
-  +---------+---+------------+--------------------------------------------+
-  |  LORAM  | 0 |   OUTPUT   | Control for RAM/ROM at $A000-$BFFF         |
-  |  HIRAM  | 1 |   OUTPUT   | Control for RAM/ROM at $E000-$FFFF         |
-  |  CHAREN | 2 |   OUTPUT   | Control for I/O/ROM at $D000-$DFFF         |
-  |         | 3 |   OUTPUT   | Cassette write line                        |
-  |         | 4 |   INPUT    | Cassette switch sense (0=play button down) |
-  |         | 5 |   OUTPUT   | Cassette motor control (0=motor spins)     |
-  +---------+---+------------+--------------------------------------------+
-
-%x00: RAM visible in all three areas.
-%x01: RAM visible at $A000-$BFFF and $E000-$FFFF.
-%x10: RAM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
-%x11: BASIC ROM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
-%0xx: Character ROM visible at $D000-$DFFF. (Except for the value %000, see above.)
-%1xx: I/O area visible at $D000-$DFFF. (Except for the value %100, see above.)
-
-
  Memory Configuration
 
   The signals /CharEn, /HiRam and /LoRam are used to select the memory
@@ -266,11 +213,8 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 
     if (addr >= BASIC_ROM_START && addr <= BASIC_ROM_END)
     {
-        if (
-            (port.charen && port.hiram && port.loram) // Mode 31 / 15
-            ||
-            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11
-        )
+        // Basic ROM  = (/LoRam AND /HiRam)
+        if (port.hiram && port.loram)
         {
             // printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
             return c64->basic[addr - BASIC_ROM_START];
@@ -278,24 +222,15 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     }
     else if (addr >= CHAR_ROM_START && addr <= CHAR_ROM_END)
     {
-        if (
-            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11 / 3
-            ||
-            (!(port.charen) && port.hiram && !(port.loram)) // Mode 26 / 10 / 2
-            ||
-            (!(port.charen) && !(port.hiram) && port.loram) // Mode 25 / 9
-        )
+        // Char. ROM  = ((NOT (/CharEn)) AND (/LoRam OR /HiRam))
+        if (!(port.charen) && (port.hiram || port.loram))
         {
             // printf("CHARROM #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
             return c64->characters[addr - CHAR_ROM_START];
         }
-        else if (
-            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
-            ||
-            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
-            ||
-            (port.charen && !(port.hiram) && port.loram) // Mode 29 / 13 / 5
-        )
+
+        // I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
+        else if (port.charen && (port.hiram || port.loram))
         {
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
             {
@@ -317,15 +252,8 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     }
     else if (addr >= KERNAL_ROM_START && addr <= KERNAL_ROM_END)
     {
-        if (
-            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
-            ||
-            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
-            ||
-            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11 / 3
-            ||
-            (!(port.charen) && port.hiram && !(port.loram)) // Mode 26 / 10 / 2
-        )
+        // Kernal ROM = (/HiRam)
+        if (port.hiram)
         {
             // printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
             return c64->kernal[addr - KERNAL_ROM_START];
@@ -349,13 +277,8 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 
     if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
     {
-        if (
-            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
-            ||
-            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
-            ||
-            (port.charen && !(port.hiram) && port.loram) // Mode 29 / 13 / 5
-        )
+        // I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
+        if (port.charen && (port.hiram || port.loram))
         {
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
             {
