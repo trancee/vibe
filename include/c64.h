@@ -44,9 +44,9 @@ typedef union
         uint8_t hiram : 1;  // Bit 1 (HIRAM): Controls if KERNAL ROM is visible (1 = Visible, 0 = RAM).
         uint8_t charen : 1; // Bit 2 (CHAREN): Controls if Character ROM or I/O is visible (1 = Character ROM/IO, 0 = RAM).
 
-        uint8_t casout : 1; // Bit 3: Cassette Data Output Line.
-        uint8_t cassw : 1;  // Bit 4: Cassette Switch Sense: 1 = Switch Closed
-        uint8_t casmot : 1; // Bit 5: Cassette Motor Control 0 = ON, 1 = OFF
+        uint8_t cass_wrt : 1;   // Bit 3: Cassette Data Output Line.
+        uint8_t cass_sense : 1; // Bit 4: Cassette Switch Sense: 1 = Switch Closed
+        uint8_t cass_motor : 1; // Bit 5: Cassette Motor Control 0 = ON, 1 = OFF
 
         uint8_t unused : 2; // Bits 6-7: Undefined.
     };
