@@ -24,12 +24,12 @@ void dump(CPU *cpu, uint16_t addr)
     printf("\n      ");
     for (size_t i = 0; i < 16; i++)
     {
-        printf("%02X ", i);
+        printf("%02lX ", i);
     }
     for (size_t i = 0; i <= 0xFF; i++)
     {
         if (i % 16 == 0)
-            printf("\n%04X  ", addr + i);
+            printf("\n%04lX  ", addr + i);
 
         printf("%02X ", cpu_read(cpu, addr + i));
     }

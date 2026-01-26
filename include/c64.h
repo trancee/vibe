@@ -32,7 +32,7 @@ typedef union
         // Bit 5: Direction of Bit 5 I/O on port at next address. Default = 1 (output)
         // Bit 6: Direction of Bit 6 I/O on port at next address. Not used.
         // Bit 7: Direction of Bit 7 I/O on port at next address. Not used.
-    } b;
+    };
 } data_direction_register_t;
 
 typedef union
@@ -49,7 +49,7 @@ typedef union
         uint8_t casmot : 1; // Bit 5: Cassette Motor Control 0 = ON, 1 = OFF
 
         uint8_t unused : 2; // Bits 6-7: Undefined.
-    } b;
+    };
 } data_register_t;
 
 typedef struct

@@ -210,9 +210,9 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     if (addr >= BASIC_ROM_START && addr < BASIC_ROM_END)
     {
         if (
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15
+            (port.loram && port.hiram && port.charen) // Mode 31 / 15
             ||
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11
+            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11
         )
         {
             printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
@@ -222,22 +222,22 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     else if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
     {
         if (
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11 / 3
+            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11 / 3
             ||
-            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 26 / 10 / 2
+            (!(port.loram) && port.hiram && !(port.charen)) // Mode 26 / 10 / 2
             ||
-            (port & IO_PORT_LORAM && !(port & IO_PORT_HIRAM) && !(port & IO_PORT_CHAREN)) // Mode 25 / 9
+            (port.loram && !(port.hiram) && !(port.charen)) // Mode 25 / 9
         )
         {
-            printf("CHAR #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
+            printf("CHARROM #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
             return c64->characters[addr - CHAR_ROM_START];
         }
         else if (
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15 / 7
+            (port.loram && port.hiram && port.charen) // Mode 31 / 15 / 7
             ||
-            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 30 / 14 / 6
+            (!(port.loram) && port.hiram && port.charen) // Mode 30 / 14 / 6
             ||
-            (port & IO_PORT_LORAM && !(port & IO_PORT_HIRAM) && port & IO_PORT_CHAREN) // Mode 29 / 13 / 5
+            (port.loram && !(port.hiram) && port.charen) // Mode 29 / 13 / 5
         )
         {
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
@@ -261,13 +261,13 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     else if (addr >= KERNAL_ROM_START && addr < KERNAL_ROM_END)
     {
         if (
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15 / 7
+            (port.loram && port.hiram && port.charen) // Mode 31 / 15 / 7
             ||
-            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 30 / 14 / 6
+            (!(port.loram) && port.hiram && port.charen) // Mode 30 / 14 / 6
             ||
-            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11 / 3
+            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11 / 3
             ||
-            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 26 / 10 / 2
+            (!(port.loram) && port.hiram && !(port.charen)) // Mode 26 / 10 / 2
         )
         {
             printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
