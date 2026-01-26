@@ -7,7 +7,7 @@
 
 #define DEBUG false
 
-#define TESTCASE "mmufetch"
+#define TESTCASE "mmu"
 #define MAX_STEPS 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);

@@ -27,7 +27,7 @@ void c64_init(C64 *c64, bool debug)
 
     /* Load ROMs */
     load_rom("roms/basic.901226-01.bin", c64->basic, BASIC_ROM_SIZE);
-    load_rom("roms/characters.906143-02.bin", c64->characters, CHAR_ROM_SIZE);
+    load_rom("roms/characters.901225-01.bin", c64->characters, CHAR_ROM_SIZE);
     load_rom("roms/kernal.901227-03.bin", c64->kernal, KERNAL_ROM_SIZE);
 
     /* Reset chips */
