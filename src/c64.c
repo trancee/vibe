@@ -26,9 +26,9 @@ void c64_init(C64 *c64, bool debug)
     memset(c64->kernal, 0, KERNAL_ROM_SIZE);
 
     /* Load ROMs */
-    c64_load_rom(c64, "roms/basic.901226-01.bin", c64->basic, BASIC_ROM_SIZE);
-    c64_load_rom(c64, "roms/characters.906143-02.bin", c64->characters, CHAR_ROM_SIZE);
-    c64_load_rom(c64, "roms/kernal.901227-03.bin", c64->kernal, KERNAL_ROM_SIZE);
+    load_rom("roms/basic.901226-01.bin", c64->basic, BASIC_ROM_SIZE);
+    load_rom("roms/characters.906143-02.bin", c64->characters, CHAR_ROM_SIZE);
+    load_rom("roms/kernal.901227-03.bin", c64->kernal, KERNAL_ROM_SIZE);
 
     /* Reset chips */
     c64_reset(c64);
@@ -210,50 +210,50 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     if (addr >= BASIC_ROM_START && addr <= BASIC_ROM_END)
     {
         if (
-            (port.loram && port.hiram && port.charen) // Mode 31 / 15
+            (port.charen && port.hiram && port.loram) // Mode 31 / 15
             ||
-            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11
+            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11
         )
         {
-            printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
+            // printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
             return c64->basic[addr - BASIC_ROM_START];
         }
     }
     else if (addr >= CHAR_ROM_START && addr <= CHAR_ROM_END)
     {
         if (
-            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11 / 3
+            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11 / 3
             ||
-            (!(port.loram) && port.hiram && !(port.charen)) // Mode 26 / 10 / 2
+            (!(port.charen) && port.hiram && !(port.loram)) // Mode 26 / 10 / 2
             ||
-            (port.loram && !(port.hiram) && !(port.charen)) // Mode 25 / 9
+            (!(port.charen) && !(port.hiram) && port.loram) // Mode 25 / 9
         )
         {
-            printf("CHARROM #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
+            // printf("CHARROM #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
             return c64->characters[addr - CHAR_ROM_START];
         }
         else if (
-            (port.loram && port.hiram && port.charen) // Mode 31 / 15 / 7
+            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
             ||
-            (!(port.loram) && port.hiram && port.charen) // Mode 30 / 14 / 6
+            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
             ||
-            (port.loram && !(port.hiram) && port.charen) // Mode 29 / 13 / 5
+            (port.charen && !(port.hiram) && port.loram) // Mode 29 / 13 / 5
         )
         {
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
             {
-                printf("VIC #$%04X → $%02X\n", addr, vic_read(&c64->vic, addr));
+                // printf("VIC #$%04X → $%02X\n", addr, vic_read(&c64->vic, addr));
                 return vic_read(&c64->vic, addr);
             }
 
             else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
             {
-                printf("CIA1 #$%04X → $%02X\n", addr, cia_read(&c64->cia1, addr));
+                // printf("CIA1 #$%04X → $%02X\n", addr, cia_read(&c64->cia1, addr));
                 return cia_read(&c64->cia1, addr);
             }
             else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
             {
-                printf("CIA2 #$%04X → $%02X\n", addr, cia_read(&c64->cia2, addr));
+                // printf("CIA2 #$%04X → $%02X\n", addr, cia_read(&c64->cia2, addr));
                 return cia_read(&c64->cia2, addr);
             }
         }
@@ -261,16 +261,16 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     else if (addr >= KERNAL_ROM_START && addr <= KERNAL_ROM_END)
     {
         if (
-            (port.loram && port.hiram && port.charen) // Mode 31 / 15 / 7
+            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
             ||
-            (!(port.loram) && port.hiram && port.charen) // Mode 30 / 14 / 6
+            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
             ||
-            (port.loram && port.hiram && !(port.charen)) // Mode 27 / 11 / 3
+            (!(port.charen) && port.hiram && port.loram) // Mode 27 / 11 / 3
             ||
-            (!(port.loram) && port.hiram && !(port.charen)) // Mode 26 / 10 / 2
+            (!(port.charen) && port.hiram && !(port.loram)) // Mode 26 / 10 / 2
         )
         {
-            printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
+            // printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
             return c64->kernal[addr - KERNAL_ROM_START];
         }
     }
@@ -285,24 +285,38 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    if (addr == R6510)
-        printf("----  #$%02X C%d H%d L%d\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
+    data_register_t port = (data_register_t)cpu_read(&c64->cpu, R6510);
 
-    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
-    {
-        printf("VIC #$%04X ← $%02X\n", addr, data);
-        return vic_write(&c64->vic, addr, data);
-    }
+    // if (addr == R6510)
+    //     printf("\n----  #$%02X [%d%d%d]\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
 
-    else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
+    if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
     {
-        printf("CIA1 #$%04X ← $%02X\n", addr, data);
-        return cia_write(&c64->cia1, addr, data);
-    }
-    else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
-    {
-        printf("CIA2 #$%04X ← $%02X\n", addr, data);
-        return cia_write(&c64->cia2, addr, data);
+        if (
+            (port.charen && port.hiram && port.loram) // Mode 31 / 15 / 7
+            ||
+            (port.charen && port.hiram && !(port.loram)) // Mode 30 / 14 / 6
+            ||
+            (port.charen && !(port.hiram) && port.loram) // Mode 29 / 13 / 5
+        )
+        {
+            if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
+            {
+                // printf("VIC #$%04X ← $%02X\n", addr, data);
+                return vic_write(&c64->vic, addr, data);
+            }
+
+            else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
+            {
+                // printf("CIA1 #$%04X ← $%02X\n", addr, data);
+                return cia_write(&c64->cia1, addr, data);
+            }
+            else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
+            {
+                // printf("CIA2 #$%04X ← $%02X\n", addr, data);
+                return cia_write(&c64->cia2, addr, data);
+            }
+        }
     }
 
     // printf("C64 #$%04X ← $%02X\n", addr, data);
@@ -342,7 +356,7 @@ uint8_t c64_step(C64 *c64)
    ROM Loading
    ============================================================ */
 
-void c64_load_rom(C64 *c64, const char *path, uint8_t *memory, size_t size)
+void load_rom(const char *path, uint8_t *memory, size_t size)
 {
     FILE *f = fopen(path, "rb");
     if (!f)

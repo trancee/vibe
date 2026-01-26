@@ -5,17 +5,21 @@
 
 #include "c64.h"
 
-#define DEBUG true
+#define DEBUG false
 
 #define TESTCASE "mmufetch"
-#define MAX_STEPS 1000 // 1100000000
+#define MAX_STEPS 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
-#define petscii_to_ascii(c)                                                                      \
-    ((c) >= 0xC1 && (c) <= 0xDA ? (c) - 0xC1 + 65 : (c) >= 0x41 && (c) <= 0x5A ? (c) - 0x41 + 97 \
-                                                : (c) < 32 || (c) >= 127       ? '.'             \
-                                                                               : (c))
+#define petscii_to_ascii(c) (    \
+    (c) >= 0xC1 && (c) <= 0xDA   \
+        ? (c) - 0xC1 + 65        \
+    : (c) >= 0x41 && (c) <= 0x5A \
+        ? (c) - 0x41 + 97        \
+    : (c) < 32 || (c) >= 127     \
+        ? '.'                    \
+        : (c))
 
 // https://www.softwolves.com/arkiv/cbm-hackers/7/7114.html
 
@@ -141,11 +145,7 @@ uint8_t irq_handler[] = {
 
 void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    cpu_write_data(cpu, addr, data, size);
-
-    cpu_write_data(cpu, 0xFF48, irq_handler, sizeof(irq_handler));
-
-    cpu_write_byte(cpu, R6510, 0x04); // VIC
+    cpu_write_byte(cpu, R6510, 0x04); // CHAREN=1 / HIRAM=0 / LORAM=0
     cpu_write_byte(cpu, UNUSED, 0x00);
 
     cpu_write_word(cpu, WARM, 0x8000); // 0xA002
@@ -162,6 +162,10 @@ void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 
     // scan keyboard is LDA #3: RTS
     cpu_write_data(cpu, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
+
+    cpu_write_data(cpu, PULS, irq_handler, sizeof(irq_handler));
+
+    cpu_write_data(cpu, addr, data, size);
 
     cpu_reset_pc(cpu, addr);
     cpu_push16(cpu, 0x7FFF); // Return to WARM trap
@@ -230,10 +234,10 @@ int main()
 
     printf("cycles: %ld\n", cycles);
 
-    dump(&c64.cpu, 0x0000);
-    dump(&c64.cpu, 0x0100);
-    dump(&c64.cpu, 0x0200);
-    dump(&c64.cpu, 0x0300);
+    // dump(&c64.cpu, 0x0000);
+    // dump(&c64.cpu, 0x0100);
+    // dump(&c64.cpu, 0x0200);
+    // dump(&c64.cpu, 0x0300);
 
     return 0;
 }

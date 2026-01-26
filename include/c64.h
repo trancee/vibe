@@ -10,13 +10,13 @@
 #include "vic.h"
 
 #define BASIC_ROM_START 0xA000
-#define BASIC_ROM_END BASIC_ROM_START + BASIC_ROM_SIZE - 1
+#define BASIC_ROM_END BASIC_ROM_START + (BASIC_ROM_SIZE - 1)
 #define BASIC_ROM_SIZE 0x2000
 #define CHAR_ROM_START 0xD000
-#define CHAR_ROM_END CHAR_ROM_START + CHAR_ROM_SIZE - 1
+#define CHAR_ROM_END CHAR_ROM_START + (CHAR_ROM_SIZE - 1)
 #define CHAR_ROM_SIZE 0x1000
 #define KERNAL_ROM_START 0xE000
-#define KERNAL_ROM_END KERNAL_ROM_START + KERNAL_ROM_SIZE - 1
+#define KERNAL_ROM_END KERNAL_ROM_START + (KERNAL_ROM_SIZE - 1)
 #define KERNAL_ROM_SIZE 0x2000
 
 typedef union
@@ -77,7 +77,7 @@ void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size);
 bool c64_trap(C64 *c64, uint16_t addr, handler_t handler);
 uint8_t c64_step(C64 *c64);
 
-void c64_load_rom(C64 *c64, const char *path, uint8_t *memory, size_t size);
+void load_rom(const char *path, uint8_t *memory, size_t size);
 
 /*
          MOS 6510 Micro-Processor
@@ -350,6 +350,16 @@ void c64_load_rom(C64 *c64, const char *path, uint8_t *memory, size_t size);
 #define READY 0xA474 // ARRAY[12]
 
 ///
+/*
+CHECKS FOR REAL IRQ'S OR BREAKS
+
+This routine is pointed to by the hardware IRQ vector at
+$fffe. This routine is able to distinguish between a
+hardware IRQ, and a software BRK. The two types of
+interrupts are processed by its own routine.
+*/
+#define PULS 0xFF48
+
 #define CHROUT 0xFFD2 // JMP
 #define GETIN 0xFFE4  // JMP
 
