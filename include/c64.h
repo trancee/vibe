@@ -19,18 +19,38 @@
 #define KERNAL_ROM_END KERNAL_ROM_START + KERNAL_ROM_SIZE - 1
 #define KERNAL_ROM_SIZE 0x2000
 
-#define BANKS 8
-
-#define BANK_BASIC 3
-#define BANK_CHARACTERS 5
-#define BANK_KERNAL 6
-
-typedef enum
+typedef union
 {
-    RAM,
-    ROM,
-    IO,
-} bank_t;
+    uint8_t v;
+    struct
+    {
+        // Bit 0 : Direction of Bit 0 I / O on port at next address.Default = 1(output)
+        // Bit 1: Direction of Bit 1 I/O on port at next address. Default = 1 (output)
+        // Bit 2: Direction of Bit 2 I/O on port at next address. Default = 1 (output)
+        // Bit 3: Direction of Bit 3 I/O on port at next address. Default = 1 (output)
+        // Bit 4: Direction of Bit 4 I/O on port at next address. Default = 0 (input)
+        // Bit 5: Direction of Bit 5 I/O on port at next address. Default = 1 (output)
+        // Bit 6: Direction of Bit 6 I/O on port at next address. Not used.
+        // Bit 7: Direction of Bit 7 I/O on port at next address. Not used.
+    } b;
+} data_direction_register_t;
+
+typedef union
+{
+    uint8_t v;
+    struct
+    {
+        uint8_t loram : 1;  // Bit 0 (LORAM): Controls if BASIC ROM is visible (1 = Visible, 0 = RAM).
+        uint8_t hiram : 1;  // Bit 1 (HIRAM): Controls if KERNAL ROM is visible (1 = Visible, 0 = RAM).
+        uint8_t charen : 1; // Bit 2 (CHAREN): Controls if Character ROM or I/O is visible (1 = Character ROM/IO, 0 = RAM).
+
+        uint8_t casout : 1; // Bit 3: Cassette Data Output Line.
+        uint8_t cassw : 1;  // Bit 4: Cassette Switch Sense: 1 = Switch Closed
+        uint8_t casmot : 1; // Bit 5: Cassette Motor Control 0 = ON, 1 = OFF
+
+        uint8_t unused : 2; // Bits 6-7: Undefined.
+    } b;
+} data_register_t;
 
 typedef struct
 {
@@ -42,8 +62,6 @@ typedef struct
     uint8_t basic[BASIC_ROM_SIZE];
     uint8_t characters[CHAR_ROM_SIZE];
     uint8_t kernal[KERNAL_ROM_SIZE];
-
-    bank_t bank[BANKS];
 } C64;
 
 void c64_init(C64 *c64, bool debug);

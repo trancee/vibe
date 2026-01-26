@@ -7,8 +7,8 @@
 
 #define DEBUG true
 
-#define TESTCASE "trap4"
-#define MAX_STEPS 800 // 1100000000
+#define TESTCASE "mmufetch"
+#define MAX_STEPS 1000 // 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -18,6 +18,23 @@ uint16_t load_testcase(CPU *cpu, const char *testcase);
                                                                                : (c))
 
 // https://www.softwolves.com/arkiv/cbm-hackers/7/7114.html
+
+void dump(CPU *cpu, uint16_t addr)
+{
+    printf("\n      ");
+    for (size_t i = 0; i < 16; i++)
+    {
+        printf("%02X ", i);
+    }
+    for (size_t i = 0; i <= 0xFF; i++)
+    {
+        if (i % 16 == 0)
+            printf("\n%04X  ", addr + i);
+
+        printf("%02X ", cpu_read(cpu, addr + i));
+    }
+    printf("\n");
+}
 
 // Helper functions
 void print_handler(CPU *cpu)
@@ -60,15 +77,6 @@ void load_handler(CPU *cpu)
     // Pop return address from stack
     // Set PC to $0816
     // Re-start the CPU
-
-    // for (size_t i = 0; i <= 0xFF; i++)
-    // {
-    //     if (i % 16 == 0)
-    //         printf("\n%04X  ", i);
-
-    //     printf("%02X ", cpu_read_byte(cpu, 0x0D00 + i));
-    // }
-    // printf("\n");
 
     uint16_t addr = cpu_read_word(cpu, 0xBB);
     uint8_t size = cpu_read_byte(cpu, 0xB7);
@@ -221,6 +229,11 @@ int main()
     } while (pc != c64_get_pc(&c64) /* && cycles < 10000000000*/);
 
     printf("cycles: %ld\n", cycles);
+
+    dump(&c64.cpu, 0x0000);
+    dump(&c64.cpu, 0x0100);
+    dump(&c64.cpu, 0x0200);
+    dump(&c64.cpu, 0x0300);
 
     return 0;
 }

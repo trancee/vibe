@@ -30,9 +30,6 @@ void c64_init(C64 *c64, bool debug)
     c64_load_rom(c64, "roms/characters.906143-02.bin", c64->characters, CHAR_ROM_SIZE);
     c64_load_rom(c64, "roms/kernal.901227-03.bin", c64->kernal, KERNAL_ROM_SIZE);
 
-    for (size_t i = 0; i < BANKS; i++)
-        c64->bank[i] = RAM;
-
     /* Reset chips */
     c64_reset(c64);
 }
@@ -171,37 +168,6 @@ void c64_set_pc(C64 *c64, uint16_t addr)
     cpu_set_pc(&c64->cpu, addr);
 }
 
-void c64_clear_bank(C64 *c64)
-{
-    c64->bank[BANK_BASIC] = RAM;
-    c64->bank[BANK_CHARACTERS] = RAM;
-    c64->bank[BANK_KERNAL] = RAM;
-}
-
-void c64_set_bank(C64 *c64, uint8_t port)
-{
-    c64_clear_bank(c64);
-
-    if (port & IO_PORT_HIRAM)
-        c64->bank[BANK_KERNAL] = ROM;
-
-    if (port & IO_PORT_LORAM && port & IO_PORT_HIRAM)
-        c64->bank[BANK_BASIC] = ROM;
-
-    if (port & IO_PORT_CHAREN && (port & IO_PORT_LORAM || port & IO_PORT_HIRAM))
-        c64->bank[BANK_CHARACTERS] = IO;
-    else if (port & IO_PORT_CHAREN && !(port & IO_PORT_LORAM) && !(port & IO_PORT_HIRAM))
-        c64->bank[BANK_CHARACTERS] = RAM;
-    else
-        c64->bank[BANK_CHARACTERS] = ROM;
-
-    printf("C64 BANK PORT $%02X => BASIC=%s KERNAL=%s CHAR=%s\n",
-           port,
-           c64->bank[BANK_BASIC] == ROM ? "ROM" : "RAM",
-           c64->bank[BANK_KERNAL] == ROM ? "ROM" : "RAM",
-           c64->bank[BANK_CHARACTERS] == ROM ? "ROM" : (c64->bank[BANK_CHARACTERS] == RAM ? "RAM" : "IO"));
-}
-
 /*
                                The area at $d000-$dfff with
                                   CHAREN=1     CHAREN=0
@@ -239,45 +205,74 @@ void c64_set_bank(C64 *c64, uint8_t port)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
-    if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
-    {
-        printf("CIA1 #$%04X → $%02X\n", addr, cia_read(&c64->cia1, addr));
-        return cia_read(&c64->cia1, addr);
-    }
-    else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
-    {
-        printf("CIA2 #$%04X → $%02X\n", addr, cia_read(&c64->cia2, addr));
-        return cia_read(&c64->cia2, addr);
-    }
+    data_register_t port = (data_register_t)cpu_read(&c64->cpu, R6510);
 
-    else if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
+    if (addr >= BASIC_ROM_START && addr < BASIC_ROM_END)
     {
-        switch (c64->bank[BANK_CHARACTERS])
+        if (
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15
+            ||
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11
+        )
         {
-        case RAM:
-            // printf("VIC #$%04X → $%02X\n", addr, vic_read(&c64->vic, addr));
-            return vic_read(&c64->vic, addr);
-        case ROM:
-            printf("CHAR #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
-            return c64->characters[addr - CHAR_ROM_START];
-        case IO:
+            printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
+            return c64->basic[addr - BASIC_ROM_START];
         }
     }
+    else if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
+    {
+        if (
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11 / 3
+            ||
+            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 26 / 10 / 2
+            ||
+            (port & IO_PORT_LORAM && !(port & IO_PORT_HIRAM) && !(port & IO_PORT_CHAREN)) // Mode 25 / 9
+        )
+        {
+            printf("CHAR #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
+            return c64->characters[addr - CHAR_ROM_START];
+        }
+        else if (
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15 / 7
+            ||
+            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 30 / 14 / 6
+            ||
+            (port & IO_PORT_LORAM && !(port & IO_PORT_HIRAM) && port & IO_PORT_CHAREN) // Mode 29 / 13 / 5
+        )
+        {
+            if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
+            {
+                printf("VIC #$%04X → $%02X\n", addr, vic_read(&c64->vic, addr));
+                return vic_read(&c64->vic, addr);
+            }
 
-    if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END && c64->bank[BANK_CHARACTERS] == ROM)
-    {
-        printf("CHAR #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
-        return c64->characters[addr - CHAR_ROM_START];
+            else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
+            {
+                printf("CIA1 #$%04X → $%02X\n", addr, cia_read(&c64->cia1, addr));
+                return cia_read(&c64->cia1, addr);
+            }
+            else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
+            {
+                printf("CIA2 #$%04X → $%02X\n", addr, cia_read(&c64->cia2, addr));
+                return cia_read(&c64->cia2, addr);
+            }
+        }
     }
-    if (addr >= KERNAL_ROM_START && addr < KERNAL_ROM_END && c64->bank[BANK_KERNAL] == ROM)
+    else if (addr >= KERNAL_ROM_START && addr < KERNAL_ROM_END)
     {
-        printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
-        return c64->kernal[addr - KERNAL_ROM_START];
-    }
-    if (addr >= BASIC_ROM_START && addr < BASIC_ROM_END && c64->bank[BANK_BASIC] == ROM)
-    {
-        printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
-        return c64->basic[addr - BASIC_ROM_START];
+        if (
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 31 / 15 / 7
+            ||
+            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && port & IO_PORT_CHAREN) // Mode 30 / 14 / 6
+            ||
+            (port & IO_PORT_LORAM && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 27 / 11 / 3
+            ||
+            (!(port & IO_PORT_LORAM) && port & IO_PORT_HIRAM && !(port & IO_PORT_CHAREN)) // Mode 26 / 10 / 2
+        )
+        {
+            printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
+            return c64->kernal[addr - KERNAL_ROM_START];
+        }
     }
 
     // printf("C64 #$%04X → $%02X\n", addr, cpu_read(&c64->cpu, addr));
@@ -290,9 +285,10 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    if (addr == R6510)
+    if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
     {
-        c64_set_bank(c64, data);
+        printf("VIC #$%04X ← $%02X\n", addr, data);
+        return vic_write(&c64->vic, addr, data);
     }
 
     else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
@@ -304,12 +300,6 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
     {
         printf("CIA2 #$%04X ← $%02X\n", addr, data);
         return cia_write(&c64->cia2, addr, data);
-    }
-
-    else if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
-    {
-        // printf("VIC #$%04X ← $%02X\n", addr, data);
-        return vic_write(&c64->vic, addr, data);
     }
 
     // printf("C64 #$%04X ← $%02X\n", addr, data);
