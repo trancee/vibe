@@ -60,7 +60,7 @@ void c64_reset(C64 *c64)
     /// Bit 7: Direction of Bit 7 I/O on port at next address.  Not used.
 
     /// Processor port data direction register.
-    c64_write_byte(c64, D6510, 0xEF);
+    c64_write_byte(c64, D6510, 0x2F); // %00101111
 
     /// Processor port.
     c64_write_byte(c64, R6510, 0x37); // %00110111
@@ -201,6 +201,63 @@ void c64_set_pc(C64 *c64, uint16_t addr)
   |         | 4 |   INPUT    | Cassette switch sense (0=play button down) |
   |         | 5 |   OUTPUT   | Cassette motor control (0=motor spins)     |
   +---------+---+------------+--------------------------------------------+
+
+%x00: RAM visible in all three areas.
+%x01: RAM visible at $A000-$BFFF and $E000-$FFFF.
+%x10: RAM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
+%x11: BASIC ROM visible at $A000-$BFFF; KERNAL ROM visible at $E000-$FFFF.
+%0xx: Character ROM visible at $D000-$DFFF. (Except for the value %000, see above.)
+%1xx: I/O area visible at $D000-$DFFF. (Except for the value %100, see above.)
+
+
+ Memory Configuration
+
+  The signals /CharEn, /HiRam and /LoRam are used to select the memory
+  configuration. They can be set using the processor port $01. The following
+  logic applies (if expression on the right side is true, area mentioned on
+  the left side will be activated. Otherwise, there is RAM):
+
+    Kernal ROM = (/HiRam)
+
+    Basic ROM  = (/LoRam AND /HiRam)
+
+      That means, you cannot switch in Basic when the Kernal is off. Please
+      note also, that an EPROM starting at $8000 will be disabled when you
+      switch off the Basic ROM.
+
+    Char. ROM  = ((NOT (/CharEn)) AND (/LoRam OR /HiRam))
+
+    I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
+
+      These two areas can just be activated, if at least one other signal is
+      high. Then /CharEn selects either Char. ROM or I/O-Area.
+
+  As a result, we get the following possibilities for the corresponding
+  bits of $01:
+
+       Bit+-------------+-----------+------------+
+       210| $8000-$BFFF |$D000-$DFFF|$E000-$FFFF |
+  +---+---+-------------+-----------+------------+
+  | 7 |111| Cart.+Basic |    I/O    | Kernal ROM |
+  +---+---+-------------+-----------+------------+
+  | 6 |110|     RAM     |    I/O    | Kernal ROM |
+  +---+---+-------------+-----------+------------+
+  | 5 |101|     RAM     |    I/O    |    RAM     |
+  +---+---+-------------+-----------+------------+
+  | 4 |100|     RAM     |    RAM    |    RAM     |
+  +---+---+-------------+-----------+------------+
+  | 3 |011| Cart.+Basic | Char. ROM | Kernal ROM |
+  +---+---+-------------+-----------+------------+
+  | 2 |010|     RAM     | Char. ROM | Kernal ROM |
+  +---+---+-------------+-----------+------------+
+  | 1 |001|     RAM     | Char. ROM |    RAM     |
+  +---+---+-------------+-----------+------------+
+  | 0 |000|     RAM     |    RAM    |    RAM     |
+  +---+---+-------------+-----------+------------+
+       |||
+ /CharEn|/LoRam
+        |
+      /HiRam
 */
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
