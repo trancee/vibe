@@ -24,7 +24,7 @@ typedef union
     uint8_t v;
     struct
     {
-        // Bit 0 : Direction of Bit 0 I / O on port at next address.Default = 1(output)
+        // Bit 0: Direction of Bit 0 I O on port at next address. Default = 1(output)
         // Bit 1: Direction of Bit 1 I/O on port at next address. Default = 1 (output)
         // Bit 2: Direction of Bit 2 I/O on port at next address. Default = 1 (output)
         // Bit 3: Direction of Bit 3 I/O on port at next address. Default = 1 (output)

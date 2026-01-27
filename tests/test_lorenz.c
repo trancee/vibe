@@ -8,7 +8,7 @@
 #define DEBUG true
 
 #define TESTCASE "mmu"
-#define MAX_STEPS 150 // 1100000000
+#define MAX_STEPS 1000 // 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 

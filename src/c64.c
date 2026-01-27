@@ -209,6 +209,7 @@ void c64_set_pc(C64 *c64, uint16_t addr)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
+    data_direction_register_t direction = (data_direction_register_t)cpu_read(&c64->cpu, D6510);
     data_register_t port = (data_register_t)cpu_read(&c64->cpu, R6510);
 
     if (addr >= BASIC_ROM_START && addr <= BASIC_ROM_END)
@@ -270,10 +271,13 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
+    data_direction_register_t direction = (data_direction_register_t)cpu_read(&c64->cpu, D6510);
     data_register_t port = (data_register_t)cpu_read(&c64->cpu, R6510);
 
-    // if (addr == R6510)
-    //     printf("\n----  #$%02X [%d%d%d]\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
+    if (addr == D6510)
+        printf("\n----  #$%02X\n", data);
+    if (addr == R6510)
+        printf("\n----  #$%02X [%d%d%d]\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
 
     if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
     {
