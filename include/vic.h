@@ -105,6 +105,9 @@
 #define VIC_SPRITE_HEIGHT 21
 #define VIC_SPRITE_DATA_SIZE 63
 
+typedef uint8_t (*read_mem_t)(uint8_t *mem, uint16_t addr);
+typedef void (*write_mem_t)(uint8_t *mem, uint16_t addr, uint8_t data);
+
 typedef struct
 {
     // VIC-II Registers
@@ -149,12 +152,15 @@ typedef struct
     // Screen buffer for rendering
     uint32_t framebuffer[VIC_SCREEN_HEIGHT][VIC_SCREEN_WIDTH];
 
-    uint8_t *memory;
+    // Memory access functions
+    read_mem_t read;
+    write_mem_t write;
 } VIC;
 
 // VIC-II Functions
-void vic_init(VIC *vic, uint8_t *memory);
-void vic_reset(VIC *vic, uint8_t *memory);
+void vic_init(VIC *vic);
+void vic_reset(VIC *vic);
+void vic_set_read_write(VIC *vic, read_mem_t read, write_mem_t write);
 uint8_t vic_read(VIC *vic, uint16_t addr);
 void vic_write(VIC *vic, uint16_t addr, uint8_t data);
 void vic_clock(VIC *vic);

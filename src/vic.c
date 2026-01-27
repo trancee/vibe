@@ -4,14 +4,12 @@
 
 #include "vic.h"
 
-void vic_init(VIC *vic, uint8_t *memory)
+void vic_init(VIC *vic)
 {
     if (vic == NULL)
         return;
 
     memset(vic, 0, sizeof(VIC));
-
-    vic->memory = memory;
 
     // Initialize to power-up state
     vic->control1 = VIC_CTRL1_DEN | VIC_CTRL1_RSEL; // Display enabled, 25 rows
@@ -39,22 +37,32 @@ void vic_init(VIC *vic, uint8_t *memory)
     vic->bad_line = false;
 }
 
-void vic_reset(VIC *vic, uint8_t *memory)
+void vic_reset(VIC *vic)
 {
     if (vic == NULL)
         return;
 
-    vic_init(vic, memory);
+    vic_init(vic);
 }
 
-uint8_t read_mem(VIC *vic, uint16_t addr)
+void vic_set_read_write(VIC *vic, read_mem_t read, write_mem_t write)
 {
-    return vic->memory[addr];
+    vic->read = read != NULL ? read : vic_read;
+    vic->write = write != NULL ? write : vic_write;
 }
 
-void write_mem(VIC *vic, uint16_t addr, uint8_t data)
+uint8_t vic_read_byte(VIC *vic, uint16_t addr)
 {
-    vic->memory[addr] = data;
+    printf("VIC #$%04X → $%02X\n", addr, vic->read(vic, addr));
+
+    return vic->read(vic, addr);
+}
+
+void vic_write_byte(VIC *vic, uint16_t addr, uint8_t data)
+{
+    printf("VIC #$%04X ← $%02X\n", addr, data);
+
+    vic->write(vic, addr, data);
 }
 
 uint8_t vic_read(VIC *vic, uint16_t addr)
@@ -420,12 +428,12 @@ void vic_render_text_line(VIC *vic, uint16_t line, bool multicolor)
     for (int col = 0; col < 40; col++)
     {
         uint16_t screen_addr = screen_base + text_line * 40 + col;
-        uint8_t char_code = read_mem(vic, screen_addr);
+        uint8_t char_code = vic_read_byte(vic, screen_addr);
         uint8_t color = vic->color_ram[text_line * 40 + col] & 0x0F;
 
         // Get character data from charset
         uint16_t char_data_addr = charset_base + char_code * 8 + char_line;
-        uint8_t char_data = read_mem(vic, char_data_addr);
+        uint8_t char_data = vic_read_byte(vic, char_data_addr);
 
         // Render character pixels
         for (int pixel = 0; pixel < 8; pixel++)
@@ -488,9 +496,9 @@ void vic_render_bitmap_line(VIC *vic, uint16_t line, bool multicolor)
         uint16_t bitmap_addr = bitmap_base + (bitmap_line / 8) * 320 + col * 8 + (bitmap_line % 8);
         uint16_t color_ram_addr = screen_base + (bitmap_line / 8) * 40 + col;
 
-        uint8_t bitmap_data = read_mem(vic, bitmap_addr);
-        uint8_t foreground_color = read_mem(vic, color_ram_addr) & 0x0F;
-        uint8_t background_color = (read_mem(vic, color_ram_addr) >> 4) & 0x0F;
+        uint8_t bitmap_data = vic_read_byte(vic, bitmap_addr);
+        uint8_t foreground_color = vic_read_byte(vic, color_ram_addr) & 0x0F;
+        uint8_t background_color = (vic_read_byte(vic, color_ram_addr) >> 4) & 0x0F;
 
         for (int pixel = 0; pixel < 8; pixel++)
         {
@@ -566,7 +574,7 @@ void vic_render_sprites_line(VIC *vic, uint16_t line)
             // Fetch sprite pointer from video matrix end (VM base + $3F8 + sprite number)
             // Sprite pointers are located at the last 8 bytes of the video matrix
             uint16_t sprite_pointer_addr = screen_base + 0x3F8 + sprite;
-            uint8_t sprite_pointer = read_mem(vic, sprite_pointer_addr);
+            uint8_t sprite_pointer = vic_read_byte(vic, sprite_pointer_addr);
 
             // Calculate sprite data base address (pointer * 64)
             uint16_t sprite_data_base = sprite_pointer * 64;
@@ -575,8 +583,7 @@ void vic_render_sprites_line(VIC *vic, uint16_t line)
             for (int byte = 0; byte < 3; byte++)
             {
                 uint16_t sprite_data_addr = sprite_data_base + sprite_line * 3 + byte;
-                uint8_t sprite_data = read_mem(vic, sprite_data_addr);
-
+                uint8_t sprite_data = vic_read_byte(vic, sprite_data_addr);
                 for (int bit = 7; bit >= 0; bit--)
                 {
                     int x = sprite_x + byte * 8 + (7 - bit);

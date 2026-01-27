@@ -6,7 +6,7 @@ TEST_DIR = tests
 BUILD_DIR = build
 
 # Source files
-SOURCES = $(SRC_DIR)/c64.c $(SRC_DIR)/cpu.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/instructions.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c
+SOURCES = $(SRC_DIR)/c64.c $(SRC_DIR)/cpu.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/instructions.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c $(SRC_DIR)/sid6581.c
 TEST_OPCODES_SRC = $(TEST_DIR)/test_opcodes.c
 TEST_DORMANN_SRC = $(TEST_DIR)/test_dormann.c
 TEST_LORENZ_SRC = $(TEST_DIR)/test_lorenz.c
@@ -14,6 +14,7 @@ TEST_NESTEST_SRC = $(TEST_DIR)/test_nestest.c
 TEST_VIC_SRC = $(TEST_DIR)/test_vic.c
 TEST_CIA1_SRC = $(TEST_DIR)/test_cia1.c
 TEST_CIA2_SRC = $(TEST_DIR)/test_cia2.c
+TEST_SID_SRC = $(TEST_DIR)/test_sid.c
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -24,6 +25,7 @@ TEST_NESTEST_OBJ = $(TEST_NESTEST_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_VIC_OBJ = $(TEST_VIC_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_CIA1_OBJ = $(TEST_CIA1_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 TEST_CIA2_OBJ = $(TEST_CIA2_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
+TEST_SID_OBJ = $(TEST_SID_SRC:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Executables
 LIB_NAME = $(BUILD_DIR)/libmos6510.a
@@ -34,12 +36,13 @@ TEST_NESTEST_BIN = $(BUILD_DIR)/test_nestest
 TEST_VIC_BIN = $(BUILD_DIR)/test_vic
 TEST_CIA1_BIN = $(BUILD_DIR)/test_cia1
 TEST_CIA2_BIN = $(BUILD_DIR)/test_cia2
+TEST_SID_BIN = $(BUILD_DIR)/test_sid
 EXAMPLE_BIN = $(BUILD_DIR)/example
 MAIN_BIN = $(BUILD_DIR)/main
 
 .PHONY: all clean test run-test example run-example main run-main docs
 
-all: $(LIB_NAME) $(MAIN_BIN) $(TEST_OPCODES_BIN) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(EXAMPLE_BIN)
+all: $(LIB_NAME) $(MAIN_BIN) $(TEST_OPCODES_BIN) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(TEST_SID_BIN) $(EXAMPLE_BIN)
 
 # Create build directory
 $(BUILD_DIR):
@@ -76,6 +79,9 @@ $(TEST_CIA1_BIN): $(OBJECTS) $(TEST_CIA1_OBJ) | $(BUILD_DIR)
 # Build CIA2 test executable
 $(TEST_CIA2_BIN): $(OBJECTS) $(TEST_CIA2_OBJ) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
+# Build SID test executable
+$(TEST_SID_BIN): $(OBJECTS) $(TEST_SID_OBJ) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 
 # Build example executable
 $(EXAMPLE_BIN): $(OBJECTS) | $(BUILD_DIR)
@@ -94,6 +100,8 @@ test-cia1: $(TEST_CIA1_BIN)
 	./$(TEST_CIA1_BIN)
 test-cia2: $(TEST_CIA2_BIN)
 	./$(TEST_CIA2_BIN)
+test-sid: $(TEST_SID_BIN)
+	./$(TEST_SID_BIN)
 
 run-test: test
 

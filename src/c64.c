@@ -13,12 +13,30 @@ void c64_write(void *c64, uint16_t addr, uint8_t data)
     c64_write_byte((C64 *)c64, addr, data);
 }
 
+uint8_t c64_read_mem(uint8_t *mem, uint16_t addr)
+{
+    return mem[addr];
+}
+void c64_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
+{
+    mem[addr] = data;
+}
+
 void c64_init(C64 *c64, bool debug)
 {
     cpu_init(&c64->cpu);
 
     cpu_set_read_write(&c64->cpu, c64_read, c64_write);
     cpu_set_debug(&c64->cpu, debug, NULL);
+
+    cia_init(&c64->cia1, CIA1_MEM_START);
+    cia_init(&c64->cia2, CIA2_MEM_START);
+
+    vic_init(&c64->vic);
+    vic_set_read_write(&c64->vic, c64_read_mem, c64_write_mem);
+
+    /* Initialize SID (PAL clock rate ~985248 Hz, 44100 Hz sample rate) */
+    sid_init(&c64->sid, 985248, 44100);
 
     /* Clear ROMs */
     memset(c64->basic, 0, BASIC_ROM_SIZE);
@@ -41,9 +59,9 @@ void c64_reset(C64 *c64)
     cia_reset(&c64->cia1);
     cia_reset(&c64->cia2);
 
-    vic_reset(&c64->vic, c64->cpu.memory);
+    vic_reset(&c64->vic);
 
-    // sid_reset(SAMPLE_RATE);
+    sid_reset(&c64->sid);
 
     // https://sta.c64.org/cbm64mem.html
 
@@ -249,6 +267,11 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
                 return vic_read(&c64->vic, addr);
             }
 
+            else if (addr >= SID_MEM_START && addr <= SID_MEM_END)
+            {
+                return sid_read(&c64->sid, addr);
+            }
+
             else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
             {
                 // printf("CIA1 #$%04X → $%02X\n", addr, cia_read(&c64->cia1, addr));
@@ -306,6 +329,11 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
                 return vic_write(&c64->vic, addr, data);
             }
 
+            else if (addr >= SID_MEM_START && addr <= SID_MEM_END)
+            {
+                return sid_write(&c64->sid, addr, data);
+            }
+
             else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
             {
                 // printf("CIA1 #$%04X ← $%02X\n", addr, data);
@@ -347,7 +375,7 @@ uint8_t c64_step(C64 *c64)
     cia_clock(&c64->cia1 /*, CYCLES_PER_FRAME*/);
     cia_clock(&c64->cia2 /*, CYCLES_PER_FRAME*/);
 
-    // sid_clock(&sid, CYCLES_PER_FRAME);
+    sid_clock(&c64->sid, steps);
 
     return steps;
 }

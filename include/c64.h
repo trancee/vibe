@@ -6,7 +6,7 @@
 
 #include "mos6510.h"
 #include "cia6526.h"
-// #include "sid6581.h"
+#include "sid6581.h"
 #include "vic.h"
 
 #define BASIC_ROM_START 0xA000
@@ -57,7 +57,7 @@ typedef struct
 {
     CPU cpu;
     CIA cia1, cia2;
-    // SID6581 sid;
+    SID sid;
     VIC vic;
 
     uint8_t basic[BASIC_ROM_SIZE];
