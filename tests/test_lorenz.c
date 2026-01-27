@@ -5,10 +5,10 @@
 
 #include "c64.h"
 
-#define DEBUG true
+#define DEBUG false
 
-#define TESTCASE "mmu"
-#define MAX_STEPS 1000 // 1100000000
+#define TESTCASE "cpuport"
+#define MAX_STEPS 380000 // 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -145,7 +145,9 @@ uint8_t irq_handler[] = {
 
 void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    cpu_write_byte(cpu, R6510, 0x04); // CHAREN=1 / HIRAM=0 / LORAM=0
+    // cpu_write_byte(cpu, D6510, 0x2F);
+    // cpu_write_byte(cpu, R6510, 0x04); // trap15 not working if commented out
+
     cpu_write_byte(cpu, UNUSED, 0x00);
 
     cpu_write_word(cpu, WARM, 0x8000); // 0xA002

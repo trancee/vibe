@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 #define VIC_MEM_START 0xD000
-#define VIC_MEM_END VIC_MEM_START + VIC_MEM_SIZE - 1
+#define VIC_MEM_END (VIC_MEM_START + VIC_MEM_SIZE - 1)
 #define VIC_MEM_SIZE 0x0400
 
 // VIC-II Register Addresses (at $D000-$D03E)

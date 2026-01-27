@@ -43,6 +43,7 @@ void vic_reset(VIC *vic, uint8_t *memory)
 {
     if (vic == NULL)
         return;
+
     vic_init(vic, memory);
 }
 
@@ -59,12 +60,12 @@ void write_mem(VIC *vic, uint16_t addr, uint8_t data)
 uint8_t vic_read(VIC *vic, uint16_t addr)
 {
     // printf("VIC READ #$%04X\n", addr);
-    if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
+    if (vic == NULL || addr < VIC_MEM_START || addr > VIC_MEM_END)
         return 0;
 
-    uint16_t offset = addr - VIC_MEM_START;
-    uint8_t result = 0;
+    uint16_t offset = addr & 0x3F; // VIC-II register images (repeated every $40, 64 bytes).
 
+    uint8_t result = 0;
     switch (offset)
     {
     case 0x00:
@@ -185,6 +186,19 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
         result = vic->sprite_color[offset - 0x27];
         break;
 
+    case 0x2F:
+    case 0x30:
+    case 0x31:
+    case 0x33:
+    case 0x35:
+    case 0x37:
+    case 0x39:
+    case 0x3B:
+    case 0x3D:
+    case 0x3F:
+        result = 0xFF;
+        break;
+
     default:
         result = 0;
         break;
@@ -196,10 +210,10 @@ uint8_t vic_read(VIC *vic, uint16_t addr)
 void vic_write(VIC *vic, uint16_t addr, uint8_t data)
 {
     // printf("VIC WRITE #$%04X = $%02X\n", addr, data);
-    if (vic == NULL || addr < VIC_MEM_START || addr > 0xD02E)
+    if (vic == NULL || addr < VIC_MEM_START || addr > VIC_MEM_END)
         return;
 
-    uint16_t offset = addr - VIC_MEM_START;
+    uint16_t offset = addr & 0x3F; // VIC-II register images (repeated every $40, 64 bytes).
 
     switch (offset)
     {
