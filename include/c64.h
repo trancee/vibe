@@ -8,6 +8,10 @@
 #include "cia6526.h"
 #include "sid6581.h"
 #include "vic.h"
+#include "clock.h"
+
+#define PAL_CPU_FREQUENCY  985248
+#define NTSC_CPU_FREQUENCY 1022727
 
 #define BASIC_ROM_START 0xA000
 #define BASIC_ROM_END BASIC_ROM_START + (BASIC_ROM_SIZE - 1)
@@ -53,6 +57,31 @@ typedef union
     };
 } data_register_t;
 
+// $01 bits 6 and 7 fall-off cycles (1->0), average is about 350 msec
+#define CPU_DATA_PORT_FALL_OFF_CYCLES 350000
+
+typedef struct
+{
+    // value read from processor port
+    uint8_t dataRead;
+
+	// State of processor port pins.
+	uint8_t dataOut;
+
+    // cycle that should invalidate the unused bits of the data port.
+    int64_t dataSetClkBit6;
+    int64_t dataSetClkBit7;
+
+    // indicates if the unused bits of the data port are still valid or should be
+    // read as 0, 1 = unused bits valid, 0 = unused bits should be 0
+    bool dataSetBit6;
+    bool dataSetBit7;
+
+    // indicates if the unused bits are in the process of falling off. 
+    bool dataFalloffBit6;
+    bool dataFalloffBit7;
+} zero_ram_t;
+
 typedef struct
 {
     CPU cpu;
@@ -63,6 +92,10 @@ typedef struct
     uint8_t basic[BASIC_ROM_SIZE];
     uint8_t characters[CHAR_ROM_SIZE];
     uint8_t kernal[KERNAL_ROM_SIZE];
+
+    zero_ram_t zero_ram;
+
+    clock_t clock;
 } C64;
 
 void c64_init(C64 *c64, bool debug);

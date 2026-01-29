@@ -5,10 +5,10 @@
 
 #include "c64.h"
 
-#define DEBUG false
+#define DEBUG true
 
 #define TESTCASE "cpuport"
-#define MAX_STEPS 380000 // 1100000000
+#define MAX_STEPS 383000 // 1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 

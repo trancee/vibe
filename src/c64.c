@@ -24,6 +24,8 @@ void c64_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
 
 void c64_init(C64 *c64, bool debug)
 {
+    clock_init(&c64->clock, PAL_CPU_FREQUENCY);
+
     cpu_init(&c64->cpu);
 
     cpu_set_read_write(&c64->cpu, c64_read, c64_write);
@@ -36,7 +38,7 @@ void c64_init(C64 *c64, bool debug)
     vic_set_read_write(&c64->vic, c64_read_mem, c64_write_mem);
 
     /* Initialize SID (PAL clock rate ~985248 Hz, 44100 Hz sample rate) */
-    sid_init(&c64->sid, 985248, 44100);
+    sid_init(&c64->sid, PAL_CPU_FREQUENCY, 44100);
 
     /* Clear ROMs */
     memset(c64->basic, 0, BASIC_ROM_SIZE);
@@ -54,6 +56,8 @@ void c64_init(C64 *c64, bool debug)
 
 void c64_reset(C64 *c64)
 {
+    clock_reset(&c64->clock);
+
     cpu_reset(&c64->cpu);
 
     cia_reset(&c64->cia1);
@@ -295,6 +299,38 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
         }
     }
 
+    if (addr == R6510)
+    {
+        if (c64->zero_ram.dataFalloffBit6 || c64->zero_ram.dataFalloffBit7)
+        {
+            if (c64->zero_ram.dataSetClkBit6 < clock_getTime(&c64->clock, PHASE_PHI2))
+            {
+                c64->zero_ram.dataFalloffBit6 = false;
+                c64->zero_ram.dataSetBit6 = false;
+            }
+
+            if (c64->zero_ram.dataSetClkBit7 < clock_getTime(&c64->clock, PHASE_PHI2))
+            {
+                c64->zero_ram.dataSetBit7 = false;
+                c64->zero_ram.dataFalloffBit7 = false;
+            }
+        }
+
+        return (uint8_t)(c64->zero_ram.dataRead & 0xff - (((!c64->zero_ram.dataSetBit6 ? 1 : 0) << 6) + ((!c64->zero_ram.dataSetBit7 ? 1 : 0) << 7)));
+        /*
+            0=ff 1=ff 0=00 1=ff 1=ff 1=ff
+            after  00 ff
+            right  00 df
+        */
+        if (ddr.v == 0x00 && dr.v == 0xFF)
+            return 0xDF; // bit 5 is drawn low if input
+                         /*
+                              0=ff 1=ff 1=00 0=00 1=ff 1=ff
+                              after  00 df
+                              right  00 17
+                         */
+    }
+
     // printf("C64 #$%04X → $%02X\n", addr, cpu_read(&c64->cpu, addr));
     return cpu_read(&c64->cpu, addr);
 }
@@ -347,6 +383,39 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
         }
     }
 
+    if (addr == D6510)
+    {
+        if (c64->zero_ram.dataSetBit7 && (data & 0x80) == 0 && !c64->zero_ram.dataFalloffBit7)
+        {
+            c64->zero_ram.dataFalloffBit7 = true;
+            c64->zero_ram.dataSetClkBit7 = clock_getTime(&c64->clock, PHASE_PHI2) + CPU_DATA_PORT_FALL_OFF_CYCLES;
+        }
+        if (c64->zero_ram.dataSetBit6 && (data & 0x40) == 0 && !c64->zero_ram.dataFalloffBit6)
+        {
+            c64->zero_ram.dataFalloffBit6 = true;
+            c64->zero_ram.dataSetClkBit6 = clock_getTime(&c64->clock, PHASE_PHI2) + CPU_DATA_PORT_FALL_OFF_CYCLES;
+        }
+        if (c64->zero_ram.dataSetBit7 && (data & 0x80) != 0 && c64->zero_ram.dataFalloffBit7)
+        {
+            c64->zero_ram.dataFalloffBit7 = false;
+        }
+        if (c64->zero_ram.dataSetBit6 && (data & 0x40) != 0 && c64->zero_ram.dataFalloffBit6)
+        {
+            c64->zero_ram.dataFalloffBit6 = false;
+        }
+    }
+    else if (addr == R6510)
+    {
+        if ((ddr.v & 0x80) != 0 && (data & 0x80) != 0)
+        {
+            c64->zero_ram.dataSetBit7 = true;
+        }
+        if ((ddr.v & 0x40) != 0 && (data & 0x40) != 0)
+        {
+            c64->zero_ram.dataSetBit6 = true;
+        }
+    }
+
     // printf("C64 #$%04X ← $%02X\n", addr, data);
     cpu_write(&c64->cpu, addr, data);
 }
@@ -367,6 +436,8 @@ bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
 
 uint8_t c64_step(C64 *c64)
 {
+    clock_step(&c64->clock);
+
     uint8_t steps = cpu_step(&c64->cpu);
 
     vic_clock(&c64->vic /*, CYCLES_PER_FRAME*/);
