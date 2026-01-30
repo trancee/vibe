@@ -16,7 +16,7 @@ typedef struct
 void clock_init(clock_t *clock, double cyclesPerSecond);
 void clock_reset(clock_t *clock);
 
-void clock_step(clock_t *clock);
+void clock_step(clock_t *clock, int cycles);
 
 uint64_t clock_getTime(clock_t *clock, uint32_t phase);
 uint32_t clock_getPhase(clock_t *clock);

@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
 #include "c64.h"
 
-#define DEBUG true
+#define DEBUG false
 
 #define TESTCASE "cpuport"
 #define MAX_STEPS 383000 // 1100000000
@@ -98,14 +98,14 @@ void warm_handler(CPU *cpu)
     cpu_get_pc(cpu);
 
     printf("\x{1B}[31;1;6mWARM\x{1B}[0m\n");
-    abort();
+    assert(false);
 }
 void ready_handler(CPU *cpu)
 {
     cpu_get_pc(cpu);
 
     printf("\x{1B}[31;1;6mREADY\x{1B}[0m\n");
-    abort();
+    assert(false);
 }
 
 void setup_c64(C64 *c64)
@@ -184,7 +184,7 @@ uint16_t load_testcase(CPU *cpu, const char *testcase)
     if (stream == NULL)
     {
         fprintf(stderr, "Error: could not open \"%s\" testcase.\n", testcase);
-        exit(1);
+        assert(false);
     }
 
     fseek(stream, 0L, SEEK_END);

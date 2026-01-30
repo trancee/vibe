@@ -218,8 +218,8 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
     fprintf(stream, " A:%02X X:%02X Y:%02X P:%02X SP:%02X",
             cpu->A, cpu->X, cpu->Y, cpu->P, cpu->SP);
 
-    fprintf(stream, "  %02X %02X %%%c%c%c",
-            cpu_read_byte(cpu, 0x0000), cpu_read_byte(cpu, 0x0001), cpu_read_byte(cpu, 0x0001) & 0x04 ? '1' : '0', cpu_read_byte(cpu, 0x0001) & 0x02 ? '1' : '0', cpu_read_byte(cpu, 0x0001) & 0x01 ? '1' : '0');
+    // fprintf(stream, "  %02X %02X %%%c%c%c",
+    //         cpu_read_byte(cpu, 0x0000), cpu_read_byte(cpu, 0x0001), cpu_read_byte(cpu, 0x0001) & 0x04 ? '1' : '0', cpu_read_byte(cpu, 0x0001) & 0x02 ? '1' : '0', cpu_read_byte(cpu, 0x0001) & 0x01 ? '1' : '0');
 
     // printf(" P:%c%c%c%c%c%c%c%c",
     //        (get_flag_negative(cpu) ? 'N' : '-'),

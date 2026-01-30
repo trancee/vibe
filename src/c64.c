@@ -1,4 +1,4 @@
-#include <stdlib.h>
+// #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
@@ -34,8 +34,7 @@ void c64_init(C64 *c64, bool debug)
     cia_init(&c64->cia1, CIA1_MEM_START);
     cia_init(&c64->cia2, CIA2_MEM_START);
 
-    vic_init(&c64->vic);
-    vic_set_read_write(&c64->vic, c64_read_mem, c64_write_mem);
+    vic_init(&c64->vic, c64->cpu.memory);
 
     /* Initialize SID (PAL clock rate ~985248 Hz, 44100 Hz sample rate) */
     sid_init(&c64->sid, PAL_CPU_FREQUENCY, 44100);
@@ -436,9 +435,9 @@ bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
 
 uint8_t c64_step(C64 *c64)
 {
-    clock_step(&c64->clock);
+    uint8_t cycles = cpu_step(&c64->cpu);
 
-    uint8_t steps = cpu_step(&c64->cpu);
+    clock_step(&c64->clock, cycles);
 
     vic_clock(&c64->vic /*, CYCLES_PER_FRAME*/);
     vic_clock(&c64->vic /*, CYCLES_PER_FRAME*/);
@@ -446,9 +445,9 @@ uint8_t c64_step(C64 *c64)
     cia_clock(&c64->cia1 /*, CYCLES_PER_FRAME*/);
     cia_clock(&c64->cia2 /*, CYCLES_PER_FRAME*/);
 
-    sid_clock(&c64->sid, steps);
+    sid_clock(&c64->sid, cycles);
 
-    return steps;
+    return cycles;
 }
 
 /* ============================================================
@@ -461,7 +460,7 @@ void load_rom(const char *path, uint8_t *memory, size_t size)
     if (!f)
     {
         printf("Missing ROM: %s\n", path);
-        exit(1);
+        assert(false);
     }
     size_t read = fread(memory, 1, size, f);
     assert(read == size);

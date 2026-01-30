@@ -4,7 +4,17 @@
 
 #include "vic.h"
 
-void vic_init(VIC *vic)
+void vic_init(VIC *vic, uint8_t *memory)
+{
+    if (vic == NULL)
+        return;
+
+    vic->memory = memory;
+
+    vic_reset(vic);
+}
+
+void vic_reset(VIC *vic)
 {
     if (vic == NULL)
         return;
@@ -37,32 +47,18 @@ void vic_init(VIC *vic)
     vic->bad_line = false;
 }
 
-void vic_reset(VIC *vic)
-{
-    if (vic == NULL)
-        return;
-
-    vic_init(vic);
-}
-
-void vic_set_read_write(VIC *vic, read_mem_t read, write_mem_t write)
-{
-    vic->read = read != NULL ? read : vic_read;
-    vic->write = write != NULL ? write : vic_write;
-}
-
 uint8_t vic_read_byte(VIC *vic, uint16_t addr)
 {
-    printf("VIC #$%04X → $%02X\n", addr, vic->read(vic, addr));
+    printf("VIC #$%04X → $%02X\n", addr, vic->memory[addr]);
 
-    return vic->read(vic, addr);
+    return vic->memory[addr];
 }
 
 void vic_write_byte(VIC *vic, uint16_t addr, uint8_t data)
 {
     printf("VIC #$%04X ← $%02X\n", addr, data);
 
-    vic->write(vic, addr, data);
+    vic->memory[addr] = data;
 }
 
 uint8_t vic_read(VIC *vic, uint16_t addr)

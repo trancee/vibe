@@ -26,7 +26,8 @@ void vic_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
 static void reset_test_vic(VIC *vic, test_memory_t *mem)
 {
     memset(mem, 0, sizeof(test_memory_t));
-    vic_init(vic);
+
+    vic_init(vic, mem->memory);
 }
 
 // Test functions
@@ -42,8 +43,6 @@ void test_vic_init(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Check initial register values (per C64 PRG and VIC-II docs)
     // Control 1: Display enabled, 25 rows (bits 4 and 3)
@@ -89,8 +88,6 @@ void test_vic_register_access(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test sprite position registers (8 sprites x 2 registers each)
     for (int i = 0; i < 8; i++)
@@ -216,8 +213,6 @@ void test_vic_interrupts(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Test raster interrupt
     printf("  Testing raster interrupt...\n");
     vic_write(&vic, VIC_RASTER, 0x50);               // Set raster compare to line 0x50
@@ -300,8 +295,6 @@ void test_vic_sprites(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test enabling/disabling all 8 sprites
     printf("  Testing sprite enable/disable...\n");
@@ -428,8 +421,6 @@ void test_vic_text_mode(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Set up standard text mode
     // Control 1: Display enabled, 25 rows, no bitmap mode
     vic_write(&vic, VIC_CONTROL1, VIC_CTRL1_DEN | VIC_CTRL1_RSEL);
@@ -477,8 +468,6 @@ void test_vic_bitmap_mode(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Set up bitmap mode
     vic_write(&vic, VIC_CONTROL1, VIC_CTRL1_DEN | VIC_CTRL1_RSEL | VIC_CTRL1_BMM);
     vic_write(&vic, VIC_CONTROL2, VIC_CTRL2_RES);
@@ -513,8 +502,6 @@ void test_vic_multicolor_modes(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test multicolor text mode setup
     printf("  Testing multicolor text mode setup...\n");
@@ -556,8 +543,6 @@ void test_vic_scrolling(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test X scrolling (bits 0-2 of $D016)
     printf("  Testing X scroll (0-7 pixels)...\n");
@@ -611,8 +596,6 @@ void test_vic_memory_pointers(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test screen base calculations
     // Bits 4-7 of $D018 select 1 of 16 possible 1KB screen locations
@@ -713,8 +696,6 @@ void test_vic_bad_lines(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Enable display - required for bad lines
     vic_write(&vic, VIC_CONTROL1, VIC_CTRL1_DEN | VIC_CTRL1_RSEL);
 
@@ -796,8 +777,6 @@ void test_vic_display_enable(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Test display enable/disable
     vic_write(&vic, VIC_CONTROL1, VIC_CTRL1_DEN | VIC_CTRL1_RSEL);
     assert(vic_is_display_enabled(&vic));
@@ -827,8 +806,6 @@ void test_vic_raster_counter(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Initial raster should be 0
     assert(vic.current_raster == 0);
@@ -881,8 +858,6 @@ void test_vic_sprite_collisions(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Sprite-sprite collision register ($D01E)
     // - Read-only register
     // - Cleared when read
@@ -926,8 +901,6 @@ void test_vic_border(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Test all 16 border colors
     for (int color = 0; color < 16; color++)
     {
@@ -963,8 +936,6 @@ void test_vic_framebuffer(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // Test framebuffer dimensions
     printf("  Testing framebuffer dimensions...\n");
@@ -1007,8 +978,6 @@ void test_vic_lightpen(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Lightpen registers ($D013, $D014) store latched position
     vic_write(&vic, VIC_LIGHTPEN_X, 0x80);
     vic_write(&vic, VIC_LIGHTPEN_Y, 0x60);
@@ -1031,8 +1000,6 @@ void test_vic_ecm_mode(void)
     VIC vic;
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
-
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
 
     // ECM mode is enabled by setting bit 6 of $D011
     // ECM = 1, BMM = 0, MCM = 0 gives ECM text mode
@@ -1068,8 +1035,6 @@ void test_vic_register_mirroring(void)
     test_memory_t mem;
     reset_test_vic(&vic, &mem);
 
-    vic_set_read_write(&vic, vic_read_mem, vic_write_mem);
-
     // Write to $D020 (border color)
     vic_write(&vic, 0xD020, 0x05);
     assert(vic.border_color == 0x05);
@@ -1094,7 +1059,7 @@ void test_vic_null_safety(void)
     printf("Testing VIC-II NULL pointer safety...\n");
 
     // These should not crash
-    vic_init(NULL);
+    vic_init(NULL, NULL);
     vic_reset(NULL);
     vic_clock(NULL);
     vic_render_line(NULL, 0);
