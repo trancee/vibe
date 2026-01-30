@@ -62,7 +62,8 @@ TEST_SRCS = tests/test_main.c \
             tests/test_vic.c \
             tests/test_cia.c \
             tests/test_sid.c \
-            tests/test_dormann.c
+            tests/test_dormann.c \
+            tests/test_lorenz.c
 
 # Library sources (without main.c)
 LIB_SRCS = src/c64.c \
