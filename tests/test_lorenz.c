@@ -8,7 +8,7 @@
 #define DEBUG false
 
 #define TESTCASE "irq"
-#define MAX_STEPS 10000000//1100000000
+#define MAX_STEPS 110000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 

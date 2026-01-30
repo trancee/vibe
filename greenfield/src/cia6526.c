@@ -177,10 +177,6 @@ uint8_t cia_read(CIA *cia, uint16_t addr)
                 if (cia->irq_pending) {
                     result |= CIA_ICR_IR;
                 }
-                if (cia->base_addr == CIA1_BASE) {
-                    fprintf(stderr, "DEBUG: clock %d: ICR read, icr_data=%02X, irq_pending=%d, result=%02X\n",
-                            g_clock_count, cia->icr_data, cia->irq_pending, result);
-                }
                 cia->icr_data = 0;
                 cia->irq_pending = false;
                 return result;
@@ -360,12 +356,9 @@ void cia_clock(CIA *cia)
     cia->ta_underflow = false;
     cia->tb_underflow = false;
     
-    /* Update IRQ pending state from PREVIOUS cycle's interrupts */
+    /* Update IRQ pending state from this cycle's interrupts */
     /* This implements the 1-cycle delay before IRQ line is asserted */
     if (cia->icr_data & cia->icr_mask) {
-        if (cia->base_addr == CIA1_BASE && !cia->irq_pending) {
-            fprintf(stderr, "DEBUG: clock %d: irq_pending becoming true, icr_data=%02X\n", g_clock_count, cia->icr_data);
-        }
         cia->irq_pending = true;
     }
     
@@ -390,9 +383,12 @@ void cia_clock(CIA *cia)
                     /* Underflow */
                     cia->ta_underflow = true;
                     cia->icr_data |= CIA_ICR_TA;  /* Flag is immediately visible */
-                    if (cia->base_addr == CIA1_BASE) {
-                        fprintf(stderr, "DEBUG: clock %d: Timer A underflow, icr_data=%02X\n", g_clock_count, cia->icr_data);
-                    }
+                                    /* Underflow */
+                    cia->ta_underflow = true;
+                    cia->icr_data |= CIA_ICR_TA;  /* Flag is immediately visible */
+                    
+                    /* Reload from latch */
+                    cia->ta_counter = cia->ta_latch;
                     
                     /* Reload from latch */
                     cia->ta_counter = cia->ta_latch;
