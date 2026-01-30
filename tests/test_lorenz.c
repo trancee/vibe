@@ -5,7 +5,7 @@
 
 #include "c64.h"
 
-#define DEBUG false
+#define DEBUG true
 
 #define TESTCASE "irq"
 #define MAX_STEPS 110000000
@@ -114,7 +114,7 @@ void setup_c64(C64 *c64)
 
     // Enable CIA1 Timer A interrupt (like KERNAL does)
     // Write $81 to $DC0D: bit 7 = SET, bit 0 = Timer A
-    c64_write(c64, 0xDC0D, 0x81);
+    // c64_write(c64, 0xDC0D, 0x81);
 
     // Print Character
     c64_trap(c64, 0xFFD2, print_handler);
