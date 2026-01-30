@@ -21,13 +21,17 @@
             - [ ] Stable Illegals (LAX, SAX)
             - [ ] RMW Illegals (DCP, ISB, SLO, RLA, SRE, RRA)
             - [ ] Combined Illegals (ANC, ALR, ARR, XAA, AXS, LAS, TAS, AHX, SHX, SHY)
-        - [ ] Improve Cycle Accuracy
-            - [ ] Branch taken/page cross penalties
+        - [/] Improve Cycle Accuracy
+            - [x] Branch taken/page cross penalties (+1 taken, +2 page cross)
             - [ ] RMW dummy writes
-            - [ ] Indexed mode page cross penalties
+            - [x] Indexed mode page cross penalties (AbsoluteX/Y, IndirectIndexed)
         - [x] Status Flags (Decimal Mode ADC/SBC) <!-- id: 16 -->
         - [x] Cycle-Exact Interrupt Sequence <!-- id: 33 -->
     - [x] Implement CIA Chips (Timers, TOD, Keyboard) <!-- id: 19 -->
+        - [x] Timer A/B countdown with reload and one-shot modes
+        - [x] Timer pipeline delay (2-4 cycles before counting starts)
+        - [x] ICR bit 7 delay (1 cycle after interrupt flag set)
+        - [ ] Precise cycle-accurate timer start/underflow timing (Lorenz irq test)
     - [ ] Implement Console VIC-II (ANSI Video) <!-- id: 17 -->
         - [x] Bad Line and Sprite DMA Logic <!-- id: 25 -->
         - [x] Raster IRQ Logic <!-- id: 31 -->
@@ -39,3 +43,10 @@
     - [x] Implement Main Loop <!-- id: 21 -->
     - [x] Load ROMs (Kernal, BASIC, Char) <!-- id: 22 -->
     - [x] Verify Frame Sync (KERNAL wait loops) <!-- id: 23 -->
+- [/] Lorenz Test Suite <!-- id: 40 -->
+    - [x] Test harness integration (test_lorenz.c) <!-- id: 41 -->
+    - [x] cpuport test - CPU port floating state fix <!-- id: 42 -->
+    - [x] cputiming test - Branch/page cross cycle penalties <!-- id: 43 -->
+    - [ ] irq test - CIA timer/ICR cycle-accurate timing <!-- id: 44 -->
+    - [ ] Remaining CPU opcode tests <!-- id: 45 -->
+    - [ ] CIA timer tests (cia1ta, cia1tb, cia2ta, cia2tb) <!-- id: 46 -->
