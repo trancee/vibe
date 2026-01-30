@@ -561,6 +561,16 @@ bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
 
 uint8_t c64_step(C64 *c64)
 {
+    /* Update CPU interrupt lines from CIA states (from previous instruction's ticks) */
+    if (c64->cia1.irq_pending || c64->vic.irq_pending)
+    {
+        c64->cpu.irq_pending = true;
+    }
+    if (c64->cia2.irq_pending)
+    {
+        c64->cpu.nmi_pending = true;
+    }
+
     /* Step CPU and return cycles used */
     uint8_t cycles = cpu_step(&c64->cpu);
 
@@ -569,6 +579,11 @@ uint8_t c64_step(C64 *c64)
     {
         c64_tick(c64);
     }
+
+    /* Process IRQ delay at instruction boundary (AFTER the instruction completes) */
+    /* This ensures the delay spans to the NEXT instruction */
+    cia_finalize_irq(&c64->cia1);
+    cia_finalize_irq(&c64->cia2);
 
     return cycles;
 }

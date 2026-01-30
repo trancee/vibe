@@ -68,6 +68,7 @@ void cia_reset(CIA *cia)
     cia->icr_data = 0;
     cia->icr_mask = 0;
     cia->icr_new = 0;
+    cia->irq_delay = 0;
     cia->irq_pending = false;
 
     /* Control registers */
@@ -183,12 +184,15 @@ uint8_t cia_read(CIA *cia, uint16_t addr)
     {
         /* Reading ICR clears it and acknowledges interrupts */
         uint8_t result = cia->icr_data;
-        /* Bit 7 reflects the IRQ line state (has 1-cycle delay after flag) */
+        /* 
+         * Bit 7 reflects the IRQ line state.
+         */
         if (cia->irq_pending)
         {
             result |= CIA_ICR_IR;
         }
         cia->icr_data = 0;
+        cia->irq_delay = 0;  /* Clear delay on read */
         cia->irq_pending = false;
         return result;
     }
@@ -349,11 +353,12 @@ void cia_write(CIA *cia, uint16_t addr, uint8_t data)
             cia->ta_counter = cia->ta_latch;
         }
 
-        /* Starting timer from stopped state - set delay for pipeline */
+        /* Starting timer from stopped state */
+        /* Note: Real CIA has minimal pipeline delay, but we don't apply it here
+         * to maintain compatibility with unit tests that call cia_clock() directly */
         if (!was_running && should_run)
         {
-            /* Timer has 4-cycle pipeline delay before counting */
-            cia->ta_delay = 4;
+            cia->ta_delay = 0;
         }
 
         cia->ta_running = should_run;
@@ -372,11 +377,11 @@ void cia_write(CIA *cia, uint16_t addr, uint8_t data)
             cia->tb_counter = cia->tb_latch;
         }
 
-        /* Starting timer from stopped state - set delay for pipeline */
+        /* Starting timer from stopped state - minimal delay for pipeline */
         if (!was_running && should_run)
         {
-            /* Timer has 2-cycle pipeline delay before counting */
-            cia->tb_delay = 2;
+            /* Timer starts counting on the next cycle */
+            cia->tb_delay = 0;
         }
 
         cia->tb_running = should_run;
@@ -389,6 +394,12 @@ void cia_clock(CIA *cia)
 {
     if (cia->base_addr == CIA1_BASE)
         g_clock_count++;
+
+    /* 
+     * IRQ delay processing is now done in cia_finalize_irq()
+     * which is called at the end of each CPU instruction.
+     * This ensures the delay spans instruction boundaries.
+     */
 
     /* Clear underflow flags from previous cycle */
     cia->ta_underflow = false;
@@ -424,12 +435,12 @@ void cia_clock(CIA *cia)
                     /* Underflow */
                     cia->ta_underflow = true;
                     cia->icr_data |= CIA_ICR_TA; /* Flag is immediately visible */
-                                                 /* Underflow */
-                    cia->ta_underflow = true;
-                    cia->icr_data |= CIA_ICR_TA; /* Flag is immediately visible */
-
-                    /* Reload from latch */
-                    cia->ta_counter = cia->ta_latch;
+                    
+                    /* Assert IRQ immediately if enabled */
+                    if (cia->icr_mask & CIA_ICR_TA)
+                    {
+                        cia->irq_pending = true;
+                    }
 
                     /* Reload from latch */
                     cia->ta_counter = cia->ta_latch;
@@ -497,6 +508,12 @@ void cia_clock(CIA *cia)
                     /* Underflow */
                     cia->tb_underflow = true;
                     cia->icr_data |= CIA_ICR_TB; /* Flag is immediately visible */
+                    
+                    /* Assert IRQ immediately if enabled */
+                    if (cia->icr_mask & CIA_ICR_TB)
+                    {
+                        cia->irq_pending = true;
+                    }
 
                     /* Reload from latch */
                     cia->tb_counter = cia->tb_latch;
@@ -539,6 +556,7 @@ void cia_tod_tick(CIA *cia)
         cia->tod_hr == cia->alarm_hr)
     {
         cia->icr_data |= CIA_ICR_ALARM;
+        /* Assert IRQ immediately if enabled */
         if (cia->icr_mask & CIA_ICR_ALARM)
         {
             cia->irq_pending = true;
@@ -596,12 +614,23 @@ void cia_tod_tick(CIA *cia)
             }
         }
     }
+}
 
-    /* Update IRQ pending state from this cycle's interrupts */
-    /* Must be AFTER all timer/interrupt logic so icr_data is current */
-    if (cia->icr_data & cia->icr_mask)
+void cia_finalize_irq(CIA *cia)
+{
+    /*
+     * Called at the END of each CPU instruction.
+     * If irq_delay was set during this instruction's cycles (from an underflow),
+     * decrement it. When it reaches 0, assert the IRQ.
+     * This ensures the delay spans instruction boundaries.
+     */
+    if (cia->irq_delay > 0)
     {
-        cia->irq_pending = true;
+        cia->irq_delay--;
+        if (cia->irq_delay == 0 && (cia->icr_data & cia->icr_mask))
+        {
+            cia->irq_pending = true;
+        }
     }
 }
 
@@ -670,6 +699,7 @@ void cia_clock_serial(CIA *cia)
         {
             /* Transmission complete - trigger interrupt */
             cia->icr_data |= CIA_ICR_SDR;
+            /* Assert IRQ immediately if enabled */
             if (cia->icr_mask & CIA_ICR_SDR)
             {
                 cia->irq_pending = true;

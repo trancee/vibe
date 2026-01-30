@@ -7,8 +7,8 @@
 
 #define DEBUG true
 
-#define TESTCASE "irq"
-#define MAX_STEPS 110000000
+#define TESTCASE "mmufetch"
+#define MAX_STEPS 1300000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -112,7 +112,7 @@ void setup_c64(C64 *c64)
 {
     c64_init(c64);
 
-    c64_set_debug(&c64, DEBUG, NULL);
+    c64_set_debug(c64, DEBUG, NULL);
 
     // Enable CIA1 Timer A interrupt (like KERNAL does)
     // Write $81 to $DC0D: bit 7 = SET, bit 0 = Timer A

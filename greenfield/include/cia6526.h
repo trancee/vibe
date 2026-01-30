@@ -176,6 +176,7 @@ typedef struct {
     uint8_t icr_data;       /* Interrupt flags (read) */
     uint8_t icr_mask;       /* Interrupt mask (write) */
     uint8_t icr_new;        /* New interrupt flags (not yet visible in bit 7) */
+    uint8_t irq_delay;      /* Cycles until IRQ is asserted (0 = can assert now) */
     
     /* Control registers */
     uint8_t cra;            /* Control Register A */
@@ -243,6 +244,9 @@ uint8_t cia1_joystick_read(CIA *cia, int joy_num);
 /* VIC bank control (CIA2 only) */
 void cia2_set_vic_bank(CIA *cia, uint8_t bank);
 uint8_t cia2_get_vic_bank(CIA *cia);
+
+/* Process IRQ delay at instruction boundary */
+void cia_finalize_irq(CIA *cia);
 
 /* Get IRQ/NMI status */
 bool cia_get_irq(CIA *cia);

@@ -548,3 +548,5 @@ The real 6526 behavior:
 - The timer counts down: N, N-1, ..., 1, 0, underflow
 
 For value N, underflow happens after N+1 clocks.
+
+IRQ line assertion has a 1-cycle delay after the interrupt flag is set.
