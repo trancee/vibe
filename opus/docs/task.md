@@ -1,0 +1,52 @@
+# Task: C64 Emulator Implementation
+
+- [x] Research Documentation <!-- id: 0 -->
+    - [x] Read system architecture docs (64doc.txt) <!-- id: 1 -->
+    - [x] Read CPU (6502/6510) docs (65xx_ins.txt, 65xx_ill.txt) <!-- id: 2 -->
+    - [x] Read VIC-II (Graphics) docs (vic-ii.txt) <!-- id: 3 -->
+    - [x] Read SID (Sound) docs (SID_file_format.txt) <!-- id: 4 -->
+    - [x] Read CIA (I/O) and PRG docs (C64PRG10.txt) <!-- id: 5 -->
+- [x] Implementation Planning <!-- id: 7 -->
+    - [x] Create implementation plan <!-- id: 8 -->
+    - [x] Define project structure <!-- id: 9 -->
+- [x] Core Implementation <!-- id: 10 -->
+    - [x] Setup Makefiles and build system (Link math library) <!-- id: 11 -->
+    - [x] Implement Memory Bus & PLA Logic (Color RAM, Ticking Sync) <!-- id: 12 -->
+    - [x] Implement System Timing / Bus Arbitration (c64_tick, BA Stall) <!-- id: 29 -->
+    - [x] Implement Interrupt Logic (Shared tracking, CIA 2 -> NMI routing) <!-- id: 30 -->
+    - [/] Implement Full 6502/6510 Opcode Set
+        - [x] All legal opcodes (including ASL, LSR, ROR, etc.) <!-- id: 14 -->
+        - [/] All illegal opcodes
+            - [ ] Illegal NOPs / KILs
+            - [ ] Stable Illegals (LAX, SAX)
+            - [ ] RMW Illegals (DCP, ISB, SLO, RLA, SRE, RRA)
+            - [ ] Combined Illegals (ANC, ALR, ARR, XAA, AXS, LAS, TAS, AHX, SHX, SHY)
+        - [/] Improve Cycle Accuracy
+            - [x] Branch taken/page cross penalties (+1 taken, +2 page cross)
+            - [ ] RMW dummy writes
+            - [x] Indexed mode page cross penalties (AbsoluteX/Y, IndirectIndexed)
+        - [x] Status Flags (Decimal Mode ADC/SBC) <!-- id: 16 -->
+        - [x] Cycle-Exact Interrupt Sequence <!-- id: 33 -->
+    - [x] Implement CIA Chips (Timers, TOD, Keyboard) <!-- id: 19 -->
+        - [x] Timer A/B countdown with reload and one-shot modes
+        - [x] Timer pipeline delay (2-4 cycles before counting starts)
+        - [x] ICR bit 7 delay (1 cycle after interrupt flag set)
+        - [ ] Precise cycle-accurate timer start/underflow timing (Lorenz irq test)
+    - [ ] Implement Console VIC-II (ANSI Video) <!-- id: 17 -->
+        - [x] Bad Line and Sprite DMA Logic <!-- id: 25 -->
+        - [x] Raster IRQ Logic <!-- id: 31 -->
+        - [x] Screen Memory Fetch ($0400 range) <!-- id: 36 -->
+        - [x] ANSI Color Mapping and Escape Sequences <!-- id: 37 -->
+        - [x] Frame Buffer Rendering (End of V-Blank) <!-- id: 38 -->
+    - [x] Implement SID (Sound Filter, Register Mirroring) <!-- id: 18 -->
+- [x] Integration & Testing <!-- id: 20 -->
+    - [x] Implement Main Loop <!-- id: 21 -->
+    - [x] Load ROMs (Kernal, BASIC, Char) <!-- id: 22 -->
+    - [x] Verify Frame Sync (KERNAL wait loops) <!-- id: 23 -->
+- [/] Lorenz Test Suite <!-- id: 40 -->
+    - [x] Test harness integration (test_lorenz.c) <!-- id: 41 -->
+    - [x] cpuport test - CPU port floating state fix <!-- id: 42 -->
+    - [x] cputiming test - Branch/page cross cycle penalties <!-- id: 43 -->
+    - [ ] irq test - CIA timer/ICR cycle-accurate timing <!-- id: 44 -->
+    - [ ] Remaining CPU opcode tests <!-- id: 45 -->
+    - [ ] CIA timer tests (cia1ta, cia1tb, cia2ta, cia2tb) <!-- id: 46 -->
