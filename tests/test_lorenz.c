@@ -110,7 +110,9 @@ void ready_handler(CPU *cpu)
 
 void setup_c64(C64 *c64)
 {
-    c64_init(c64, DEBUG);
+    c64_init(c64);
+
+    c64_set_debug(&c64, DEBUG, NULL);
 
     // Enable CIA1 Timer A interrupt (like KERNAL does)
     // Write $81 to $DC0D: bit 7 = SET, bit 0 = Timer A

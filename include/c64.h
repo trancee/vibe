@@ -98,7 +98,7 @@ typedef struct
     clock_t clock;
 } C64;
 
-void c64_init(C64 *c64, bool debug);
+void c64_init(C64 *c64);
 void c64_reset(C64 *c64);
 void c64_reset_pc(C64 *c64, uint16_t addr);
 uint16_t c64_get_pc(C64 *c64);
@@ -110,6 +110,8 @@ void c64_write_word(C64 *c64, uint16_t addr, uint16_t data);
 void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size);
 bool c64_trap(C64 *c64, uint16_t addr, handler_t handler);
 uint8_t c64_step(C64 *c64);
+
+void c64_set_debug(C64 *c64, bool debug, FILE *debug_file);
 
 void load_rom(const char *path, uint8_t *memory, size_t size);
 

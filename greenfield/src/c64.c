@@ -26,7 +26,7 @@ static void cpu_mem_write(void *context, uint16_t addr, uint8_t data)
     c64_write(c64, addr, data);
 }
 
-void c64_init_internal(C64 *c64)
+void c64_init(C64 *c64)
 {
     memset(c64, 0, sizeof(C64));
 
@@ -84,6 +84,10 @@ void c64_reset(C64 *c64)
     uint16_t reset_lo = c64_read(c64, 0xFFFC);
     uint16_t reset_hi = c64_read(c64, 0xFFFD);
     c64->cpu.PC = (reset_hi << 8) | reset_lo;
+}
+
+void c64_set_debug(C64 *c64, bool debug, FILE *debug_file) {
+    cpu_set_debug(&c64->cpu, debug, debug_file);
 }
 
 bool c64_load_basic(C64 *c64, const char *filename)

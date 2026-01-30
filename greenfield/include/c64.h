@@ -106,14 +106,10 @@ typedef struct {
 } C64;
 
 /* Initialization - internal implementation */
-void c64_init_internal(C64 *c64);
+void c64_init(C64 *c64);
 void c64_reset(C64 *c64);
 
-/* c64_init accepts optional debug parameter for compatibility */
-#define c64_init_1(c64) c64_init_internal(c64)
-#define c64_init_2(c64, debug) c64_init_internal(c64)
-#define c64_init_SELECTOR(_1, _2, NAME, ...) NAME
-#define c64_init(...) c64_init_SELECTOR(__VA_ARGS__, c64_init_2, c64_init_1)(__VA_ARGS__)
+void c64_set_debug(C64 *c64, bool debug, FILE *debug_file);
 
 /* ROM loading */
 bool c64_load_basic(C64 *c64, const char *filename);

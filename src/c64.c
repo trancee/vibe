@@ -22,14 +22,13 @@ void c64_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
     mem[addr] = data;
 }
 
-void c64_init(C64 *c64, bool debug)
+void c64_init(C64 *c64)
 {
     clock_init(&c64->clock, PAL_CPU_FREQUENCY);
 
     cpu_init(&c64->cpu);
 
     cpu_set_read_write(&c64->cpu, c64_read, c64_write);
-    cpu_set_debug(&c64->cpu, debug, NULL);
 
     cia_init(&c64->cia1, CIA1_MEM_START);
     cia_init(&c64->cia2, CIA2_MEM_START);
@@ -175,6 +174,11 @@ uint16_t c64_get_pc(C64 *c64)
 void c64_set_pc(C64 *c64, uint16_t addr)
 {
     cpu_set_pc(&c64->cpu, addr);
+}
+
+void c64_set_debug(C64 *c64, bool debug, FILE *debug_file)
+{
+    cpu_set_debug(&c64->cpu, debug, debug_file);
 }
 
 /*
