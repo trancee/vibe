@@ -7,8 +7,8 @@
 
 #define DEBUG false
 
-#define TESTCASE "cpuport"
-#define MAX_STEPS 383000 // 1100000000
+#define TESTCASE "irq"
+#define MAX_STEPS 10000000//1100000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -111,6 +111,10 @@ void ready_handler(CPU *cpu)
 void setup_c64(C64 *c64)
 {
     c64_init(c64, DEBUG);
+
+    // Enable CIA1 Timer A interrupt (like KERNAL does)
+    // Write $81 to $DC0D: bit 7 = SET, bit 0 = Timer A
+    c64_write(c64, 0xDC0D, 0x81);
 
     // Print Character
     c64_trap(c64, 0xFFD2, print_handler);

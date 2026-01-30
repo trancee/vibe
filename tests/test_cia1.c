@@ -30,8 +30,28 @@ void cia1_port_a_write(void *context, uint8_t data) {
 // CIA1 port B callback (keyboard columns + joystick 1)
 uint8_t cia1_port_b_read(void *context) {
     cia1_context_t *ctx = (cia1_context_t*)context;
-    // Return joystick 1 state (bits 0-4) combined with port B output
-    return (ctx->port_b_output & 0xE0) | (ctx->joystick1_state & 0x1F);
+    // Scan keyboard matrix - check which rows are active (low) in port_a_output
+    uint8_t result = 0xFF;  // All columns inactive by default (no keys pressed)
+    
+    for (int row = 0; row < 8; row++) {
+        if ((ctx->port_a_output & (1 << row)) == 0) {  // Row active (low)
+            // For each column, check if a key is set at keyboard_matrix[row][col]
+            for (int col = 0; col < 8; col++) {
+                // Non-zero value means key is pressed at this position
+                // The value itself indicates which bit should be cleared
+                if (ctx->keyboard_matrix[row][col] != 0) {
+                    result &= ctx->keyboard_matrix[row][col];
+                }
+            }
+        }
+    }
+    
+    // Combine with joystick 1 state (bits 0-4), default to 0xFF if not set
+    if (ctx->joystick1_state == 0) {
+        ctx->joystick1_state = 0xFF;
+    }
+    result &= ctx->joystick1_state;
+    return result;
 }
 
 void cia1_port_b_write(void *context, uint8_t data) {
@@ -316,12 +336,16 @@ void test_cia1_keyboard() {
     memset(&ctx, 0, sizeof(ctx));
     
     // Set up keyboard matrix - simulate 'A' key pressed (row 1, column 1)
-    ctx.keyboard_matrix[1][1] = 0xFE; // Bit 1 cleared = key pressed
+    ctx.keyboard_matrix[1][1] = 0xFD; // Bit 1 cleared = key pressed
     
     cia_init(&cia1, CIA1_PRA);
     cia_set_io_callbacks(&cia1, &ctx,
                       cia1_port_a_read, cia1_port_a_write,
                       cia1_port_b_read, cia1_port_b_write);
+    
+    // Configure Port A as output (rows), Port B as input (columns)
+    cia_write(&cia1, CIA1_DDRA, 0xFF);  // Port A all outputs (row select)
+    cia_write(&cia1, CIA1_DDRB, 0x00);  // Port B all inputs (column read)
     
     // Activate row 1 (active low)
     cia_write(&cia1, CIA1_PRA, 0xFD); // Clear bit 1
@@ -332,7 +356,7 @@ void test_cia1_keyboard() {
     assert((result & 0x02) == 0); // Column 1 should show key pressed
     
     // Test multiple keys
-    ctx.keyboard_matrix[1][2] = 0xFD; // Another key in same row
+    ctx.keyboard_matrix[1][2] = 0xFB; // Another key in same row, bit 2 cleared
     cia_write(&cia1, CIA1_PRA, 0xFC);
     ctx.port_a_output = 0xFC;
     
