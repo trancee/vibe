@@ -251,8 +251,11 @@ u8 cia_read(C64Cia *cia, u8 reg) {
             return (cia->timer_b >> 8) & 0xFF;
         
         case CIA_TOD_10:
-            cia->tod_latched = false;
-            return cia->tod_latched ? cia->tod_latch_10ths : cia->tod_10ths;
+            {
+                u8 result = cia->tod_latched ? cia->tod_latch_10ths : cia->tod_10ths;
+                cia->tod_latched = false;  // Unlatch after reading 10ths
+                return result;
+            }
         
         case CIA_TOD_S:
             return cia->tod_latched ? cia->tod_latch_sec : cia->tod_sec;
