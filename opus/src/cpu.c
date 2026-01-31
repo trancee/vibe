@@ -59,6 +59,7 @@ void cpu_init(C64Cpu *cpu, C64System *sys)
     cpu->SP = 0xFD;
     cpu->port_dir = 0x2F;
     cpu->port_data = 0x37;
+    cpu->mode = CPU_MODE_6510; // Default: enable 6510 I/O port
 }
 
 void cpu_reset(C64Cpu *cpu)
@@ -88,46 +89,58 @@ void cpu_reset(C64Cpu *cpu)
 
 static u8 cpu_read(C64Cpu *cpu, u16 addr)
 {
-    if (addr == 0x0000)
+    // 6510 I/O port handling (only when enabled)
+    if (cpu->mode == CPU_MODE_6510)
     {
-        if (cpu->sys->debug)
-            printf("CPU #$%04X -> $%02X\n", addr, cpu->port_dir);
-        return cpu->port_dir;
-    }
-    if (addr == 0x0001)
-    {
-        u8 output_bits = cpu->port_dir;
-        u8 input_bits = ~cpu->port_dir;
-        u8 result = 0;
-        result |= (cpu->port_data & output_bits);
-        u8 external = 0x1F;
-        if (!(cpu->port_dir & 0x20))
-            external &= ~0x20;
-        external |= (cpu->cpu_port_floating & 0xC0);
-        result |= (external & input_bits);
-        if (cpu->sys->debug)
-            printf("CPU #$%04X -> $%02X\n", addr, result);
-        return result;
+        if (addr == 0x0000)
+        {
+            if (cpu->sys->debug)
+                printf("CPU #$%04X -> $%02X\n", addr, cpu->port_dir);
+            return cpu->port_dir;
+        }
+        if (addr == 0x0001)
+        {
+            u8 output_bits = cpu->port_dir;
+            u8 input_bits = ~cpu->port_dir;
+            u8 result = 0;
+            result |= (cpu->port_data & output_bits);
+            u8 external = 0x1F;
+            if (!(cpu->port_dir & 0x20))
+                external &= ~0x20;
+            external |= (cpu->cpu_port_floating & 0xC0);
+            result |= (external & input_bits);
+            if (cpu->sys->debug)
+                printf("CPU #$%04X -> $%02X\n", addr, result);
+            return result;
+        }
     }
     return mem_read(&cpu->sys->mem, addr);
 }
 
 static void cpu_write(C64Cpu *cpu, u16 addr, u8 value)
 {
-    if (addr == 0x0000)
+    // 6510 I/O port handling (only when enabled)
+    if (cpu->mode == CPU_MODE_6510)
     {
-        if (cpu->sys->debug)
-            printf("CPU #$%04X <- $%02X\n", addr, value);
-        cpu->port_dir = value;
-        return;
-    }
-    if (addr == 0x0001)
-    {
-        if (cpu->sys->debug)
-            printf("CPU #$%04X <- $%02X\n", addr, value);
-        cpu->port_data = value;
-        cpu->cpu_port_floating = value;
-        return;
+        if (addr == 0x0000)
+        {
+            if (cpu->sys->debug)
+                printf("CPU #$%04X <- $%02X\n", addr, value);
+            cpu->port_dir = value;
+            // Also write to underlying RAM (RAM exists at $0000 on C64)
+            mem_write(&cpu->sys->mem, addr, value);
+            return;
+        }
+        if (addr == 0x0001)
+        {
+            if (cpu->sys->debug)
+                printf("CPU #$%04X <- $%02X\n", addr, value);
+            cpu->port_data = value;
+            cpu->cpu_port_floating = value;
+            // Also write to underlying RAM (RAM exists at $0001 on C64)
+            mem_write(&cpu->sys->mem, addr, value);
+            return;
+        }
     }
     mem_write(&cpu->sys->mem, addr, value);
 }
@@ -618,30 +631,313 @@ static int op_20(C64Cpu *cpu)
 // NOP
 static int op_EA(C64Cpu *cpu) { cpu_read(cpu, cpu->PC); return 2; }
 
-// Unknown opcode
-static int op_XX(C64Cpu *cpu) { fprintf(stderr, "Unknown opcode at $%04X\n", cpu->PC - 1); return 2; }
+// ============================================================================
+// Illegal/Undocumented Opcodes
+// ============================================================================
+
+// JAM/HLT - Halt the CPU (requires reset to recover)
+static int op_JAM(C64Cpu *cpu) { 
+    cpu->PC--; // Stay at this instruction forever
+    return 2; 
+}
+
+// NOP variants - implied (1 byte, 2 cycles)
+static int op_NOP_impl(C64Cpu *cpu) { cpu_read(cpu, cpu->PC); return 2; }
+
+// NOP variants - immediate (2 bytes, 2 cycles) - also known as SKB/DOP
+static int op_NOP_imm(C64Cpu *cpu) { addr_immediate(cpu); return 2; }
+
+// NOP variants - zeropage (2 bytes, 3 cycles)
+static int op_NOP_zp(C64Cpu *cpu) { addr_zeropage(cpu); return 3; }
+
+// NOP variants - zeropage,x (2 bytes, 4 cycles)
+static int op_NOP_zpx(C64Cpu *cpu) { addr_zeropage_x(cpu); return 4; }
+
+// NOP variants - absolute (3 bytes, 4 cycles) - also known as SKW/TOP
+static int op_NOP_abs(C64Cpu *cpu) { addr_absolute(cpu); return 4; }
+
+// NOP variants - absolute,x (3 bytes, 4+ cycles)
+static int op_NOP_abx(C64Cpu *cpu) { addr_absolute_x(cpu, true); return 4; }
+
+// SLO (ASO) - ASL memory then ORA with A
+static int op_03(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_07(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 5; }
+static int op_0F(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_13(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_17(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_1B(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 7; }
+static int op_1F(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a); v = op_asl(cpu, v); cpu_write(cpu, a, v); cpu->A |= v; cpu_update_nz(cpu, cpu->A); return 7; }
+
+// RLA - ROL memory then AND with A
+static int op_23(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_27(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 5; }
+static int op_2F(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_33(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_37(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_3B(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 7; }
+static int op_3F(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a); v = op_rol(cpu, v); cpu_write(cpu, a, v); cpu->A &= v; cpu_update_nz(cpu, cpu->A); return 7; }
+
+// SRE (LSE) - LSR memory then EOR with A
+static int op_43(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_47(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 5; }
+static int op_4F(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_53(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 8; }
+static int op_57(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_5B(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 7; }
+static int op_5F(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a); v = op_lsr(cpu, v); cpu_write(cpu, a, v); cpu->A ^= v; cpu_update_nz(cpu, cpu->A); return 7; }
+
+// RRA - ROR memory then ADC with A
+static int op_63(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 8; }
+static int op_67(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 5; }
+static int op_6F(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 6; }
+static int op_73(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 8; }
+static int op_77(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 6; }
+static int op_7B(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 7; }
+static int op_7F(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a); v = op_ror(cpu, v); cpu_write(cpu, a, v); op_adc(cpu, v); return 7; }
+
+// SAX (AXS) - Store A & X to memory (no flags affected)
+static int op_83(C64Cpu *cpu) { cpu_write(cpu, addr_indirect_x(cpu), cpu->A & cpu->X); return 6; }
+static int op_87(C64Cpu *cpu) { cpu_write(cpu, addr_zeropage(cpu), cpu->A & cpu->X); return 3; }
+static int op_8F(C64Cpu *cpu) { cpu_write(cpu, addr_absolute(cpu), cpu->A & cpu->X); return 4; }
+static int op_97(C64Cpu *cpu) { cpu_write(cpu, addr_zeropage_y(cpu), cpu->A & cpu->X); return 4; }
+
+// LAX - Load A and X with memory
+static int op_A3(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_indirect_x(cpu)); cpu_update_nz(cpu, cpu->A); return 6; }
+static int op_A7(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_zeropage(cpu)); cpu_update_nz(cpu, cpu->A); return 3; }
+static int op_AF(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_absolute(cpu)); cpu_update_nz(cpu, cpu->A); return 4; }
+static int op_B3(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_indirect_y(cpu, true)); cpu_update_nz(cpu, cpu->A); return 5; }
+static int op_B7(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_zeropage_y(cpu)); cpu_update_nz(cpu, cpu->A); return 4; }
+static int op_BF(C64Cpu *cpu) { cpu->A = cpu->X = cpu_read(cpu, addr_absolute_y(cpu, true)); cpu_update_nz(cpu, cpu->A); return 4; }
+
+// DCP (DCM) - DEC memory then CMP with A
+static int op_C3(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 8; }
+static int op_C7(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 5; }
+static int op_CF(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 6; }
+static int op_D3(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 8; }
+static int op_D7(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 6; }
+static int op_DB(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 7; }
+static int op_DF(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a) - 1; cpu_write(cpu, a, v); op_cmp(cpu, cpu->A, v); return 7; }
+
+// ISC (ISB/INS) - INC memory then SBC with A
+static int op_E3(C64Cpu *cpu) { u16 a = addr_indirect_x(cpu); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 8; }
+static int op_E7(C64Cpu *cpu) { u16 a = addr_zeropage(cpu); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 5; }
+static int op_EF(C64Cpu *cpu) { u16 a = addr_absolute(cpu); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 6; }
+static int op_F3(C64Cpu *cpu) { u16 a = addr_indirect_y(cpu, false); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 8; }
+static int op_F7(C64Cpu *cpu) { u16 a = addr_zeropage_x(cpu); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 6; }
+static int op_FB(C64Cpu *cpu) { u16 a = addr_absolute_y(cpu, false); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 7; }
+static int op_FF(C64Cpu *cpu) { u16 a = addr_absolute_x(cpu, false); u8 v = cpu_read(cpu, a) + 1; cpu_write(cpu, a, v); op_sbc(cpu, v); return 7; }
+
+// ANC (AAC) - AND immediate, then copy N to C
+static int op_0B(C64Cpu *cpu) { cpu->A &= cpu_read(cpu, addr_immediate(cpu)); cpu_update_nz(cpu, cpu->A); cpu_set_flag(cpu, FLAG_C, cpu->P & FLAG_N); return 2; }
+static int op_2B(C64Cpu *cpu) { cpu->A &= cpu_read(cpu, addr_immediate(cpu)); cpu_update_nz(cpu, cpu->A); cpu_set_flag(cpu, FLAG_C, cpu->P & FLAG_N); return 2; }
+
+// ALR (ASR) - AND immediate then LSR A
+static int op_4B(C64Cpu *cpu) { cpu->A &= cpu_read(cpu, addr_immediate(cpu)); cpu->A = op_lsr(cpu, cpu->A); return 2; }
+
+// ARR - AND immediate then ROR A with special flag handling
+static int op_6B(C64Cpu *cpu) {
+    u8 imm = cpu_read(cpu, addr_immediate(cpu));
+    cpu->A &= imm;
+    
+    if (cpu->P & FLAG_D) {
+        // Decimal mode - complex behavior
+        u8 t = cpu->A;
+        u8 ah = t >> 4;
+        u8 al = t & 0x0F;
+        
+        // Do ROR
+        bool old_carry = cpu->P & FLAG_C;
+        cpu->A = (cpu->A >> 1) | (old_carry ? 0x80 : 0);
+        
+        // Set N and Z based on result
+        cpu_set_flag(cpu, FLAG_N, old_carry);
+        cpu_set_flag(cpu, FLAG_Z, cpu->A == 0);
+        cpu_set_flag(cpu, FLAG_V, (t ^ cpu->A) & 0x40);
+        
+        // BCD fixup for low nibble
+        if ((al + (al & 1)) > 5) {
+            cpu->A = (cpu->A & 0xF0) | ((cpu->A + 6) & 0x0F);
+        }
+        
+        // BCD fixup for high nibble and set carry
+        if ((ah + (ah & 1)) > 5) {
+            cpu_set_flag(cpu, FLAG_C, true);
+            cpu->A = (cpu->A + 0x60) & 0xFF;
+        } else {
+            cpu_set_flag(cpu, FLAG_C, false);
+        }
+    } else {
+        // Binary mode
+        bool old_carry = cpu->P & FLAG_C;
+        cpu->A = (cpu->A >> 1) | (old_carry ? 0x80 : 0);
+        cpu_update_nz(cpu, cpu->A);
+        // C flag is bit 6 of result, V flag is bit 6 XOR bit 5
+        cpu_set_flag(cpu, FLAG_C, cpu->A & 0x40);
+        cpu_set_flag(cpu, FLAG_V, ((cpu->A >> 6) ^ (cpu->A >> 5)) & 1);
+    }
+    return 2;
+}
+
+// XAA (ANE) - TXA then AND immediate (unstable - uses magic constant)
+static int op_8B(C64Cpu *cpu) {
+    // Most common behavior: A = (A | $EE) & X & imm
+    // We use $EE as the magic constant for compatibility
+    cpu->A = (cpu->A | 0xEE) & cpu->X & cpu_read(cpu, addr_immediate(cpu));
+    cpu_update_nz(cpu, cpu->A);
+    return 2;
+}
+
+// LAX immediate (LXA/OAL/ATX) - unstable
+static int op_AB(C64Cpu *cpu) {
+    // Most common: A = X = (A | $EE) & imm
+    cpu->A = (cpu->A | 0xEE) & cpu_read(cpu, addr_immediate(cpu));
+    cpu->X = cpu->A;
+    cpu_update_nz(cpu, cpu->A);
+    return 2;
+}
+
+// SBX (AXS/SAX) - (A & X) - immediate -> X, sets flags like CMP
+static int op_CB(C64Cpu *cpu) {
+    u8 imm = cpu_read(cpu, addr_immediate(cpu));
+    u8 ax = cpu->A & cpu->X;
+    u16 result = ax - imm;
+    cpu->X = result & 0xFF;
+    cpu_set_flag(cpu, FLAG_C, ax >= imm);
+    cpu_update_nz(cpu, cpu->X);
+    return 2;
+}
+
+// SBC immediate (USBC) - identical to regular SBC #imm
+static int op_EB(C64Cpu *cpu) { op_sbc(cpu, cpu_read(cpu, addr_immediate(cpu))); return 2; }
+
+// SHA (AXA/AHX) - Store A & X & (addr_hi + 1)
+static int op_93(C64Cpu *cpu) {
+    u8 ptr = cpu_read(cpu, cpu->PC++);
+    u16 lo = cpu_read(cpu, ptr);
+    u16 hi = cpu_read(cpu, (ptr + 1) & 0xFF);
+    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u8 val = cpu->A & cpu->X & ((hi + 1) & 0xFF);
+    // On page crossing, high byte of address gets corrupted
+    if ((addr & 0xFF00) != (hi << 8)) {
+        addr = (addr & 0x00FF) | (val << 8);
+    }
+    cpu_write(cpu, addr, val);
+    return 6;
+}
+
+static int op_9F(C64Cpu *cpu) {
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u8 val = cpu->A & cpu->X & ((hi + 1) & 0xFF);
+    if ((addr & 0xFF00) != (hi << 8)) {
+        addr = (addr & 0x00FF) | (val << 8);
+    }
+    cpu_write(cpu, addr, val);
+    return 5;
+}
+
+// TAS (SHS/XAS) - S = A & X, then store S & (addr_hi + 1)
+static int op_9B(C64Cpu *cpu) {
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    cpu->SP = cpu->A & cpu->X;
+    u8 val = cpu->SP & ((hi + 1) & 0xFF);
+    if ((addr & 0xFF00) != (hi << 8)) {
+        addr = (addr & 0x00FF) | (val << 8);
+    }
+    cpu_write(cpu, addr, val);
+    return 5;
+}
+
+// SHY (SAY/SYA) - Store Y & (addr_hi + 1)
+static int op_9C(C64Cpu *cpu) {
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 addr = (lo | (hi << 8)) + cpu->X;
+    u8 val = cpu->Y & ((hi + 1) & 0xFF);
+    if ((addr & 0xFF00) != (hi << 8)) {
+        addr = (addr & 0x00FF) | (val << 8);
+    }
+    cpu_write(cpu, addr, val);
+    return 5;
+}
+
+// SHX (SXA/XAS) - Store X & (addr_hi + 1)
+static int op_9E(C64Cpu *cpu) {
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u8 val = cpu->X & ((hi + 1) & 0xFF);
+    if ((addr & 0xFF00) != (hi << 8)) {
+        addr = (addr & 0x00FF) | (val << 8);
+    }
+    cpu_write(cpu, addr, val);
+    return 5;
+}
+
+// LAS (LAR) - AND memory with SP, store to A, X, and SP
+static int op_BB(C64Cpu *cpu) {
+    u8 v = cpu_read(cpu, addr_absolute_y(cpu, true));
+    cpu->A = cpu->X = cpu->SP = v & cpu->SP;
+    cpu_update_nz(cpu, cpu->A);
+    return 4;
+}
 
 // ============================================================================
 // Opcode Lookup Table
 // ============================================================================
 
 static const OpcodeHandler opcode_table[256] = {
-    op_00, op_01, op_XX, op_XX, op_XX, op_05, op_06, op_XX, op_08, op_09, op_0A, op_XX, op_XX, op_0D, op_0E, op_XX,
-    op_10, op_11, op_XX, op_XX, op_XX, op_15, op_16, op_XX, op_18, op_19, op_XX, op_XX, op_XX, op_1D, op_1E, op_XX,
-    op_20, op_21, op_XX, op_XX, op_24, op_25, op_26, op_XX, op_28, op_29, op_2A, op_XX, op_2C, op_2D, op_2E, op_XX,
-    op_30, op_31, op_XX, op_XX, op_XX, op_35, op_36, op_XX, op_38, op_39, op_XX, op_XX, op_XX, op_3D, op_3E, op_XX,
-    op_40, op_41, op_XX, op_XX, op_XX, op_45, op_46, op_XX, op_48, op_49, op_4A, op_XX, op_4C, op_4D, op_4E, op_XX,
-    op_50, op_51, op_XX, op_XX, op_XX, op_55, op_56, op_XX, op_58, op_59, op_XX, op_XX, op_XX, op_5D, op_5E, op_XX,
-    op_60, op_61, op_XX, op_XX, op_XX, op_65, op_66, op_XX, op_68, op_69, op_6A, op_XX, op_6C, op_6D, op_6E, op_XX,
-    op_70, op_71, op_XX, op_XX, op_XX, op_75, op_76, op_XX, op_78, op_79, op_XX, op_XX, op_XX, op_7D, op_7E, op_XX,
-    op_XX, op_81, op_XX, op_XX, op_84, op_85, op_86, op_XX, op_88, op_XX, op_8A, op_XX, op_8C, op_8D, op_8E, op_XX,
-    op_90, op_91, op_XX, op_XX, op_94, op_95, op_96, op_XX, op_98, op_99, op_9A, op_XX, op_XX, op_9D, op_XX, op_XX,
-    op_A0, op_A1, op_A2, op_XX, op_A4, op_A5, op_A6, op_XX, op_A8, op_A9, op_AA, op_XX, op_AC, op_AD, op_AE, op_XX,
-    op_B0, op_B1, op_XX, op_XX, op_B4, op_B5, op_B6, op_XX, op_B8, op_B9, op_BA, op_XX, op_BC, op_BD, op_BE, op_XX,
-    op_C0, op_C1, op_XX, op_XX, op_C4, op_C5, op_C6, op_XX, op_C8, op_C9, op_CA, op_XX, op_CC, op_CD, op_CE, op_XX,
-    op_D0, op_D1, op_XX, op_XX, op_XX, op_D5, op_D6, op_XX, op_D8, op_D9, op_XX, op_XX, op_XX, op_DD, op_DE, op_XX,
-    op_E0, op_E1, op_XX, op_XX, op_E4, op_E5, op_E6, op_XX, op_E8, op_E9, op_EA, op_XX, op_EC, op_ED, op_EE, op_XX,
-    op_F0, op_F1, op_XX, op_XX, op_XX, op_F5, op_F6, op_XX, op_F8, op_F9, op_XX, op_XX, op_XX, op_FD, op_FE, op_XX,
+    // 0x00-0x0F
+    op_00,      op_01,      op_JAM,     op_03,      op_NOP_zp,  op_05,      op_06,      op_07,
+    op_08,      op_09,      op_0A,      op_0B,      op_NOP_abs, op_0D,      op_0E,      op_0F,
+    // 0x10-0x1F
+    op_10,      op_11,      op_JAM,     op_13,      op_NOP_zpx, op_15,      op_16,      op_17,
+    op_18,      op_19,      op_NOP_impl,op_1B,      op_NOP_abx, op_1D,      op_1E,      op_1F,
+    // 0x20-0x2F
+    op_20,      op_21,      op_JAM,     op_23,      op_24,      op_25,      op_26,      op_27,
+    op_28,      op_29,      op_2A,      op_2B,      op_2C,      op_2D,      op_2E,      op_2F,
+    // 0x30-0x3F
+    op_30,      op_31,      op_JAM,     op_33,      op_NOP_zpx, op_35,      op_36,      op_37,
+    op_38,      op_39,      op_NOP_impl,op_3B,      op_NOP_abx, op_3D,      op_3E,      op_3F,
+    // 0x40-0x4F
+    op_40,      op_41,      op_JAM,     op_43,      op_NOP_zp,  op_45,      op_46,      op_47,
+    op_48,      op_49,      op_4A,      op_4B,      op_4C,      op_4D,      op_4E,      op_4F,
+    // 0x50-0x5F
+    op_50,      op_51,      op_JAM,     op_53,      op_NOP_zpx, op_55,      op_56,      op_57,
+    op_58,      op_59,      op_NOP_impl,op_5B,      op_NOP_abx, op_5D,      op_5E,      op_5F,
+    // 0x60-0x6F
+    op_60,      op_61,      op_JAM,     op_63,      op_NOP_zp,  op_65,      op_66,      op_67,
+    op_68,      op_69,      op_6A,      op_6B,      op_6C,      op_6D,      op_6E,      op_6F,
+    // 0x70-0x7F
+    op_70,      op_71,      op_JAM,     op_73,      op_NOP_zpx, op_75,      op_76,      op_77,
+    op_78,      op_79,      op_NOP_impl,op_7B,      op_NOP_abx, op_7D,      op_7E,      op_7F,
+    // 0x80-0x8F
+    op_NOP_imm, op_81,      op_NOP_imm, op_83,      op_84,      op_85,      op_86,      op_87,
+    op_88,      op_NOP_imm, op_8A,      op_8B,      op_8C,      op_8D,      op_8E,      op_8F,
+    // 0x90-0x9F
+    op_90,      op_91,      op_JAM,     op_93,      op_94,      op_95,      op_96,      op_97,
+    op_98,      op_99,      op_9A,      op_9B,      op_9C,      op_9D,      op_9E,      op_9F,
+    // 0xA0-0xAF
+    op_A0,      op_A1,      op_A2,      op_A3,      op_A4,      op_A5,      op_A6,      op_A7,
+    op_A8,      op_A9,      op_AA,      op_AB,      op_AC,      op_AD,      op_AE,      op_AF,
+    // 0xB0-0xBF
+    op_B0,      op_B1,      op_JAM,     op_B3,      op_B4,      op_B5,      op_B6,      op_B7,
+    op_B8,      op_B9,      op_BA,      op_BB,      op_BC,      op_BD,      op_BE,      op_BF,
+    // 0xC0-0xCF
+    op_C0,      op_C1,      op_NOP_imm, op_C3,      op_C4,      op_C5,      op_C6,      op_C7,
+    op_C8,      op_C9,      op_CA,      op_CB,      op_CC,      op_CD,      op_CE,      op_CF,
+    // 0xD0-0xDF
+    op_D0,      op_D1,      op_JAM,     op_D3,      op_NOP_zpx, op_D5,      op_D6,      op_D7,
+    op_D8,      op_D9,      op_NOP_impl,op_DB,      op_NOP_abx, op_DD,      op_DE,      op_DF,
+    // 0xE0-0xEF
+    op_E0,      op_E1,      op_NOP_imm, op_E3,      op_E4,      op_E5,      op_E6,      op_E7,
+    op_E8,      op_E9,      op_EA,      op_EB,      op_EC,      op_ED,      op_EE,      op_EF,
+    // 0xF0-0xFF
+    op_F0,      op_F1,      op_JAM,     op_F3,      op_NOP_zpx, op_F5,      op_F6,      op_F7,
+    op_F8,      op_F9,      op_NOP_impl,op_FB,      op_NOP_abx, op_FD,      op_FE,      op_FF,
 };
 
 // ============================================================================

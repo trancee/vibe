@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     // Cleanup
     c64_destroy(&sys);
 
-    printf("\nEmulation ended after %u frames (%lu cycles)\n",
+    printf("\nEmulation ended after %u frames (%llu cycles)\n",
            frame_count, sys.cycle_count);
 
     return 0;

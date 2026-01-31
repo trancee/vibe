@@ -20,6 +20,11 @@ typedef struct C64System C64System;
 #define FLAG_V 0x40 // Overflow
 #define FLAG_N 0x80 // Negative
 
+typedef enum {
+    CPU_MODE_6502,
+    CPU_MODE_6510
+} cpu_mode_t;
+
 // CPU state structure
 typedef struct
 {
@@ -31,6 +36,8 @@ typedef struct
     u8 P;   // Status Register
     u16 PC; // Program Counter
 
+    cpu_mode_t mode; // CPU mode (6502 or 6510)
+    
     // 6510 I/O port
     u8 port_dir;          // $00 - Data direction register
     u8 port_data;         // $01 - Data register

@@ -770,7 +770,7 @@ void run_lorenz_tests(void) {
 }
 
 #ifdef TEST_LORENZ
-TestContext g_test_ctx = {0, 0, 0, NULL};
+TestContext g_test_ctx = {0, 0, 0, 0, NULL};
 
 int main()
 {

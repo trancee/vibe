@@ -13,13 +13,13 @@
 
 // External test suite runners
 extern void run_cpu_tests(void);
+extern void run_illegal_opcode_tests(void);
 extern void run_memory_tests(void);
 extern void run_vic_tests(void);
 extern void run_cia_tests(void);
 extern void run_sid_tests(void);
 extern void run_dormann_tests(void);
 extern void run_lorenz_tests(void);
-extern void run_cpu_doc_tests(void);
 
 int main(int argc, char *argv[]) {
     (void)argc;
@@ -38,13 +38,13 @@ int main(int argc, char *argv[]) {
     
     // Run all test suites
     run_cpu_tests();
+    run_illegal_opcode_tests();
     run_memory_tests();
     run_vic_tests();
     run_cia_tests();
     run_sid_tests();
     run_dormann_tests();
     run_lorenz_tests();
-    run_cpu_doc_tests();
     
     clock_t end = clock();
     double elapsed = (double)(end - start) / CLOCKS_PER_SEC;

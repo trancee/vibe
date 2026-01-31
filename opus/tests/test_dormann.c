@@ -367,6 +367,10 @@ void run_dormann_tests(void)
     vic_init(&sys.vic, &sys);
     cia_init(&sys.cia1, 1, &sys);
     cia_init(&sys.cia2, 2, &sys);
+    
+    // Disable 6510 I/O port for pure 6502 testing
+    // (Dormann tests use $00/$01 as regular RAM variables)
+    sys.cpu.mode = CPU_MODE_6502;
 
     RUN_TEST(dormann_functional);
     RUN_TEST(dormann_decimal);

@@ -1433,3 +1433,820 @@ void run_cpu_tests(void) {
     RUN_TEST(irq_when_enabled);
     RUN_TEST(nmi_edge_triggered);
 }
+
+// ============================================================================
+// Illegal Opcode Tests
+// ============================================================================
+
+// --- SLO (ASL + ORA) ---
+TEST(slo_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x81);  // Value to shift
+    sys.cpu.A = 0x01;
+    u8 code[] = {0x07, 0x42};  // SLO $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // $81 << 1 = $02, carry set from bit 7
+    // A = $01 | $02 = $03
+    ASSERT_EQ(0x02, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0x03, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);  // Bit 7 was set
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+TEST(slo_absolute) {
+    setup();
+    mem_write_raw(&sys.mem, 0x1234, 0x40);
+    sys.cpu.A = 0x0F;
+    u8 code[] = {0x0F, 0x34, 0x12};  // SLO $1234
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // $40 << 1 = $80
+    // A = $0F | $80 = $8F
+    ASSERT_EQ(0x80, mem_read_raw(&sys.mem, 0x1234));
+    ASSERT_EQ(0x8F, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_N);
+    ASSERT_EQ(6, cycles);
+    PASS();
+}
+
+// --- RLA (ROL + AND) ---
+TEST(rla_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x80);
+    sys.cpu.A = 0xFF;
+    sys.cpu.P |= FLAG_C;  // Carry set
+    u8 code[] = {0x27, 0x42};  // RLA $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // ROL: $80 with C=1 -> $01, C becomes 1
+    // AND: A = $FF & $01 = $01
+    ASSERT_EQ(0x01, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0x01, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+TEST(rla_absolute_x) {
+    setup();
+    sys.cpu.X = 0x10;
+    mem_write_raw(&sys.mem, 0x1244, 0x55);
+    sys.cpu.A = 0xF0;
+    sys.cpu.P &= ~FLAG_C;  // Carry clear
+    u8 code[] = {0x3F, 0x34, 0x12};  // RLA $1234,X
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // ROL: $55 with C=0 -> $AA, C becomes 0
+    // AND: A = $F0 & $AA = $A0
+    ASSERT_EQ(0xAA, mem_read_raw(&sys.mem, 0x1244));
+    ASSERT_EQ(0xA0, sys.cpu.A);
+    ASSERT_EQ(7, cycles);
+    PASS();
+}
+
+// --- SRE (LSR + EOR) ---
+TEST(sre_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x81);
+    sys.cpu.A = 0xFF;
+    u8 code[] = {0x47, 0x42};  // SRE $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // LSR: $81 >> 1 = $40, C becomes 1
+    // EOR: A = $FF ^ $40 = $BF
+    ASSERT_EQ(0x40, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0xBF, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+// --- RRA (ROR + ADC) ---
+TEST(rra_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x02);
+    sys.cpu.A = 0x10;
+    sys.cpu.P |= FLAG_C;  // Carry set
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0x67, 0x42};  // RRA $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // ROR: $02 with C=1 -> $81, C becomes 0
+    // ADC: A = $10 + $81 + 0 = $91
+    ASSERT_EQ(0x81, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0x91, sys.cpu.A);
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+TEST(rra_decimal_mode) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x10);
+    sys.cpu.A = 0x05;
+    sys.cpu.P |= FLAG_C;  // Carry set
+    sys.cpu.P |= FLAG_D;  // Decimal mode
+    u8 code[] = {0x67, 0x42};  // RRA $42
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // ROR: $10 with C=1 -> $88, C becomes 0
+    // ADC decimal: $05 + $88 + 0 (BCD mode - result varies)
+    // Just verify it executes without error
+    PASS();
+}
+
+// --- SAX (Store A & X) ---
+TEST(sax_zeropage) {
+    setup();
+    sys.cpu.A = 0x55;
+    sys.cpu.X = 0x0F;
+    u8 code[] = {0x87, 0x42};  // SAX $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Store A & X = $55 & $0F = $05
+    ASSERT_EQ(0x05, mem_read_raw(&sys.mem, 0x42));
+    // A and X unchanged
+    ASSERT_EQ(0x55, sys.cpu.A);
+    ASSERT_EQ(0x0F, sys.cpu.X);
+    ASSERT_EQ(3, cycles);
+    PASS();
+}
+
+TEST(sax_absolute) {
+    setup();
+    sys.cpu.A = 0xF0;
+    sys.cpu.X = 0x3C;
+    u8 code[] = {0x8F, 0x34, 0x12};  // SAX $1234
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Store A & X = $F0 & $3C = $30
+    ASSERT_EQ(0x30, mem_read_raw(&sys.mem, 0x1234));
+    ASSERT_EQ(4, cycles);
+    PASS();
+}
+
+// --- LAX (Load A and X) ---
+TEST(lax_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x77);
+    u8 code[] = {0xA7, 0x42};  // LAX $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(0x77, sys.cpu.A);
+    ASSERT_EQ(0x77, sys.cpu.X);
+    ASSERT_EQ(3, cycles);
+    PASS();
+}
+
+TEST(lax_absolute_y) {
+    setup();
+    sys.cpu.Y = 0x10;
+    mem_write_raw(&sys.mem, 0x1244, 0xAB);
+    u8 code[] = {0xBF, 0x34, 0x12};  // LAX $1234,Y
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(0xAB, sys.cpu.A);
+    ASSERT_EQ(0xAB, sys.cpu.X);
+    ASSERT_EQ(4, cycles);  // No page cross
+    PASS();
+}
+
+TEST(lax_flags) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x00);
+    u8 code[] = {0xA7, 0x42};  // LAX $42
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    ASSERT_TRUE(sys.cpu.P & FLAG_Z);
+    ASSERT_FALSE(sys.cpu.P & FLAG_N);
+    PASS();
+}
+
+// --- DCP (DEC + CMP) ---
+TEST(dcp_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x10);
+    sys.cpu.A = 0x0F;
+    u8 code[] = {0xC7, 0x42};  // DCP $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // DEC: $10 - 1 = $0F
+    // CMP: A ($0F) vs $0F -> Z=1, C=1
+    ASSERT_EQ(0x0F, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_TRUE(sys.cpu.P & FLAG_Z);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+TEST(dcp_wrap_and_compare) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x00);
+    sys.cpu.A = 0xFF;
+    u8 code[] = {0xC7, 0x42};  // DCP $42
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // DEC: $00 - 1 = $FF (wrap)
+    // CMP: A ($FF) vs $FF -> Z=1, C=1
+    ASSERT_EQ(0xFF, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_TRUE(sys.cpu.P & FLAG_Z);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    PASS();
+}
+
+// --- ISC (INC + SBC) ---
+TEST(isc_zeropage) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0x0F);
+    sys.cpu.A = 0x20;
+    sys.cpu.P |= FLAG_C;  // No borrow
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0xE7, 0x42};  // ISC $42
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // INC: $0F + 1 = $10
+    // SBC: A = $20 - $10 - 0 = $10
+    ASSERT_EQ(0x10, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0x10, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);  // No borrow
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+TEST(isc_wrap_and_subtract) {
+    setup();
+    mem_write_raw(&sys.mem, 0x42, 0xFF);
+    sys.cpu.A = 0x05;
+    sys.cpu.P |= FLAG_C;  // No borrow
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0xE7, 0x42};  // ISC $42
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // INC: $FF + 1 = $00 (wrap)
+    // SBC: A = $05 - $00 - 0 = $05
+    ASSERT_EQ(0x00, mem_read_raw(&sys.mem, 0x42));
+    ASSERT_EQ(0x05, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    PASS();
+}
+
+// --- ANC (AND + copy N to C) ---
+TEST(anc_basic) {
+    setup();
+    sys.cpu.A = 0xFF;
+    u8 code[] = {0x0B, 0x80};  // ANC #$80
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $80 = $80
+    // C = N = 1
+    ASSERT_EQ(0x80, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_N);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(anc_clear_carry) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.P |= FLAG_C;  // Set carry initially
+    u8 code[] = {0x2B, 0x7F};  // ANC #$7F
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $7F = $7F
+    // N=0, so C=0
+    ASSERT_EQ(0x7F, sys.cpu.A);
+    ASSERT_FALSE(sys.cpu.P & FLAG_N);
+    ASSERT_FALSE(sys.cpu.P & FLAG_C);
+    PASS();
+}
+
+// --- ALR (AND + LSR) ---
+TEST(alr_basic) {
+    setup();
+    sys.cpu.A = 0xFF;
+    u8 code[] = {0x4B, 0xFE};  // ALR #$FE
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $FE = $FE
+    // LSR: A = $FE >> 1 = $7F, C = 0
+    ASSERT_EQ(0x7F, sys.cpu.A);
+    ASSERT_FALSE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(alr_carry_out) {
+    setup();
+    sys.cpu.A = 0xFF;
+    u8 code[] = {0x4B, 0xFF};  // ALR #$FF
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $FF = $FF
+    // LSR: A = $FF >> 1 = $7F, C = 1
+    ASSERT_EQ(0x7F, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    PASS();
+}
+
+// --- ARR (AND + ROR with special flag handling) ---
+TEST(arr_binary_mode) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.P |= FLAG_C;  // Carry set
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0x6B, 0xFE};  // ARR #$FE
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $FE = $FE
+    // ROR: A = ($FE >> 1) | $80 = $FF
+    // C = bit 6 of result = 1
+    // V = bit 6 XOR bit 5 = 1 XOR 1 = 0
+    ASSERT_EQ(0xFF, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_FALSE(sys.cpu.P & FLAG_V);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(arr_overflow_set) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.P &= ~FLAG_C;  // Carry clear
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0x6B, 0x40};  // ARR #$40
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // AND: A = $FF & $40 = $40
+    // ROR: A = ($40 >> 1) | $00 = $20
+    // C = bit 6 of $20 = 0
+    // V = bit 6 XOR bit 5 = 0 XOR 1 = 1
+    ASSERT_EQ(0x20, sys.cpu.A);
+    ASSERT_FALSE(sys.cpu.P & FLAG_C);
+    ASSERT_TRUE(sys.cpu.P & FLAG_V);
+    PASS();
+}
+
+// --- SBX (A & X - imm -> X) ---
+TEST(sbx_basic) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.X = 0xFF;
+    u8 code[] = {0xCB, 0x10};  // SBX #$10
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // (A & X) - imm = $FF - $10 = $EF
+    ASSERT_EQ(0xEF, sys.cpu.X);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);  // No borrow
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(sbx_with_and) {
+    setup();
+    sys.cpu.A = 0xF0;
+    sys.cpu.X = 0x0F;
+    u8 code[] = {0xCB, 0x00};  // SBX #$00
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // (A & X) - imm = ($F0 & $0F) - $00 = $00
+    ASSERT_EQ(0x00, sys.cpu.X);
+    ASSERT_TRUE(sys.cpu.P & FLAG_Z);
+    PASS();
+}
+
+TEST(sbx_borrow) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.X = 0x0F;
+    u8 code[] = {0xCB, 0x10};  // SBX #$10
+    load_code(code, sizeof(code));
+    
+    cpu_step(&sys.cpu);
+    
+    // (A & X) - imm = $0F - $10 = $FF (with borrow)
+    ASSERT_EQ(0xFF, sys.cpu.X);
+    ASSERT_FALSE(sys.cpu.P & FLAG_C);  // Borrow occurred
+    PASS();
+}
+
+// --- NOP variants ---
+TEST(nop_implied) {
+    setup();
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x1A};  // NOP (implied, illegal)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(start_pc + 1, sys.cpu.PC);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(nop_immediate) {
+    setup();
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x80, 0x42};  // NOP #$42 (2-byte NOP)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(start_pc + 2, sys.cpu.PC);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+TEST(nop_zeropage) {
+    setup();
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x04, 0x42};  // NOP $42 (2-byte NOP, zeropage)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(start_pc + 2, sys.cpu.PC);
+    ASSERT_EQ(3, cycles);
+    PASS();
+}
+
+TEST(nop_absolute) {
+    setup();
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x0C, 0x34, 0x12};  // NOP $1234 (3-byte NOP)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(start_pc + 3, sys.cpu.PC);
+    ASSERT_EQ(4, cycles);
+    PASS();
+}
+
+TEST(nop_absolute_x_page_cross) {
+    setup();
+    sys.cpu.X = 0xFF;
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x1C, 0x34, 0x12};  // NOP $1234,X (with page cross)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    ASSERT_EQ(start_pc + 3, sys.cpu.PC);
+    ASSERT_EQ(5, cycles);  // +1 for page cross
+    PASS();
+}
+
+// --- JAM/HLT ---
+TEST(jam_halts_cpu) {
+    setup();
+    u16 start_pc = sys.cpu.PC;
+    u8 code[] = {0x02};  // JAM
+    load_code(code, sizeof(code));
+    
+    // Execute multiple times - PC should stay at JAM
+    cpu_step(&sys.cpu);
+    cpu_step(&sys.cpu);
+    cpu_step(&sys.cpu);
+    
+    // PC should be at the JAM instruction
+    ASSERT_EQ(start_pc, sys.cpu.PC);
+    PASS();
+}
+
+// --- SBC immediate (illegal $EB) ---
+TEST(sbc_illegal_eb) {
+    setup();
+    sys.cpu.A = 0x50;
+    sys.cpu.P |= FLAG_C;  // No borrow
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    u8 code[] = {0xEB, 0x10};  // SBC #$10 (illegal)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Should work exactly like $E9
+    ASSERT_EQ(0x40, sys.cpu.A);
+    ASSERT_TRUE(sys.cpu.P & FLAG_C);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+// --- XAA (ANE) unstable ---
+TEST(xaa_basic) {
+    setup();
+    sys.cpu.A = 0x00;
+    sys.cpu.X = 0xFF;
+    u8 code[] = {0x8B, 0xFF};  // XAA #$FF
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // A = (A | $EE) & X & imm = ($00 | $EE) & $FF & $FF = $EE
+    ASSERT_EQ(0xEE, sys.cpu.A);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+// --- LAX immediate (LXA) unstable ---
+TEST(lax_immediate) {
+    setup();
+    sys.cpu.A = 0x00;
+    u8 code[] = {0xAB, 0xFF};  // LAX #$FF (LXA)
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // A = X = (A | $EE) & imm = ($00 | $EE) & $FF = $EE
+    ASSERT_EQ(0xEE, sys.cpu.A);
+    ASSERT_EQ(0xEE, sys.cpu.X);
+    ASSERT_EQ(2, cycles);
+    PASS();
+}
+
+// --- LAS (LAR) ---
+TEST(las_basic) {
+    setup();
+    sys.cpu.SP = 0xFF;
+    sys.cpu.Y = 0x10;
+    mem_write_raw(&sys.mem, 0x1244, 0x7F);
+    u8 code[] = {0xBB, 0x34, 0x12};  // LAS $1234,Y
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // A = X = SP = mem & SP = $7F & $FF = $7F
+    ASSERT_EQ(0x7F, sys.cpu.A);
+    ASSERT_EQ(0x7F, sys.cpu.X);
+    ASSERT_EQ(0x7F, sys.cpu.SP);
+    ASSERT_EQ(4, cycles);
+    PASS();
+}
+
+// --- SHA (AXA/AHX) ---
+TEST(sha_indirect_y) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.X = 0xFF;
+    sys.cpu.Y = 0x00;
+    // Pointer at $42 -> $1200
+    mem_write_raw(&sys.mem, 0x42, 0x00);
+    mem_write_raw(&sys.mem, 0x43, 0x12);
+    u8 code[] = {0x93, 0x42};  // SHA ($42),Y
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Store A & X & (hi+1) = $FF & $FF & $13 = $13
+    ASSERT_EQ(0x13, mem_read_raw(&sys.mem, 0x1200));
+    ASSERT_EQ(6, cycles);
+    PASS();
+}
+
+// --- TAS (SHS) ---
+TEST(tas_basic) {
+    setup();
+    sys.cpu.A = 0xFF;
+    sys.cpu.X = 0x0F;
+    sys.cpu.Y = 0x00;
+    u8 code[] = {0x9B, 0x00, 0x12};  // TAS $1200,Y
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // SP = A & X = $FF & $0F = $0F
+    // Store SP & (hi+1) = $0F & $13 = $03
+    ASSERT_EQ(0x0F, sys.cpu.SP);
+    ASSERT_EQ(0x03, mem_read_raw(&sys.mem, 0x1200));
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+// --- SHY (SAY) ---
+TEST(shy_basic) {
+    setup();
+    sys.cpu.Y = 0xFF;
+    sys.cpu.X = 0x00;
+    u8 code[] = {0x9C, 0x00, 0x12};  // SHY $1200,X
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Store Y & (hi+1) = $FF & $13 = $13
+    ASSERT_EQ(0x13, mem_read_raw(&sys.mem, 0x1200));
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+// --- SHX (SXA) ---
+TEST(shx_basic) {
+    setup();
+    sys.cpu.X = 0xFF;
+    sys.cpu.Y = 0x00;
+    u8 code[] = {0x9E, 0x00, 0x12};  // SHX $1200,Y
+    load_code(code, sizeof(code));
+    
+    int cycles = cpu_step(&sys.cpu);
+    
+    // Store X & (hi+1) = $FF & $13 = $13
+    ASSERT_EQ(0x13, mem_read_raw(&sys.mem, 0x1200));
+    ASSERT_EQ(5, cycles);
+    PASS();
+}
+
+// --- Edge Cases ---
+TEST(slo_all_addressing_modes) {
+    // Test that all SLO addressing modes work
+    setup();
+    
+    // Indirect X ($03)
+    sys.cpu.X = 0x00;
+    mem_write_raw(&sys.mem, 0x40, 0x00);
+    mem_write_raw(&sys.mem, 0x41, 0x10);
+    mem_write_raw(&sys.mem, 0x1000, 0x01);
+    sys.cpu.A = 0x00;
+    sys.cpu.PC = 0x0800;
+    u8 code1[] = {0x03, 0x40};  // SLO ($40,X)
+    load_code(code1, sizeof(code1));
+    cpu_step(&sys.cpu);
+    ASSERT_EQ(0x02, sys.cpu.A);
+    
+    // Indirect Y ($13)
+    setup();
+    sys.cpu.Y = 0x00;
+    mem_write_raw(&sys.mem, 0x40, 0x00);
+    mem_write_raw(&sys.mem, 0x41, 0x10);
+    mem_write_raw(&sys.mem, 0x1000, 0x01);
+    sys.cpu.A = 0x00;
+    u8 code2[] = {0x13, 0x40};  // SLO ($40),Y
+    load_code(code2, sizeof(code2));
+    cpu_step(&sys.cpu);
+    ASSERT_EQ(0x02, sys.cpu.A);
+    
+    // Absolute,Y ($1B)
+    setup();
+    sys.cpu.Y = 0x00;
+    mem_write_raw(&sys.mem, 0x1000, 0x01);
+    sys.cpu.A = 0x00;
+    u8 code3[] = {0x1B, 0x00, 0x10};  // SLO $1000,Y
+    load_code(code3, sizeof(code3));
+    cpu_step(&sys.cpu);
+    ASSERT_EQ(0x02, sys.cpu.A);
+    
+    PASS();
+}
+
+TEST(isc_all_addressing_modes) {
+    // Test ISC in all modes
+    setup();
+    sys.cpu.P |= FLAG_C;  // No borrow
+    sys.cpu.P &= ~FLAG_D;  // Binary mode
+    
+    // Zeropage ($E7)
+    mem_write_raw(&sys.mem, 0x42, 0x00);
+    sys.cpu.A = 0x10;
+    u8 code1[] = {0xE7, 0x42};
+    load_code(code1, sizeof(code1));
+    cpu_step(&sys.cpu);
+    // INC: $00 -> $01, SBC: $10 - $01 = $0F
+    ASSERT_EQ(0x0F, sys.cpu.A);
+    
+    // Absolute ($EF)
+    setup();
+    sys.cpu.P |= FLAG_C;
+    sys.cpu.P &= ~FLAG_D;
+    mem_write_raw(&sys.mem, 0x1234, 0x00);
+    sys.cpu.A = 0x20;
+    u8 code2[] = {0xEF, 0x34, 0x12};
+    load_code(code2, sizeof(code2));
+    cpu_step(&sys.cpu);
+    ASSERT_EQ(0x1F, sys.cpu.A);
+    
+    PASS();
+}
+
+void run_illegal_opcode_tests(void) {
+    TEST_SUITE("CPU - Illegal: SLO (ASL+ORA)");
+    RUN_TEST(slo_zeropage);
+    RUN_TEST(slo_absolute);
+    
+    TEST_SUITE("CPU - Illegal: RLA (ROL+AND)");
+    RUN_TEST(rla_zeropage);
+    RUN_TEST(rla_absolute_x);
+    
+    TEST_SUITE("CPU - Illegal: SRE (LSR+EOR)");
+    RUN_TEST(sre_zeropage);
+    
+    TEST_SUITE("CPU - Illegal: RRA (ROR+ADC)");
+    RUN_TEST(rra_zeropage);
+    RUN_TEST(rra_decimal_mode);
+    
+    TEST_SUITE("CPU - Illegal: SAX (Store A&X)");
+    RUN_TEST(sax_zeropage);
+    RUN_TEST(sax_absolute);
+    
+    TEST_SUITE("CPU - Illegal: LAX (Load A&X)");
+    RUN_TEST(lax_zeropage);
+    RUN_TEST(lax_absolute_y);
+    RUN_TEST(lax_flags);
+    
+    TEST_SUITE("CPU - Illegal: DCP (DEC+CMP)");
+    RUN_TEST(dcp_zeropage);
+    RUN_TEST(dcp_wrap_and_compare);
+    
+    TEST_SUITE("CPU - Illegal: ISC (INC+SBC)");
+    RUN_TEST(isc_zeropage);
+    RUN_TEST(isc_wrap_and_subtract);
+    
+    TEST_SUITE("CPU - Illegal: ANC (AND, N->C)");
+    RUN_TEST(anc_basic);
+    RUN_TEST(anc_clear_carry);
+    
+    TEST_SUITE("CPU - Illegal: ALR (AND+LSR)");
+    RUN_TEST(alr_basic);
+    RUN_TEST(alr_carry_out);
+    
+    TEST_SUITE("CPU - Illegal: ARR (AND+ROR)");
+    RUN_TEST(arr_binary_mode);
+    RUN_TEST(arr_overflow_set);
+    
+    TEST_SUITE("CPU - Illegal: SBX (A&X-imm->X)");
+    RUN_TEST(sbx_basic);
+    RUN_TEST(sbx_with_and);
+    RUN_TEST(sbx_borrow);
+    
+    TEST_SUITE("CPU - Illegal: NOP variants");
+    RUN_TEST(nop_implied);
+    RUN_TEST(nop_immediate);
+    RUN_TEST(nop_zeropage);
+    RUN_TEST(nop_absolute);
+    RUN_TEST(nop_absolute_x_page_cross);
+    
+    TEST_SUITE("CPU - Illegal: JAM/HLT");
+    RUN_TEST(jam_halts_cpu);
+    
+    TEST_SUITE("CPU - Illegal: Misc");
+    RUN_TEST(sbc_illegal_eb);
+    RUN_TEST(xaa_basic);
+    RUN_TEST(lax_immediate);
+    RUN_TEST(las_basic);
+    
+    TEST_SUITE("CPU - Illegal: SHA/SHX/SHY/TAS");
+    RUN_TEST(sha_indirect_y);
+    RUN_TEST(tas_basic);
+    RUN_TEST(shy_basic);
+    RUN_TEST(shx_basic);
+    
+    TEST_SUITE("CPU - Illegal: All Addressing Modes");
+    RUN_TEST(slo_all_addressing_modes);
+    RUN_TEST(isc_all_addressing_modes);
+}

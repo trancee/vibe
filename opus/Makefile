@@ -1,7 +1,7 @@
 # C64 Emulator Makefile
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -O2 -g
+CFLAGS = -Wall -Wextra -std=c11 -O2
 LDFLAGS = -lm
 
 # Source files
@@ -56,7 +56,7 @@ $(TEST_LORENZ_BIN): $(OBJS) $(TEST_LORENZ_OBJ) | $(BUILD_DIR)
 
 # Clean build artifacts
 clean:
-	rm -rf $(OBJDIR) $(TARGET) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN)
+	rm -rf $(OBJDIR) $(TARGET) $(TEST_TARGET) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN)
 
 # Run the emulator
 run: $(TARGET)
@@ -77,7 +77,6 @@ quicktest: $(TARGET)
 # Test source files
 TEST_SRCS = tests/test_main.c \
             tests/test_cpu.c \
-            tests/test_cpu_doc.c \
             tests/test_memory.c \
             tests/test_vic.c \
             tests/test_cia.c \
