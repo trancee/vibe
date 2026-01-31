@@ -41,7 +41,8 @@ typedef struct
 
     // 6510 I/O port
     u8 port_dir;          // $00 - Data direction register
-    u8 port_data;         // $01 - Data register
+    u8 port_data;         // $01 - Data register (value written)
+    u8 port_latch;        // Output latch (only updated for output bits)
     u8 cpu_port_floating; // Tracks floating bits for proper read behavior
 
     // Interrupt state

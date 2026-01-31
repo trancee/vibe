@@ -59,6 +59,7 @@ void cpu_init(C64Cpu *cpu, C64System *sys)
     cpu->SP = 0xFD;
     cpu->port_dir = 0x2F;
     cpu->port_data = 0x37;
+    cpu->port_latch = 0x37;
     cpu->mode = CPU_MODE_6510; // Default: enable 6510 I/O port
 }
 
@@ -71,6 +72,7 @@ void cpu_reset(C64Cpu *cpu)
     cpu->P = FLAG_U | FLAG_I;
     cpu->port_dir = 0x2F;
     cpu->port_data = 0x37;
+    cpu->port_latch = 0x37;
     cpu->cpu_port_floating = 0xC0;
     cpu->nmi_pending = false;
     cpu->irq_pending = false;
@@ -109,11 +111,14 @@ static u8 cpu_read(C64Cpu *cpu, u16 addr)
             
             // Input bits return external hardware state:
             // - Bits 0-2 (LORAM, HIRAM, CHAREN): External pullup resistors pull high
-            // - Bits 3-5: No external influence, retain last output value (weak latch)
-            // - Bits 6-7: Datasette lines, no pullups, retain last value
-            u8 external = 0x07;  // Bits 0-2 pulled high by external resistors
-            external |= (cpu->port_data & 0x38);  // Bits 3-5 retain last output
-            external |= (cpu->cpu_port_floating & 0xC0);  // Bits 6-7 float/retain
+            // - Bit 3: No pullup, retains last OUTPUT value (from latch)
+            // - Bit 4: Directly connected, reads high when input (similar to bits 0-2)
+            // - Bit 5: Cassette motor, no pullup, drawn LOW when input
+            // - Bits 6-7: Datasette lines, retain last OUTPUT value (from latch)
+            u8 external = 0x17;  // Bits 0-2,4 read high when input
+            external |= (cpu->port_latch & 0x08);  // Bit 3 retains latch value
+            // Bit 5 is 0 when input (no pullup, drawn low)
+            external |= (cpu->port_latch & 0xC0);  // Bits 6-7 retain latch value
             result |= (external & input_bits);
             
             if (cpu->sys->debug)
@@ -134,6 +139,8 @@ static void cpu_write(C64Cpu *cpu, u16 addr, u8 value)
             if (cpu->sys->debug)
                 printf("CPU #$%04X <- $%02X\n", addr, value);
             cpu->port_dir = value;
+            // Update latch: output bits take on DATA value, input bits retain latch
+            cpu->port_latch = (cpu->port_data & value) | (cpu->port_latch & ~value);
             // Also write to underlying RAM (RAM exists at $0000 on C64)
             mem_write(&cpu->sys->mem, addr, value);
             return;
@@ -143,6 +150,9 @@ static void cpu_write(C64Cpu *cpu, u16 addr, u8 value)
             if (cpu->sys->debug)
                 printf("CPU #$%04X <- $%02X\n", addr, value);
             cpu->port_data = value;
+            // Only update latch for bits configured as outputs
+            // Input bits in the latch retain their previous value
+            cpu->port_latch = (value & cpu->port_dir) | (cpu->port_latch & ~cpu->port_dir);
             cpu->cpu_port_floating = value;
             // Also write to underlying RAM (RAM exists at $0001 on C64)
             mem_write(&cpu->sys->mem, addr, value);
