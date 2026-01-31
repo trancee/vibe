@@ -56,20 +56,4 @@ int test_lorenz_irq(C64* sys) {
     return 0;
 }
 
-int main(int argc, char* argv[]) {
-    C64* sys = malloc(sizeof(C64));
-    if (!sys) {
-        fprintf(stderr, "Failed to allocate C64 system\n");
-        return 1;
-    }
-
-    c64_init(sys);
-    
-    printf("CIA Timing Test Harness\n");
-    
-    test_lorenz_irq(sys);
-    
-    c64_cleanup(sys);
-    free(sys);
-    return 0;
-}
+// main function removed - use test_runner instead

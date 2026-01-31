@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 
     // Initialize system
     c64_init(&sys);
-    sys.debug_enabled = debug;
+    sys.debug = debug;
 
     sys.frame_renderer = vic_render_frame_ansi;
 

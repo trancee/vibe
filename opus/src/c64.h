@@ -30,7 +30,7 @@ struct C64System {
     bool running;
 
     // Debug/logging
-    bool debug_enabled;
+    bool debug;
     u64  debug_interval;    // Cycles between debug output
 
     render_frame_t frame_renderer;

@@ -62,13 +62,10 @@ void test_cia_timing() {
     }
 }
 
-int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
-    
+#ifdef STANDALONE_MAIN
+int main(void) {
     printf("CIA Timing Test Harness\n");
-    
     test_cia_timing();
-    
     return 0;
 }
+#endif

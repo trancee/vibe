@@ -11,12 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #include "../src/c64.h"
+#include "../src/c64.h"
 #include "../src/cpu.h"
 
 #include "test_framework.h"
 
-#define DEBUG true
+#define DEBUG false
 
 static C64System sys;
 
@@ -79,8 +79,8 @@ TEST(dormann_functional)
     sys.cpu.SP = 0xFF;
     sys.cpu.PC = 0x0400; // Start address
 
-    u16 end_address = 0x3469;      // Success address
-    size_t max_cycles = 1000000; // Safety limit
+    u16 end_address = 0x3469;    // Success address
+    size_t max_cycles = 100000000; // Safety limit
     size_t cycles = 0;
     u16 last_pc = 0;
     int stuck_count = 0;
@@ -91,16 +91,17 @@ TEST(dormann_functional)
         u16 pc = sys.cpu.PC;
 
         // Print test progress
-        u8 test_num = sys.mem.ram[0x0200];
+        u8 test_num = mem_read_raw(&sys.mem, 0x0200);
         if (test_num != last_test_num)
         {
             last_test_num = test_num;
+
             // Uncomment for verbose output:
             printf("    Test #$%02X at $%04X\n", test_num, pc);
         }
 
-        c64_run_frame(&sys);
-        cycles += sys.cycle_count;
+        // Execute one CPU instruction
+        cycles += cpu_step(&sys.cpu);
 
         // Check for success
         if (sys.cpu.PC == end_address)
@@ -117,7 +118,7 @@ TEST(dormann_functional)
             if (stuck_count > 3)
             {
                 printf("    Test failed at $%04X (test #$%02X, cycles: %zu)\n",
-                       sys.cpu.PC, sys.mem.ram[0x0200], cycles);
+                       sys.cpu.PC, mem_read_raw(&sys.mem, 0x0200), cycles);
                 ASSERT(false);
                 return;
             }
@@ -161,14 +162,14 @@ TEST(dormann_decimal)
     {
         u16 pc = sys.cpu.PC;
 
-        c64_run_frame(&sys);
-        cycles += sys.cycle_count;
+        // Execute one CPU instruction
+        cycles += cpu_step(&sys.cpu);
 
         // Check for success
         if (sys.cpu.PC == end_address)
         {
             // Check error flag
-            u8 error = sys.mem.ram[0x000B];
+            u8 error = mem_read_raw(&sys.mem, 0x000B);
             if (error == 0)
             {
                 printf("    Decimal test passed! (cycles: %zu)\n", cycles);
@@ -190,7 +191,7 @@ TEST(dormann_decimal)
             if (stuck_count > 3)
             {
                 printf("    Test failed at $%04X (error: $%02X, cycles: %zu)\n",
-                       sys.cpu.PC, sys.mem.ram[0x000B], cycles);
+                       sys.cpu.PC, mem_read_raw(&sys.mem, 0x000B), cycles);
                 ASSERT(false);
                 return;
             }
@@ -212,6 +213,10 @@ TEST(dormann_decimal)
 
 TEST(dormann_interrupt)
 {
+    u16 nmi_count_address = 0x0200;
+    u16 irq_count_address = 0x0201;
+    u16 brk_count_address = 0x0202;
+
     if (!load_dormann_test("6502_interrupt_test", 0x0000))
     {
         printf("    Skipping (test binary not found)\n");
@@ -231,11 +236,16 @@ TEST(dormann_interrupt)
 
     // Initialize I_port to 0 (no interrupts pending) - the test will set it up
     // This simulates the external hardware state before the test runs
-    sys.mem.ram[I_port] = 0;
+    mem_write_raw(&sys.mem, I_port, 0);
+
+    // Reset counts
+    mem_write_raw(&sys.mem, nmi_count_address, 0x00);
+    mem_write_raw(&sys.mem, irq_count_address, 0x00);
+    mem_write_raw(&sys.mem, brk_count_address, 0x00);
 
     // Success is indicated by reaching the STP instruction at $0731
     // or an infinite loop at $06F5 (success trap)
-    size_t max_cycles = 500000000; // 500M cycles should be enough
+    size_t max_cycles = 4000;
     size_t cycles = 0;
     u16 last_pc = 0;
     int stuck_count = 0;
@@ -246,29 +256,33 @@ TEST(dormann_interrupt)
         u16 pc = sys.cpu.PC;
 
         // Check for success BEFORE executing - the test ends with JMP * at $06F5
-        if (pc == 0x06F5 && sys.mem.ram[pc] == 0x4C &&
-            sys.mem.ram[pc + 1] == 0xF5 && sys.mem.ram[pc + 2] == 0x06)
+        if (pc == 0x06F5 && mem_read_raw(&sys.mem, pc) == 0x4C &&
+            mem_read_raw(&sys.mem, pc + 1) == 0xF5 && mem_read_raw(&sys.mem, pc + 2) == 0x06)
         {
+            printf("    NMI count: $%02X\n", mem_read_raw(&sys.mem, nmi_count_address));
+            printf("    IRQ count: $%02X\n", mem_read_raw(&sys.mem, irq_count_address));
+            printf("    BRK count: $%02X\n", mem_read_raw(&sys.mem, brk_count_address));
+
             printf("    Interrupt test passed! (cycles: %zu)\n", cycles);
+            // mem_dump(&sys.mem, );
             PASS();
             return;
         }
 
         // Check for STP instruction (alternative success at $0731)
-        if (sys.mem.ram[pc] == 0xDB)
+        if (mem_read_raw(&sys.mem, pc) == 0xDB)
         {
             printf("    Interrupt test passed (STP)! (cycles: %zu)\n", cycles);
             PASS();
             return;
         }
 
-        // Execute the instruction
-        c64_run_frame(&sys);
-        cycles += sys.cycle_count;
+        // Execute one CPU instruction
+        cycles += cpu_step(&sys.cpu);
 
         // Then check feedback register for interrupt line states AFTER the instruction
         // This gives the CPU a chance to set up interrupts
-        u8 feedback = sys.mem.ram[I_port];
+        u8 feedback = mem_read_raw(&sys.mem, I_port);
 
         // NMI is edge-triggered (low-to-high of the bit = interrupt trigger)
         bool nmi_now = (feedback & 0x02) != 0;
@@ -290,11 +304,11 @@ TEST(dormann_interrupt)
         {
             sys.cpu.nmi_pending = false;
             // Push PC and P, jump to NMI vector
-            sys.mem.ram[0x100 + sys.cpu.SP--] = (sys.cpu.PC >> 8) & 0xFF;
-            sys.mem.ram[0x100 + sys.cpu.SP--] = sys.cpu.PC & 0xFF;
-            sys.mem.ram[0x100 + sys.cpu.SP--] = (sys.cpu.P | FLAG_U) & ~FLAG_B;
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.PC >> 8) & 0xFF);
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, sys.cpu.PC & 0xFF);
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.P | FLAG_U) & ~FLAG_B);
             cpu_set_flag(&sys.cpu, FLAG_I, true);
-            sys.cpu.PC = sys.mem.ram[0xFFFA] | (sys.mem.ram[0xFFFB] << 8);
+            sys.cpu.PC = mem_read_raw(&sys.mem, 0xFFFA) | (mem_read_raw(&sys.mem, 0xFFFB) << 8);
             cycles += 7;
             continue;
         }
@@ -303,11 +317,11 @@ TEST(dormann_interrupt)
         if (sys.cpu.irq_pending && !(sys.cpu.P & FLAG_I))
         {
             sys.cpu.irq_pending = false;
-            sys.mem.ram[0x100 + sys.cpu.SP--] = (sys.cpu.PC >> 8) & 0xFF;
-            sys.mem.ram[0x100 + sys.cpu.SP--] = sys.cpu.PC & 0xFF;
-            sys.mem.ram[0x100 + sys.cpu.SP--] = (sys.cpu.P | FLAG_U) & ~FLAG_B;
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.PC >> 8) & 0xFF);
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, sys.cpu.PC & 0xFF);
+            mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.P | FLAG_U) & ~FLAG_B);
             cpu_set_flag(&sys.cpu, FLAG_I, true);
-            sys.cpu.PC = sys.mem.ram[0xFFFE] | (sys.mem.ram[0xFFFF] << 8);
+            sys.cpu.PC = mem_read_raw(&sys.mem, 0xFFFE) | (mem_read_raw(&sys.mem, 0xFFFF) << 8);
             cycles += 7;
             continue;
         }
@@ -318,7 +332,7 @@ TEST(dormann_interrupt)
             if (stuck_count > 3)
             {
                 printf("    Test failed at $%04X (I_src=$%02X, I_port=$%02X, cycles: %zu)\n",
-                       sys.cpu.PC, sys.mem.ram[0x0203], sys.mem.ram[I_port], cycles);
+                       sys.cpu.PC, mem_read_raw(&sys.mem, 0x0203), mem_read_raw(&sys.mem, I_port), cycles);
                 ASSERT(false);
                 return;
             }
@@ -340,28 +354,23 @@ TEST(dormann_interrupt)
 
 void run_dormann_tests(void)
 {
+    memset(&sys, 0, sizeof(C64System));
+    sys.debug = DEBUG;
+
     TEST_SUITE("Dormann 6502 Test Suite");
 
     printf("    (These tests may take a few seconds...)\n");
 
     // Initialize system
-    c64_init(&sys);
-    sys.debug_enabled = DEBUG;
+    cpu_init(&sys.cpu, &sys);
+    mem_init(&sys.mem, &sys);
+    vic_init(&sys.vic, &sys);
+    cia_init(&sys.cia1, 1, &sys);
+    cia_init(&sys.cia2, 2, &sys);
 
-    // // Load ROMs
-    // if (!c64_load_roms(&sys, rom_path))
-    // {
-    //     fprintf(stderr, "Failed to load ROMs from %s\n", rom_path);
-    //     fprintf(stderr, "Make sure basic.rom, kernal.rom, and char.rom exist.\n");
-    //     return;
-    // }
-
-    // RUN_TEST(dormann_functional);
-    // RUN_TEST(dormann_decimal);
+    RUN_TEST(dormann_functional);
+    RUN_TEST(dormann_decimal);
     RUN_TEST(dormann_interrupt);
-
-    // Cleanup
-    c64_destroy(&sys);
 }
 
 #ifdef TEST_DORMANN

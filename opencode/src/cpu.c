@@ -210,6 +210,8 @@ void cpu_step(C64* sys) {
     sys->cpu.extra_cycles = 0;
     sys->cpu.page_crossed = false;
     
+    // Don't count base cycle here - let each instruction handle its own timing
+    
     switch (opcode) {
         case 0x00: {
             cpu_push16(sys, sys->cpu.pc);
@@ -224,7 +226,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x10: {
+        case 0x10: { // BPL
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (!cpu_get_flag(&sys->cpu, FLAG_N)) {
                 u16 old_pc = sys->cpu.pc;
@@ -255,7 +257,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x30: {
+        case 0x30: { // BMI
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (cpu_get_flag(&sys->cpu, FLAG_N)) {
                 u16 old_pc = sys->cpu.pc;
@@ -284,7 +286,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x50: {
+        case 0x50: { // BVC
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (!cpu_get_flag(&sys->cpu, FLAG_V)) {
                 u16 old_pc = sys->cpu.pc;
@@ -302,8 +304,9 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x60: {
+        case 0x60: { // RTS
             sys->cpu.pc = cpu_pull16(sys) + 1;
+            sys->mem.cycle_count += 6; // RTS takes 6 cycles
             break;
         }
         
@@ -312,7 +315,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x70: {
+        case 0x70: { // BVS
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (cpu_get_flag(&sys->cpu, FLAG_V)) {
                 u16 old_pc = sys->cpu.pc;
@@ -340,7 +343,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x90: {
+        case 0x90: { // BCC
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (!cpu_get_flag(&sys->cpu, FLAG_C)) {
                 u16 old_pc = sys->cpu.pc;
@@ -358,10 +361,17 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0x9A: {
-            sys->cpu.x = sys->cpu.sp;
+        case 0x9A: { // TXS
+            sys->cpu.sp = sys->cpu.x;
             break;
         }
+        
+        case 0xBA: { // TSX
+            sys->cpu.x = cpu_get_zn(&sys->cpu, sys->cpu.sp);
+            break;
+        }
+        
+
         
         case 0xA0: {
             sys->cpu.y = cpu_get_zn(&sys->cpu, mem_read(sys, addr_mode_immediate(sys)));
@@ -388,7 +398,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0xB0: {
+        case 0xB0: { // BCS
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (cpu_get_flag(&sys->cpu, FLAG_C)) {
                 u16 old_pc = sys->cpu.pc;
@@ -406,22 +416,14 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0xBA: {
-            sys->cpu.x = sys->cpu.sp;
-            break;
-        }
-        
-        case 0xC0: {
-            cpu_get_zn(&sys->cpu, sys->cpu.y - mem_read(sys, addr_mode_immediate(sys)));
-            break;
-        }
+
         
         case 0xC8: {
             sys->cpu.y = cpu_get_zn(&sys->cpu, sys->cpu.y + 1);
             break;
         }
         
-        case 0xC9: {
+        case 0xC9: { // CMP immediate
             u8 data = mem_read(sys, addr_mode_immediate(sys));
             u8 result = sys->cpu.a - data;
             cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.a >= data);
@@ -429,7 +431,46 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0xD0: {
+        // CPX - Compare X Register
+        case 0xE4: { // CPX zero page
+            u8 data = mem_read(sys, addr_mode_zero_page(sys));
+            u8 result = sys->cpu.x - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.x >= data);
+            cpu_get_zn(&sys->cpu, result);
+            break;
+        }
+        case 0xEC: { // CPX absolute
+            u8 data = mem_read(sys, addr_mode_absolute(sys));
+            u8 result = sys->cpu.x - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.x >= data);
+            cpu_get_zn(&sys->cpu, result);
+            break;
+        }
+        
+        // CPY - Compare Y Register  
+        case 0xC0: { // CPY immediate
+            u8 data = mem_read(sys, addr_mode_immediate(sys));
+            u8 result = sys->cpu.y - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.y >= data);
+            cpu_get_zn(&sys->cpu, result);
+            break;
+        }
+        case 0xC4: { // CPY zero page
+            u8 data = mem_read(sys, addr_mode_zero_page(sys));
+            u8 result = sys->cpu.y - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.y >= data);
+            cpu_get_zn(&sys->cpu, result);
+            break;
+        }
+        case 0xCC: { // CPY absolute
+            u8 data = mem_read(sys, addr_mode_absolute(sys));
+            u8 result = sys->cpu.y - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.y >= data);
+            cpu_get_zn(&sys->cpu, result);
+            break;
+        }
+        
+        case 0xD0: { // BNE
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (!cpu_get_flag(&sys->cpu, FLAG_Z)) {
                 u16 old_pc = sys->cpu.pc;
@@ -439,6 +480,7 @@ void cpu_step(C64* sys) {
                     sys->cpu.extra_cycles = 2;
                 }
             }
+            sys->mem.cycle_count += 2; // Base timing
             break;
         }
         
@@ -448,7 +490,10 @@ void cpu_step(C64* sys) {
         }
         
         case 0xE0: {
-            cpu_get_zn(&sys->cpu, sys->cpu.x - mem_read(sys, addr_mode_immediate(sys)));
+            u8 data = mem_read(sys, addr_mode_immediate(sys));
+            u8 result = sys->cpu.x - data;
+            cpu_set_flag(&sys->cpu, FLAG_C, sys->cpu.x >= data);
+            cpu_get_zn(&sys->cpu, result);
             break;
         }
         
@@ -457,7 +502,7 @@ void cpu_step(C64* sys) {
             break;
         }
         
-        case 0xF0: {
+        case 0xF0: { // BEQ
             u8 rel = mem_read(sys, sys->cpu.pc++);
             if (cpu_get_flag(&sys->cpu, FLAG_Z)) {
                 u16 old_pc = sys->cpu.pc;
@@ -689,6 +734,7 @@ void cpu_step(C64* sys) {
             u8 data = mem_read(sys, addr);
             if (sys->cpu.page_crossed) mem_read(sys, addr & 0xFF00); // Dummy read on page cross
             sys->cpu.a = cpu_get_zn(&sys->cpu, data);
+            sys->mem.cycle_count += 4 + (sys->cpu.page_crossed ? 1 : 0); // Base + page cross
             break;
         }
         case 0xB9: { // Absolute,Y

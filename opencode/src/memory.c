@@ -82,6 +82,11 @@ u8 mem_read(C64* sys, u16 addr) {
     }
     
     if (addr < 0xE000) {
+        // Color RAM at $D800-$DBFF should mask high nibble
+        if (addr >= 0xD800 && addr <= 0xDBFF) {
+            u16 color_offset = addr - 0xD800;
+            return sys->mem.color_ram[color_offset] & 0x0F;
+        }
         return sys->mem.ram[addr];
     }
     

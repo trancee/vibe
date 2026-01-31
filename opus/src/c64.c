@@ -20,7 +20,7 @@ void c64_init(C64System *sys) {
     sid_init(&sys->sid, sys);
     
     sys->running = false;
-    sys->debug_enabled = false;
+    sys->debug = false;
     sys->debug_interval = 1000000;  // Log every million cycles
 }
 
@@ -64,14 +64,14 @@ void c64_tick(C64System *sys) {
     c64_check_interrupts(sys);
     
     // Debug output
-    if (sys->debug_enabled && (sys->cycle_count % sys->debug_interval == 0)) {
-        printf("[Cycle %lu] PC=$%04X A=$%02X X=$%02X Y=$%02X SP=$%02X P=$%02X "
-               "Raster=%03d BA=%d\n",
-               sys->cycle_count,
-               sys->cpu.PC, sys->cpu.A, sys->cpu.X, sys->cpu.Y,
-               sys->cpu.SP, sys->cpu.P,
-               sys->vic.raster_line, sys->vic.ba_low);
-    }
+    // if (sys->debug && (sys->cycle_count % sys->debug_interval == 0)) {
+    //     printf("[Cycle %lu] PC=$%04X A=$%02X X=$%02X Y=$%02X SP=$%02X P=$%02X "
+    //            "Raster=%03d BA=%d\n",
+    //            sys->cycle_count,
+    //            sys->cpu.PC, sys->cpu.A, sys->cpu.X, sys->cpu.Y,
+    //            sys->cpu.SP, sys->cpu.P,
+    //            sys->vic.raster_line, sys->vic.ba_low);
+    // }
 }
 
 // Run one complete frame

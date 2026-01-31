@@ -3,11 +3,13 @@
 
 void cia_init(C64CIA* cia) {
     memset(cia, 0, sizeof(C64CIA));
+    cia->ta_delay = 0; // Initialize to no delay
+    cia->tb_delay = 0;
 }
 
 void cia_clock(C64CIA* cia) {
     // Handle ICR bit 7 delay: set bit 7 on cycle AFTER interrupt flag was set
-    if (cia->icr_irq_flag_set && cia->imr & 0x80) {
+    if (cia->icr_irq_flag_set) {
         cia->icr_data |= 0x80;
         cia->icr_irq_flag_set = false;
     }
@@ -21,8 +23,9 @@ void cia_clock(C64CIA* cia) {
     }
     
     if ((cia->cra & 0x01) && cia->ta_delay == 0) {
+        u16 old_timer = cia->timer_a;
         cia->timer_a--;
-        if (cia->timer_a == 0xFFFF) {
+        if (old_timer == 0 && cia->timer_a == 0xFFFF) {
             cia->timer_a = cia->timer_a_latch;
             cia->icr_data |= 0x01;
             cia->irq_pending = true;
@@ -41,8 +44,9 @@ void cia_clock(C64CIA* cia) {
     }
     
     if ((cia->crb & 0x01) && cia->tb_delay == 0) {
+        u16 old_timer = cia->timer_b;
         cia->timer_b--;
-        if (cia->timer_b == 0xFFFF) {
+        if (old_timer == 0 && cia->timer_b == 0xFFFF) {
             cia->timer_b = cia->timer_b_latch;
             cia->icr_data |= 0x02;
             cia->irq_pending = true;
@@ -189,11 +193,11 @@ void cia_write_reg(C64CIA* cia, u8 reg, u8 data) {
             cia->cra = data;
             if (data & 0x10) {
                 cia->timer_a = cia->timer_a_latch;
-                cia->ta_delay = 3;
+                cia->ta_delay = 1; // Minimal delay for forced load
             }
             if (data & 0x01) {
                 if (cia->ta_delay == 0) {
-                    cia->ta_delay = 3;
+                    cia->ta_delay = 1; // Minimal delay for start
                 }
             }
             break;
@@ -201,11 +205,11 @@ void cia_write_reg(C64CIA* cia, u8 reg, u8 data) {
             cia->crb = data;
             if (data & 0x10) {
                 cia->timer_b = cia->timer_b_latch;
-                cia->tb_delay = 3;
+                cia->tb_delay = 2;
             }
             if (data & 0x01) {
                 if (cia->tb_delay == 0) {
-                    cia->tb_delay = 3;
+                    cia->tb_delay = 2;
                 }
             }
             break;

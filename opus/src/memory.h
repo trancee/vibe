@@ -51,4 +51,6 @@ bool mem_load_roms(C64Memory *mem, const char *rom_path);
 // VIC memory access (uses VIC bank from CIA2)
 u8   mem_vic_read(C64Memory *mem, u16 vic_addr);
 
+void mem_dump(C64Memory *mem, u16 addr);
+
 #endif // C64_MEMORY_H
