@@ -104,10 +104,12 @@ static u8 cpu_read(C64Cpu *cpu, u16 addr)
             u8 input_bits = ~cpu->port_dir;
             u8 result = 0;
             result |= (cpu->port_data & output_bits);
-            u8 external = 0x1F;
-            if (!(cpu->port_dir & 0x20))
-                external &= ~0x20;
-            external |= (cpu->cpu_port_floating & 0xC0);
+            // External lines: model the floating/pulled state
+            // The external state should match what the port_data wrote for proper
+            // readback when lines are configured as inputs but are weakly pulled
+            // by the output drivers. Use port_data as external for input bits.
+            u8 external = cpu->port_data & 0x3F;  // Lower 6 bits from last write
+            external |= (cpu->cpu_port_floating & 0xC0);  // Bits 6-7 float
             result |= (external & input_bits);
             if (cpu->sys->debug)
                 printf("CPU #$%04X -> $%02X\n", addr, result);

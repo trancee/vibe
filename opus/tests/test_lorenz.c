@@ -22,7 +22,7 @@
 
 #define DEBUG false
 
-#define TESTCASE "start"
+#define TESTCASE "trap17" // "start"
 
 static C64System sys;
 
@@ -135,6 +135,9 @@ static bool lorenz_load_test(const char *testcase)
     u16 load_address = fgetc(f) | (fgetc(f) << 8);
     size -= 2;
 
+    // Reset all components
+    c64_reset(&sys);
+
     // Read program data
     size_t read = fread(&sys.mem.ram[load_address], 1, size, f);
     fclose(f);
@@ -147,6 +150,9 @@ static bool run_lorenz_test()
 {
     if (!lorenz_load_test(lorenz_test))
         return false;
+
+    // Initialize memory AFTER c64_reset (which is called in lorenz_load_test)
+    lorenz_init_memory();
 
     lorenz_test_passed = false;
     lorenz_test_failed = false;
@@ -171,6 +177,7 @@ static bool run_lorenz_test()
     while (cycles < max_cycles)
     {
         u16 pc = sys.cpu.PC;
+
         // Check for trap addresses BEFORE executing
 
         // CHROUT ($FFD2) - print character
@@ -256,6 +263,8 @@ static bool run_lorenz_test()
             break;
         }
 
+        c64_tick(&sys);
+
         // Execute one CPU instruction
         cycles += cpu_step(&sys.cpu);
 
@@ -279,8 +288,6 @@ static bool run_lorenz_test()
     if (cycles >= max_cycles)
         lorenz_test_failed = true;
 
-    printf("\ncycles: %zu, stuck_count: %d, passed: %s, failed: %s\n", cycles, stuck_count, lorenz_test_passed ? "yes" : "no", lorenz_test_failed ? "yes" : "no");
-
     return lorenz_test_passed && !lorenz_test_failed;
 }
 
@@ -291,8 +298,6 @@ TEST(lorenz_cpu_instructions)
     int skipped = 0;
 
     printf("\n");
-
-    lorenz_init_memory();
 
     while (run_lorenz_test())
         passed++;
@@ -313,21 +318,25 @@ TEST(lorenz_cpu_instructions)
 
 void run_lorenz_tests(void)
 {
-    memset(&sys, 0, sizeof(C64System));
-    sys.debug = DEBUG;
-
     TEST_SUITE("Lorenz Test Suite");
 
     printf("    (Running CPU instruction tests...)\n");
 
     // Initialize system
-    cpu_init(&sys.cpu, &sys);
-    mem_init(&sys.mem, &sys);
-    vic_init(&sys.vic, &sys);
-    cia_init(&sys.cia1, 1, &sys);
-    cia_init(&sys.cia2, 2, &sys);
+    c64_init(&sys);
+    sys.debug = DEBUG;
+
+    // Load ROMs
+    if (!c64_load_roms(&sys, rom_path))
+    {
+        fprintf(stderr, "Failed to load ROMs from %s\n", rom_path);
+        fprintf(stderr, "Make sure basic.rom, kernal.rom, and char.rom exist.\n");
+        return;
+    }
 
     RUN_TEST(lorenz_cpu_instructions);
+
+    c64_destroy(&sys);
 }
 
 #ifdef TEST_LORENZ

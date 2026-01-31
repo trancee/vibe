@@ -37,8 +37,8 @@ void c64_reset(C64System *sys) {
     
     sys->running = true;
     
-    printf("C64 System Reset\n");
-    printf("CPU PC: $%04X\n", sys->cpu.PC);
+    // printf("C64 System Reset\n");
+    // printf("CPU PC: $%04X\n", sys->cpu.PC);
 }
 
 void c64_destroy(C64System *sys) {
