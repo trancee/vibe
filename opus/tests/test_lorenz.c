@@ -14,8 +14,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "test_framework.h"
+
 #include "../src/c64.h"
+
+#include "test_framework.h"
 
 // Memory for Lorenz tests (64KB)
 static u8 lorenz_memory[65536];
@@ -766,3 +768,14 @@ void run_lorenz_tests(void) {
     printf("    (Running CPU instruction tests...)\n");
     RUN_TEST(lorenz_cpu_instructions);
 }
+
+#ifdef TEST_LORENZ
+TestContext g_test_ctx = {0, 0, 0, NULL};
+
+int main()
+{
+    run_lorenz_tests();
+
+    return 0;
+}
+#endif

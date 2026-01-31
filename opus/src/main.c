@@ -119,6 +119,8 @@ int main(int argc, char *argv[])
     c64_init(&sys);
     sys.debug_enabled = debug;
 
+    sys.frame_renderer = vic_render_frame_ansi;
+
     // Load ROMs
     if (!c64_load_roms(&sys, rom_path))
     {
@@ -184,7 +186,7 @@ int main(int argc, char *argv[])
     // Cleanup
     c64_destroy(&sys);
 
-    printf("\nEmulation ended after %u frames (%llu cycles)\n",
+    printf("\nEmulation ended after %u frames (%lu cycles)\n",
            frame_count, sys.cycle_count);
 
     return 0;

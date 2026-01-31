@@ -5,23 +5,37 @@ CFLAGS = -Wall -Wextra -std=c11 -O2 -g
 LDFLAGS = -lm
 
 # Source files
-SRCS = src/main.c \
-       src/c64.c \
+SRCS = src/c64.c \
        src/cpu.c \
        src/memory.c \
        src/vic.c \
        src/cia.c \
        src/sid.c
 
+MAIN_SRCS = src/main.c \
+            src/ansi.c
+
+TEST_DIR = tests
+
+TEST_DORMANN_SRC = $(TEST_DIR)/test_dormann.c
+TEST_LORENZ_SRC = $(TEST_DIR)/test_lorenz.c
+
 # Object files
 OBJDIR = obj
 OBJS = $(patsubst src/%.c,$(OBJDIR)/%.o,$(SRCS))
+MAIN_OBJS = $(patsubst src/%.c,$(OBJDIR)/%.o,$(MAIN_SRCS))
+
+TEST_DORMANN_OBJ = $(TEST_DORMANN_SRC:src/%.c=$(OBJDIR)/%.o)
+TEST_LORENZ_OBJ = $(TEST_LORENZ_SRC:src/%.c=$(OBJDIR)/%.o)
 
 # Target executable
 TARGET = c64emu
 
+TEST_DORMANN_BIN = $(TEST_DIR)/test_dormann
+TEST_LORENZ_BIN = $(TEST_DIR)/test_lorenz
+
 # Default target
-all: $(TARGET)
+all: $(TARGET) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN)
 
 # Create object directory
 $(OBJDIR):
@@ -32,12 +46,17 @@ $(OBJDIR)/%.o: src/%.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link executable
-$(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+$(TARGET): $(OBJS) $(MAIN_OBJS) 
+	$(CC) $(OBJS) $(MAIN_OBJS) -o $@ $(LDFLAGS)
+
+$(TEST_DORMANN_BIN): $(OBJS) $(TEST_DORMANN_OBJ) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -DTEST_DORMANN $^ -o $@
+$(TEST_LORENZ_BIN): $(OBJS) $(TEST_LORENZ_OBJ) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -DTEST_LORENZ $^ -o $@
 
 # Clean build artifacts
 clean:
-	rm -rf $(OBJDIR) $(TARGET)
+	rm -rf $(OBJDIR) $(TARGET) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN)
 
 # Run the emulator
 run: $(TARGET)
@@ -100,6 +119,18 @@ test: $(TEST_TARGET)
 test-verbose: $(TEST_TARGET)
 	./$(TEST_TARGET) -v
 
+# Run Dormann tests
+test-dormann: $(TEST_DORMANN_BIN)
+	./$(TEST_DORMANN_BIN)
+
+run-test-dormann: test-dormann
+
+# Run Lorenz tests
+test-lorenz: $(TEST_LORENZ_BIN)
+	./$(TEST_LORENZ_BIN)
+
+run-test-lorenz: test-lorenz
+
 # ============================================================================
 # Dependencies
 # ============================================================================
@@ -112,12 +143,4 @@ $(OBJDIR)/vic.o: src/vic.c src/vic.h src/c64.h
 $(OBJDIR)/cia.o: src/cia.c src/cia.h src/c64.h
 $(OBJDIR)/sid.o: src/sid.c src/sid.h src/c64.h
 
-# Test dependencies
-$(OBJDIR)/test/test_main.o: tests/test_main.c tests/test_framework.h
-$(OBJDIR)/test/test_cpu.o: tests/test_cpu.c tests/test_framework.h src/c64.h
-$(OBJDIR)/test/test_memory.o: tests/test_memory.c tests/test_framework.h src/c64.h
-$(OBJDIR)/test/test_vic.o: tests/test_vic.c tests/test_framework.h src/c64.h
-$(OBJDIR)/test/test_cia.o: tests/test_cia.c tests/test_framework.h src/c64.h
-$(OBJDIR)/test/test_sid.o: tests/test_sid.c tests/test_framework.h src/sid.h
-
-.PHONY: all clean run debug test test-verbose quicktest
+.PHONY: all clean run debug test test-verbose run-test-dormann run-test-lorenz quicktest

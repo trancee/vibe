@@ -12,6 +12,8 @@
 #include "cia.h"
 #include "sid.h"
 
+typedef void (*render_frame_t)(C64Vic *);
+
 // C64 System structure - contains all components
 struct C64System {
     C64Cpu    cpu;
@@ -30,6 +32,8 @@ struct C64System {
     // Debug/logging
     bool debug_enabled;
     u64  debug_interval;    // Cycles between debug output
+
+    render_frame_t frame_renderer;
 };
 
 // System functions

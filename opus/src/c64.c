@@ -65,7 +65,7 @@ void c64_tick(C64System *sys) {
     
     // Debug output
     if (sys->debug_enabled && (sys->cycle_count % sys->debug_interval == 0)) {
-        printf("[Cycle %llu] PC=$%04X A=$%02X X=$%02X Y=$%02X SP=$%02X P=$%02X "
+        printf("[Cycle %lu] PC=$%04X A=$%02X X=$%02X Y=$%02X SP=$%02X P=$%02X "
                "Raster=%03d BA=%d\n",
                sys->cycle_count,
                sys->cpu.PC, sys->cpu.A, sys->cpu.X, sys->cpu.Y,
