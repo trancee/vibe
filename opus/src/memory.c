@@ -29,7 +29,19 @@ void mem_reset(C64Memory *mem)
 static u8 get_mem_config(C64Memory *mem)
 {
     // Bits 0-2 of $01 control memory mapping
-    return mem->sys->cpu.port_data & 0x07;
+    // We need the effective value, combining output bits from port_data
+    // and input bits from external hardware (pullups on bits 0-2)
+    u8 port_dir = mem->sys->cpu.port_dir;
+    u8 port_data = mem->sys->cpu.port_data;
+    
+    // For output bits (DDR=1), use port_data
+    // For input bits (DDR=0), use external state (bits 0-2 pulled high)
+    u8 output_bits = port_dir;
+    u8 input_bits = ~port_dir;
+    u8 external = 0x07;  // Bits 0-2 pulled high by external resistors
+    
+    u8 effective = (port_data & output_bits) | (external & input_bits);
+    return effective & 0x07;
 }
 
 // Check if BASIC ROM is visible

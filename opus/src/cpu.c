@@ -103,14 +103,19 @@ static u8 cpu_read(C64Cpu *cpu, u16 addr)
             u8 output_bits = cpu->port_dir;
             u8 input_bits = ~cpu->port_dir;
             u8 result = 0;
+            
+            // Output bits return the value written to port_data
             result |= (cpu->port_data & output_bits);
-            // External lines: model the floating/pulled state
-            // The external state should match what the port_data wrote for proper
-            // readback when lines are configured as inputs but are weakly pulled
-            // by the output drivers. Use port_data as external for input bits.
-            u8 external = cpu->port_data & 0x3F;  // Lower 6 bits from last write
-            external |= (cpu->cpu_port_floating & 0xC0);  // Bits 6-7 float
+            
+            // Input bits return external hardware state:
+            // - Bits 0-2 (LORAM, HIRAM, CHAREN): External pullup resistors pull high
+            // - Bits 3-5: No external influence, retain last output value (weak latch)
+            // - Bits 6-7: Datasette lines, no pullups, retain last value
+            u8 external = 0x07;  // Bits 0-2 pulled high by external resistors
+            external |= (cpu->port_data & 0x38);  // Bits 3-5 retain last output
+            external |= (cpu->cpu_port_floating & 0xC0);  // Bits 6-7 float/retain
             result |= (external & input_bits);
+            
             if (cpu->sys->debug)
                 printf("CPU #$%04X -> $%02X\n", addr, result);
             return result;
