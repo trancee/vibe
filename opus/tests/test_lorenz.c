@@ -22,7 +22,7 @@
 
 #define DEBUG false
 
-#define TESTCASE "trap17" // "start"
+#define TESTCASE "start"
 
 static C64System sys;
 
@@ -177,11 +177,15 @@ static bool run_lorenz_test()
     while (cycles < max_cycles)
     {
         u16 pc = sys.cpu.PC;
+        
+        // Check if KERNAL ROM is visible (HIRAM bit set in port data)
+        bool kernal_visible = (sys.cpu.port_data & 0x02) != 0;
 
         // Check for trap addresses BEFORE executing
+        // Only trap KERNAL calls when KERNAL ROM is actually visible
 
         // CHROUT ($FFD2) - print character
-        if (pc == 0xFFD2)
+        if (pc == 0xFFD2 && kernal_visible)
         {
             mem_write_raw(&sys.mem, 0x030C, 0x00); // Storage for 6502 .A Register
 
@@ -214,7 +218,7 @@ static bool run_lorenz_test()
         }
 
         // GETIN ($FFE4) - get key, return non-zero to not wait forever
-        if (pc == 0xFFE4)
+        if (pc == 0xFFE4 && kernal_visible)
         {
             sys.cpu.A = 0x03; // Return 3 (RUN/STOP key) - non-zero so loops exit
 
@@ -246,7 +250,7 @@ static bool run_lorenz_test()
         }
 
         // LOAD ($E16F) - load next test (we skip this for single tests)
-        if (pc == 0xE16F)
+        if (pc == 0xE16F && kernal_visible)
         {
             // Get filename from $BB/$BC (address) and $B7 (length)
             u16 name_addr = sys.mem.ram[0xBB] | (sys.mem.ram[0xBC] << 8);
