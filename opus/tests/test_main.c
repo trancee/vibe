@@ -19,6 +19,7 @@ extern void run_cia_tests(void);
 extern void run_sid_tests(void);
 extern void run_dormann_tests(void);
 extern void run_lorenz_tests(void);
+extern void run_cpu_doc_tests(void);
 
 int main(int argc, char *argv[]) {
     (void)argc;
@@ -43,6 +44,7 @@ int main(int argc, char *argv[]) {
     run_sid_tests();
     run_dormann_tests();
     run_lorenz_tests();
+    run_cpu_doc_tests();
     
     clock_t end = clock();
     double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
@@ -60,6 +62,9 @@ int main(int argc, char *argv[]) {
         printf("  " COLOR_RED "Failed:      %d" COLOR_RESET "\n", g_test_ctx.failed);
     } else {
         printf("  Failed:      0\n");
+    }
+    if (g_test_ctx.skipped > 0) {
+        printf("  " COLOR_YELLOW "Skipped:     %d" COLOR_RESET "\n", g_test_ctx.skipped);
     }
     
     printf("  Time:        %.3f seconds\n", elapsed);

@@ -77,6 +77,7 @@ quicktest: $(TARGET)
 # Test source files
 TEST_SRCS = tests/test_main.c \
             tests/test_cpu.c \
+            tests/test_cpu_doc.c \
             tests/test_memory.c \
             tests/test_vic.c \
             tests/test_cia.c \
