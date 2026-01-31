@@ -19,9 +19,10 @@ static void setup(void) {
     memset(sys.mem.basic_rom, 0xBA, C64_BASIC_SIZE);
     memset(sys.mem.kernal_rom, 0xEA, C64_KERNAL_SIZE);
     memset(sys.mem.char_rom, 0xCA, C64_CHAR_SIZE);
-    sys.mem.basic_loaded = true;
-    sys.mem.kernal_loaded = true;
-    sys.mem.char_loaded = true;
+
+    sys.mem.has_basic = true;
+    sys.mem.has_kernal = true;
+    sys.mem.has_charom = true;
 }
 
 // ============================================================================

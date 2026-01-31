@@ -68,9 +68,7 @@ u8 mem_read(C64Memory *mem, u16 addr)
 
     // Check for BA stall (VIC-II has the bus)
     while (mem->sys->vic.ba_low)
-    {
         c64_tick(mem->sys);
-    }
 
     u8 result = mem_read_raw(mem, addr);
 
@@ -88,9 +86,7 @@ void mem_write(C64Memory *mem, u16 addr, u8 value)
 
     // Check for BA stall
     while (mem->sys->vic.ba_low)
-    {
         c64_tick(mem->sys);
-    }
 
     if (mem->sys->debug)
         printf("MEM #$%04X ← $%02X\n", addr, value);
@@ -105,80 +101,53 @@ u8 mem_read_raw(C64Memory *mem, u16 addr)
 
     // Handle different memory regions
 
-    // $0000-$9FFF: Always RAM
-    if (addr < 0xA000)
-    {
-        return mem->ram[addr];
-    }
-
     // $A000-$BFFF: BASIC ROM or RAM
-    if (addr < 0xC000)
-    {
-        if (basic_visible(config) && mem->basic_loaded)
-        {
-            return mem->basic_rom[addr - 0xA000];
-        }
-        return mem->ram[addr];
-    }
-
-    // $C000-$CFFF: Always RAM
-    if (addr < 0xD000)
-    {
-        return mem->ram[addr];
-    }
+    if (addr >= 0xA000 && addr <= 0xBFFF &&
+        basic_visible(config) && mem->has_basic)
+        return mem->basic_rom[addr - 0xA000];
 
     // $D000-$DFFF: I/O, Char ROM, or RAM
-    if (addr < 0xE000)
+    else if (addr >= 0xD000 && addr <= 0xDFFF)
     {
         if (io_visible(config))
         {
-            // I/O area
-            u16 io_addr = addr - 0xD000;
-
             // $D000-$D3FF: VIC-II (mirrored every 64 bytes)
-            if (io_addr < 0x400)
-            {
-                return vic_read(&mem->sys->vic, io_addr & 0x3F);
-            }
+            if (addr < 0xD400)
+                return vic_read(&mem->sys->vic, addr & 0x3F);
+
             // $D400-$D7FF: SID (mirrored every 32 bytes)
-            else if (io_addr < 0x800)
-            {
-                return sid_read(&mem->sys->sid, io_addr & 0x1F);
-            }
+            else if (addr < 0xD800)
+                return sid_read(&mem->sys->sid, addr & 0x1F);
+
             // $D800-$DBFF: Color RAM
-            else if (io_addr < 0xC00)
-            {
+            else if (addr < 0xDC00)
                 // Color RAM only stores 4 bits, upper nibble is open bus ($F)
-                return 0xF0 | (mem->color_ram[io_addr - 0x800] & 0x0F);
-            }
+                return 0xF0 | (mem->color_ram[addr - 0xD800] & 0x0F);
+
             // $DC00-$DCFF: CIA1
-            else if (io_addr < 0xD00)
-            {
-                return cia_read(&mem->sys->cia1, io_addr & 0x0F);
-            }
+            else if (addr < 0xDD00)
+                return cia_read(&mem->sys->cia1, addr & 0x0F);
+
             // $DD00-$DDFF: CIA2
-            else if (io_addr < 0xE00)
-            {
-                return cia_read(&mem->sys->cia2, io_addr & 0x0F);
-            }
+            else if (addr < 0xDE00)
+                return cia_read(&mem->sys->cia2, addr & 0x0F);
+
             // $DE00-$DFFF: I/O expansion area
             else
-            {
                 return 0xFF; // Open bus
-            }
         }
-        else if (char_visible(config) && mem->char_loaded)
-        {
+
+        else if (char_visible(config) && mem->has_charom)
             return mem->char_rom[addr - 0xD000];
-        }
-        return mem->ram[addr];
     }
 
     // $E000-$FFFF: KERNAL ROM or RAM
-    if (kernal_visible(config) && mem->kernal_loaded)
-    {
+    else if (addr >= 0xE000 && addr <= 0xFFFF &&
+             kernal_visible(config) && mem->has_kernal)
         return mem->kernal_rom[addr - 0xE000];
-    }
+
+    // $0000-$9FFF: Always RAM
+    // $C000-$CFFF: Always RAM
     return mem->ram[addr];
 }
 
@@ -189,60 +158,35 @@ void mem_write_raw(C64Memory *mem, u16 addr, u8 value)
 
     // Writes always go to RAM underneath ROMs
 
-    // $0000-$CFFF: RAM
-    if (addr < 0xD000)
-    {
-        mem->ram[addr] = value;
-        return;
-    }
-
     // $D000-$DFFF: I/O, or RAM
-    if (addr < 0xE000)
+    if (addr >= 0xD000 && addr <= 0xDFFF && io_visible(config))
     {
-        if (io_visible(config))
-        {
-            u16 io_addr = addr - 0xD000;
+        // VIC-II
+        if (addr < 0xD400)
+            vic_write(&mem->sys->vic, addr & 0x3F, value);
 
-            // VIC-II
-            if (io_addr < 0x400)
-            {
-                vic_write(&mem->sys->vic, io_addr & 0x3F, value);
-                return;
-            }
-            // SID
-            else if (io_addr < 0x800)
-            {
-                sid_write(&mem->sys->sid, io_addr & 0x1F, value);
-                return;
-            }
-            // Color RAM
-            else if (io_addr < 0xC00)
-            {
-                mem->color_ram[io_addr - 0x800] = value & 0x0F;
-                return;
-            }
-            // CIA1
-            else if (io_addr < 0xD00)
-            {
-                cia_write(&mem->sys->cia1, io_addr & 0x0F, value);
-                return;
-            }
-            // CIA2
-            else if (io_addr < 0xE00)
-            {
-                cia_write(&mem->sys->cia2, io_addr & 0x0F, value);
-                return;
-            }
-            // I/O expansion - ignore writes
-            return;
-        }
-        // Write to underlying RAM
-        mem->ram[addr] = value;
-        return;
+        // SID
+        else if (addr < 0xD800)
+            sid_write(&mem->sys->sid, addr & 0x1F, value);
+
+        // Color RAM
+        else if (addr < 0xDC00)
+            mem->color_ram[addr - 0xD800] = value & 0x0F;
+
+        // CIA1
+        else if (addr < 0xDD00)
+            cia_write(&mem->sys->cia1, addr & 0x0F, value);
+
+        // CIA2
+        else if (addr < 0xDE00)
+            cia_write(&mem->sys->cia2, addr & 0x0F, value);
+
+        // I/O expansion - ignore writes
     }
-
-    // $E000-$FFFF: RAM (under KERNAL)
-    mem->ram[addr] = value;
+    else
+        // $0000-$CFFF: RAM
+        // $E000-$FFFF: RAM (under KERNAL)
+        mem->ram[addr] = value;
 }
 
 // VIC memory read (uses VIC bank from CIA2)
@@ -262,10 +206,8 @@ u8 mem_vic_read(C64Memory *mem, u16 vic_addr)
         // Banks 0 ($0000) and 2 ($8000) see Char ROM
         if (bank == 0x0000 || bank == 0x8000)
         {
-            if (mem->char_loaded)
-            {
+            if (mem->has_charom)
                 return mem->char_rom[bank_offset & 0x0FFF];
-            }
         }
     }
 
@@ -276,6 +218,7 @@ u8 mem_vic_read(C64Memory *mem, u16 vic_addr)
 bool mem_load_rom(C64Memory *mem, const char *filename, u8 *dest, size_t size)
 {
     (void)mem; // Unused but kept for API consistency
+
     FILE *f = fopen(filename, "rb");
     if (!f)
     {
@@ -303,24 +246,24 @@ bool mem_load_roms(C64Memory *mem, const char *rom_path)
 
     // Load BASIC ROM
     snprintf(filename, sizeof(filename), "%s/basic.rom", rom_path);
-    mem->basic_loaded = mem_load_rom(mem, filename, mem->basic_rom, C64_BASIC_SIZE);
+    mem->has_basic = mem_load_rom(mem, filename, mem->basic_rom, C64_BASIC_SIZE);
 
     // Load KERNAL ROM
     snprintf(filename, sizeof(filename), "%s/kernal.rom", rom_path);
-    mem->kernal_loaded = mem_load_rom(mem, filename, mem->kernal_rom, C64_KERNAL_SIZE);
+    mem->has_kernal = mem_load_rom(mem, filename, mem->kernal_rom, C64_KERNAL_SIZE);
 
     // Load Character ROM
     snprintf(filename, sizeof(filename), "%s/char.rom", rom_path);
-    mem->char_loaded = mem_load_rom(mem, filename, mem->char_rom, C64_CHAR_SIZE);
+    mem->has_charom = mem_load_rom(mem, filename, mem->char_rom, C64_CHAR_SIZE);
 
-    if (mem->basic_loaded)
+    if (mem->has_basic)
         printf("Loaded BASIC ROM\n");
-    if (mem->kernal_loaded)
+    if (mem->has_kernal)
         printf("Loaded KERNAL ROM\n");
-    if (mem->char_loaded)
+    if (mem->has_charom)
         printf("Loaded Character ROM\n");
 
-    return mem->basic_loaded && mem->kernal_loaded && mem->char_loaded;
+    return mem->has_basic && mem->has_kernal && mem->has_charom;
 }
 
 void mem_dump(C64Memory *mem, u16 addr)

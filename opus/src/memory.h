@@ -19,14 +19,15 @@ typedef struct C64System C64System;
 typedef struct {
     u8 ram[C64_RAM_SIZE];           // 64KB RAM
     u8 color_ram[C64_COLOR_RAM_SIZE]; // 1KB Color RAM
+
     u8 basic_rom[C64_BASIC_SIZE];   // 8KB BASIC ROM
     u8 kernal_rom[C64_KERNAL_SIZE]; // 8KB KERNAL ROM
     u8 char_rom[C64_CHAR_SIZE];     // 4KB Character ROM
 
     // ROM loaded flags
-    bool basic_loaded;
-    bool kernal_loaded;
-    bool char_loaded;
+    bool has_basic;
+    bool has_kernal;
+    bool has_charom;
 
     // Reference to system
     C64System *sys;

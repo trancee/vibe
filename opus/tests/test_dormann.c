@@ -20,8 +20,6 @@
 
 static C64System sys;
 
-const char *rom_path = "roms";
-
 // Load a test binary into memory
 static bool load_dormann_test(const char *test_name, u16 load_address)
 {
@@ -47,8 +45,13 @@ static bool load_dormann_test(const char *test_name, u16 load_address)
     }
 
     // Reset system
-    c64_reset(&sys);
-
+    sys.cycle_count = 0;
+    
+    // Reset all components
+    mem_reset(&sys.mem);
+    vic_reset(&sys.vic);
+    cpu_reset(&sys.cpu); // CPU last (reads reset vector)
+ 
     size_t read = fread(&sys.mem.ram[load_address], 1, size, f);
     fclose(f);
 
@@ -365,8 +368,6 @@ void run_dormann_tests(void)
     cpu_init(&sys.cpu, &sys);
     mem_init(&sys.mem, &sys);
     vic_init(&sys.vic, &sys);
-    cia_init(&sys.cia1, 1, &sys);
-    cia_init(&sys.cia2, 2, &sys);
     
     // Disable 6510 I/O port for pure 6502 testing
     // (Dormann tests use $00/$01 as regular RAM variables)
