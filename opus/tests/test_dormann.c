@@ -374,7 +374,7 @@ void run_dormann_tests(void)
 }
 
 #ifdef TEST_DORMANN
-TestContext g_test_ctx = {0, 0, 0, NULL};
+TestContext g_test_ctx = {0, 0, 0, 0, NULL};
 
 int main()
 {

@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "test_framework.h"
 #include "../src/c64.h"
 
