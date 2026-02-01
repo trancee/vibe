@@ -391,7 +391,121 @@ After implementation, all PB6/PB7 tests pass:
 - ✅ cia1pb7
 - ✅ cia2pb7
 
-**Note:** The `cia1tab` test (which tests cascade mode where Timer B counts Timer A underflows) still has timing issues and requires further investigation.
+## CIA Timer Cascade Mode (cia1tab/cia2tab)
+
+The Lorenz `cia1tab` test validates Timer B's cascade mode, where Timer B counts Timer A underflows instead of system clock cycles. This mode is enabled by setting bits 5-6 of CRB to `01` (INMODE = Timer A underflow).
+
+### Test Configuration
+
+The test sets both Timer A and Timer B latches to 2, starts Timer B in cascade mode, then starts Timer A. It reads all four values (TA, TB, PB, ICR) at 12 different timing offsets and compares against expected values.
+
+### Key Findings
+
+#### 1. Cascade Signal Delay (1 cycle)
+
+When Timer A underflows, Timer B should count on the NEXT cycle, not immediately. This models the internal 6526 pipeline where the underflow signal propagates with a 1-cycle delay:
+
+```c
+// At start of cia_clock():
+cia->ta_underflow_delay = cia->ta_underflow;  // Copy previous cycle's underflow
+cia->ta_underflow = false;                     // Clear for this cycle
+
+// Timer B cascade mode uses the delayed signal:
+case 2: // Timer A underflow
+    if (cia->ta_underflow_delay) {
+        count = true;
+    }
+    break;
+```
+
+#### 2. Timer B Reads in Cascade Mode
+
+In cascade mode, Timer B reads need to return a "captured" value (`timer_b_read`) that is updated at the start of each cycle. This gives a 1-cycle delay on reads, matching real hardware:
+
+```c
+// At start of cia_clock():
+cia->timer_b_read = cia->timer_b;
+
+// When reading Timer B in cascade mode:
+u8 inmode = (cia->crb >> 5) & 0x03;
+u16 value = (inmode == 0) ? cia->timer_b : cia->timer_b_read;
+```
+
+#### 3. Zero Value Visibility in Cascade Mode
+
+In phi2 mode (counting system clocks), Timer B reloads immediately on underflow, so reads never see value 0. However, in cascade mode with the delayed read mechanism, the value 0 IS visible for exactly 1 cycle:
+
+```c
+// Only phi2 mode substitutes 0 with latch value
+if (inmode == 0 && value == 0 && (cia->crb & CIA_CR_START))
+{
+    value = cia->timer_b_latch;
+}
+```
+
+#### 4. Immediate Read Update on Cascade Underflow
+
+When Timer B underflows in cascade mode, `timer_b_read` must be immediately updated to the reloaded latch value so reads on that same cycle see the new value:
+
+```c
+if (cia->timer_b == 0xFFFF)
+{
+    cia->timer_b = cia->timer_b_latch;
+    
+    // In cascade mode, update timer_b_read immediately
+    if (inmode != 0)
+    {
+        cia->timer_b_read = cia->timer_b_latch;
+    }
+    // ... ICR flag setting, etc.
+}
+```
+
+#### 5. PB7 Output in Cascade Mode
+
+The PB7 output (controlled by Timer B) must also update immediately on underflow in cascade mode, rather than being delayed by the normal 1-cycle output pipeline:
+
+```c
+// In cascade mode, update pb7_out_delayed immediately
+if (inmode != 0)
+{
+    cia->pb7_out_delayed = cia->pb7_out;
+}
+```
+
+#### 6. No Delay for PB7 Shadow Timer in Cascade Mode
+
+In phi2 mode, the PB7 shadow timer (`timer_b_pb7`) uses `pb7_delay` to control when counting starts. In cascade mode, this delay should be bypassed:
+
+```c
+bool can_count_pb7 = (inmode != 0) || (cia->pb7_delay == 0);
+
+if (cia->pb7_delay > 0 && inmode == 0)
+{
+    cia->pb7_delay--;
+}
+
+if (can_count_pb7)
+{
+    cia->timer_b_pb7--;
+    // ...
+}
+```
+
+### Summary: Cascade Mode Timing Differences
+
+| Aspect | Phi2 Mode | Cascade Mode |
+|--------|-----------|--------------|
+| Count signal | Every cycle | 1 cycle after TA underflow |
+| Timer read value | Current `timer_b` | Captured `timer_b_read` |
+| Value 0 visible | No (shows latch) | Yes (for 1 cycle) |
+| PB7 output delay | 1 cycle | Immediate on underflow |
+| Start counting delay | Uses `tb_delay` | No delay |
+
+### Test Status
+
+After all fixes:
+- ✅ cia1tab - PASSING
 
 ## References
 

@@ -29,15 +29,23 @@ void cia_reset(C64Cia *cia)
 
     cia->timer_a = 0xFFFF;
     cia->timer_b = 0xFFFF;
+    cia->timer_a_read = 0xFFFF;
+    cia->timer_b_read = 0xFFFF;
     cia->timer_a_latch = 0xFFFF;
     cia->timer_b_latch = 0xFFFF;
+    cia->timer_a_pb6 = 0xFFFF;
     cia->timer_b_pb7 = 0xFFFF;
 
     cia->ta_delay = 0;
+    cia->pb6_delay = 0;
     cia->tb_delay = 0;
     cia->pb7_delay = 0;
     cia->ta_started = false;
     cia->tb_started = false;
+    cia->ta_reload_skip = false;
+    cia->pb6_reload_skip = false;
+    cia->tb_reload_skip = false;
+    cia->pb7_reload_skip = false;
     cia->ta_load_delay = 0;
     cia->tb_load_delay = 0;
     cia->ta_stop_delay = 0;
@@ -51,6 +59,9 @@ void cia_reset(C64Cia *cia)
     cia->pb7_pulse = false;
     cia->pb6_pulse_out = false;
     cia->pb7_pulse_out = false;
+    
+    cia->ta_underflow = false;
+    cia->ta_underflow_delay = false;
 
     cia->cra = 0;
     cia->crb = 0;
@@ -94,6 +105,21 @@ static void check_irq(C64Cia *cia)
 
 void cia_clock(C64Cia *cia)
 {
+    // Capture Timer A value for reads (1-cycle delay)
+    // CPU reads see the value from the PREVIOUS cycle
+    cia->timer_a_read = cia->timer_a;
+    
+    // Capture Timer B value for reads (1-cycle delay)
+    // This is separate from tb_delay which controls counting
+    cia->timer_b_read = cia->timer_b;
+    
+    // Copy previous cycle's underflow to delayed signal (for Timer B cascade)
+    // Timer B should see Timer A underflow 1 cycle after it happens
+    cia->ta_underflow_delay = cia->ta_underflow;
+    
+    // Clear Timer A underflow for this cycle
+    cia->ta_underflow = false;
+    
     // Update delayed output to current value (1-cycle delay for toggle output)
     // This makes reads see the value from the previous cycle
     cia->pb6_out_delayed = cia->pb6_out;
@@ -104,7 +130,7 @@ void cia_clock(C64Cia *cia)
     cia->pb6_pulse_out = cia->pb6_pulse;
     cia->pb7_pulse_out = cia->pb7_pulse;
     
-    // Clear internal pulses from the previous cycle (pulse mode = high for one cycle only)
+    // Clear internal pulses from previous cycle
     cia->pb6_pulse = false;
     cia->pb7_pulse = false;
     
@@ -116,6 +142,7 @@ void cia_clock(C64Cia *cia)
         if (cia->ta_load_delay == 0)
         {
             cia->timer_a = cia->timer_a_latch;
+            cia->timer_a_pb6 = cia->timer_a_latch;
             // When LOAD completes, add 1 cycle delay before timer can count
             // This ensures the loaded value is stable for one cycle
             // We set to 2 because the timer counting logic will decrement it
@@ -167,50 +194,66 @@ void cia_clock(C64Cia *cia)
     // Timer A
     if (cia->cra & CIA_CR_START)
     {
-        // Handle pipeline delay when timer starts
-        if (cia->ta_delay > 0)
+        bool count = false;
+
+        // Check input mode
+        if (!(cia->cra & CIA_CR_INMODE))
         {
-            cia->ta_delay--;
+            // Count phi2 cycles
+            count = true;
         }
-        else
+        // CNT mode not implemented
+
+        if (count)
         {
-            bool count = false;
-
-            // Check input mode
-            if (!(cia->cra & CIA_CR_INMODE))
+            // Count main timer (for register reads) after ta_delay expires
+            if (cia->ta_delay > 0)
             {
-                // Count phi2 cycles
-                count = true;
+                cia->ta_delay--;
             }
-            // CNT mode not implemented
-
-            if (count)
+            else
             {
                 cia->timer_a--;
                 if (cia->timer_a == 0xFFFF)
                 {
-                    // Underflow (wrapped from 0 to 0xFFFF)
+                    // Underflow - reload from latch
                     cia->timer_a = cia->timer_a_latch;
 
-                    // Set interrupt flag
+                    // Set underflow signal for cascade mode (Timer B counts Timer A underflows)
+                    cia->ta_underflow = true;
+
+                    // Set interrupt flag (based on main timer)
                     cia->icr_data |= CIA_ICR_TA;
                     check_irq(cia);
-                    
-                    // Timer output to PB6
-                    // The toggle flip-flop ALWAYS toggles on underflow, regardless of output mode
-                    // OUTMODE only affects how the output is displayed (toggle vs pulse)
-                    cia->pb6_out = !cia->pb6_out;
-                    
-                    // In pulse mode, also set the pulse flag
-                    if (!(cia->cra & CIA_CR_OUTMODE))
-                    {
-                        cia->pb6_pulse = true;
-                    }
 
                     // One-shot mode: stop timer
                     if (cia->cra & CIA_CR_RUNMODE)
                     {
                         cia->cra &= ~CIA_CR_START;
+                    }
+                }
+            }
+            
+            // Count PB6 shadow timer (for pulse output) after pb6_delay expires
+            if (cia->pb6_delay > 0)
+            {
+                cia->pb6_delay--;
+            }
+            else
+            {
+                cia->timer_a_pb6--;
+                if (cia->timer_a_pb6 == 0xFFFF)
+                {
+                    // PB6 underflow
+                    cia->timer_a_pb6 = cia->timer_a_latch;
+                    
+                    // Timer output to PB6
+                    cia->pb6_out = !cia->pb6_out;
+                
+                    // In pulse mode, set the pulse flag (visible next cycle)
+                    if (!(cia->cra & CIA_CR_OUTMODE))
+                    {
+                        cia->pb6_pulse = true;
                     }
                 }
             }
@@ -232,7 +275,9 @@ void cia_clock(C64Cia *cia)
         case 1: // CNT (not implemented)
             break;
         case 2: // Timer A underflow
-            if (cia->icr_data & CIA_ICR_TA)
+            // Use delayed underflow signal (1 cycle after TA underflows)
+            // This matches real hardware behavior where cascade has 1-cycle delay
+            if (cia->ta_underflow_delay)
             {
                 count = true;
             }
@@ -243,19 +288,29 @@ void cia_clock(C64Cia *cia)
 
         if (count)
         {
-            // Count main timer (for register reads) after tb_delay expires
-            // Check delay BEFORE decrementing so delay=2 means skip 2 cycles
-            if (cia->tb_delay > 0)
+            // Count main timer (for register reads)
+            // tb_delay only applies to phi2 mode, not cascade mode
+            bool can_count_main = (inmode != 0) || (cia->tb_delay == 0);
+            
+            if (cia->tb_delay > 0 && inmode == 0)
             {
                 cia->tb_delay--;
             }
-            else
+            
+            if (can_count_main)
             {
                 cia->timer_b--;
                 if (cia->timer_b == 0xFFFF)
                 {
                     // Underflow (wrapped from 0 to 0xFFFF)
                     cia->timer_b = cia->timer_b_latch;
+                    
+                    // In cascade mode, update timer_b_read immediately so reads
+                    // see the reloaded value on the same cycle as underflow
+                    if (inmode != 0)
+                    {
+                        cia->timer_b_read = cia->timer_b_latch;
+                    }
                     
                     // ICR flag is set based on main timer underflow
                     cia->icr_data |= CIA_ICR_TB;
@@ -268,12 +323,16 @@ void cia_clock(C64Cia *cia)
                 }
             }
             
-            // Count PB7 shadow timer (for pulse output) after pb7_delay expires
-            if (cia->pb7_delay > 0)
+            // Count PB7 shadow timer (for pulse output)
+            // pb7_delay only applies to phi2 mode, not cascade mode
+            bool can_count_pb7 = (inmode != 0) || (cia->pb7_delay == 0);
+            
+            if (cia->pb7_delay > 0 && inmode == 0)
             {
                 cia->pb7_delay--;
             }
-            else
+            
+            if (can_count_pb7)
             {
                 cia->timer_b_pb7--;
                 if (cia->timer_b_pb7 == 0xFFFF)
@@ -285,7 +344,14 @@ void cia_clock(C64Cia *cia)
                     // The toggle flip-flop ALWAYS toggles on underflow
                     cia->pb7_out = !cia->pb7_out;
                     
-                    // In pulse mode, also set the pulse flag
+                    // In cascade mode, update pb7_out_delayed immediately so reads
+                    // see the toggled value on the same cycle as underflow
+                    if (inmode != 0)
+                    {
+                        cia->pb7_out_delayed = cia->pb7_out;
+                    }
+                    
+                    // In pulse mode, set the pulse flag (visible next cycle)
                     if (!(cia->crb & CIA_CR_OUTMODE))
                     {
                         cia->pb7_pulse = true;
@@ -424,20 +490,22 @@ u8 cia_read(C64Cia *cia, u8 reg)
         }
         
         // Timer A output to PB6 (when PBON is set)
-        // OUTMODE=0: Pulse mode, OUTMODE=1: Toggle mode
+        // OUTMODE=0: Pulse mode (LOW normally, HIGH for 1 cycle on underflow)
+        // OUTMODE=1: Toggle mode (toggles on each underflow)
         if (cia->cra & CIA_CR_PBON)
         {
             result &= ~0x40; // Clear PB6
             if (cia->cra & CIA_CR_OUTMODE)
             {
-                // Toggle mode: use current toggle state
-                if (cia->pb6_out)
+                // Toggle mode: use delayed toggle state (1-cycle delay)
+                if (cia->pb6_out_delayed)
                     result |= 0x40;
             }
             else
             {
-                // Pulse mode: high during underflow cycle (direct read)
-                if (cia->pb6_pulse)
+                // Pulse mode: LOW normally, HIGH during pulse
+                // pulse_out = true means we're in the HIGH pulse period
+                if (cia->pb6_pulse_out)
                     result |= 0x40;
             }
         }
@@ -449,14 +517,14 @@ u8 cia_read(C64Cia *cia, u8 reg)
             result &= ~0x80; // Clear PB7
             if (cia->crb & CIA_CR_OUTMODE)
             {
-                // Toggle mode: use current toggle state
-                if (cia->pb7_out)
+                // Toggle mode: use delayed toggle state (1-cycle delay)
+                if (cia->pb7_out_delayed)
                     result |= 0x80;
             }
             else
             {
-                // Pulse mode: high during underflow cycle (direct read like Timer A)
-                if (cia->pb7_pulse)
+                // Pulse mode: LOW normally, HIGH during pulse
+                if (cia->pb7_pulse_out)
                     result |= 0x80;
             }
         }
@@ -471,16 +539,55 @@ u8 cia_read(C64Cia *cia, u8 reg)
         return cia->ddrb;
 
     case CIA_TALO:
-        return cia->timer_a & 0xFF;
+    {
+        // Use captured value from start of cycle (1-cycle delay for reads)
+        // When timer is 0 and running, return latch value instead
+        u16 value = cia->timer_a_read;
+        if (value == 0 && (cia->cra & CIA_CR_START))
+        {
+            value = cia->timer_a_latch;
+        }
+        return value & 0xFF;
+    }
 
     case CIA_TAHI:
-        return (cia->timer_a >> 8) & 0xFF;
+    {
+        u16 value = cia->timer_a_read;
+        if (value == 0 && (cia->cra & CIA_CR_START))
+        {
+            value = cia->timer_a_latch;
+        }
+        return (value >> 8) & 0xFF;
+    }
 
     case CIA_TBLO:
-        return cia->timer_b & 0xFF;
+    {
+        // Timer B read behavior depends on input mode
+        // Phi2 mode (inmode=0): tb_delay controls counting, read current value
+        // Cascade mode (inmode=2): immediate counting, read captured (delayed) value
+        u8 inmode = (cia->crb >> 5) & 0x03;
+        u16 value = (inmode == 0) ? cia->timer_b : cia->timer_b_read;
+        // In phi2 mode, timer reloads immediately so reads never see 0
+        // In cascade mode with delayed reads, we CAN see 0 (it's 1 cycle behind)
+        if (inmode == 0 && value == 0 && (cia->crb & CIA_CR_START))
+        {
+            value = cia->timer_b_latch;
+        }
+        return value & 0xFF;
+    }
 
     case CIA_TBHI:
-        return (cia->timer_b >> 8) & 0xFF;
+    {
+        u8 inmode = (cia->crb >> 5) & 0x03;
+        u16 value = (inmode == 0) ? cia->timer_b : cia->timer_b_read;
+        // In phi2 mode, timer reloads immediately so reads never see 0
+        // In cascade mode with delayed reads, we CAN see 0 (it's 1 cycle behind)
+        if (inmode == 0 && value == 0 && (cia->crb & CIA_CR_START))
+        {
+            value = cia->timer_b_latch;
+        }
+        return (value >> 8) & 0xFF;
+    }
 
     case CIA_TOD_10:
     {
@@ -571,6 +678,8 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         if (!(cia->cra & CIA_CR_START))
         {
             cia->timer_a = cia->timer_a_latch;
+            cia->timer_a_pb6 = cia->timer_a_latch;
+            cia->timer_a_read = cia->timer_a_latch;
         }
         break;
 
@@ -584,6 +693,7 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         {
             cia->timer_b = cia->timer_b_latch;
             cia->timer_b_pb7 = cia->timer_b_latch;
+            cia->timer_b_read = cia->timer_b_latch;
         }
         break;
 
@@ -669,22 +779,37 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         bool was_running = cia->cra & CIA_CR_START;
         bool now_running = value & CIA_CR_START;
         bool force_load = value & CIA_CR_LOAD;
-        bool was_toggle = cia->cra & CIA_CR_OUTMODE;
-        bool now_toggle = value & CIA_CR_OUTMODE;
 
-        // Force load bit - immediately reload timer from latch
-        // Note: Timer A LOAD is immediate, unlike Timer B which has pipeline delay
+        // Force load bit - schedule reload from latch
+        // Timer A LOAD has a 1-cycle delay before the load takes effect
         if (force_load)
         {
-            cia->timer_a = cia->timer_a_latch;
+            cia->ta_load_delay = 1;
         }
 
-        // Timer starting: add pipeline delay
-        // When starting with LOAD bit set, delay is 2 cycles (load + start)
-        // When starting without LOAD bit, delay is 1 cycle
+        // Timer starting: set up pipeline delays
         if (!was_running && now_running)
         {
-            cia->ta_delay = force_load ? 2 : 1;
+            // Main timer (for register reads) has 1-cycle delay
+            // Combined with timer_a_read capture, gives proper cia1tab timing
+            if (force_load)
+            {
+                cia->ta_delay = 2;
+            }
+            else
+            {
+                cia->ta_delay = 1;
+            }
+            
+            // PB6 shadow timer counts immediately for correct pulse timing (pb6 test)
+            cia->pb6_delay = 0;
+            
+            // Sync the PB6 shadow timer with the main timer
+            cia->timer_a_pb6 = cia->timer_a;
+            
+            // Clear reload skip - fresh start shouldn't inherit old skip state
+            cia->ta_reload_skip = false;
+            cia->pb6_reload_skip = false;
             
             // When timer starts, the toggle flip-flop is ALWAYS set HIGH
             // This affects toggle mode output; pulse mode uses pb6_pulse instead
@@ -702,8 +827,6 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
     {
         bool was_running = cia->crb & CIA_CR_START;
         bool now_running = value & CIA_CR_START;
-        bool was_toggle = cia->crb & CIA_CR_OUTMODE;
-        bool now_toggle = value & CIA_CR_OUTMODE;
 
         // Force load bit - set delay counter for 2-cycle delay
         // The timer is reloaded after 2 cycles
@@ -713,13 +836,18 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
             cia->tb_load_delay = 2;
         }
 
-        // Timer starting: add pipeline delay
-        // Timer B register uses 2-cycle delay (for cia1tb123 timer read test)
-        // PB7 output uses 1-cycle delay (for cia1pb7 timing test)
+        // Timer starting: add pipeline delays
+        // Register reads need 2-cycle delay (tb123 test)
+        // Pulse output needs immediate counting (pb7 test)
         if (!was_running && now_running)
         {
+            // Timer B register always has 2-cycle delay for proper read timing
             cia->tb_delay = 2;
-            cia->pb7_delay = 1;
+            // Pulse output (PB7) counts immediately for correct pulse timing
+            cia->pb7_delay = 0;
+            
+            // Sync the PB7 shadow timer with the main timer
+            cia->timer_b_pb7 = cia->timer_b;
             
             // When timer starts, the toggle flip-flop is ALWAYS set HIGH
             // This affects toggle mode output; pulse mode uses pb7_pulse instead

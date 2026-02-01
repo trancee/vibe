@@ -57,18 +57,29 @@ typedef struct
     u8 ddrb; // Port B data direction
 
     // Timers
-    u16 timer_a;       // Timer A current value
-    u16 timer_b;       // Timer B current value
+    u16 timer_a;       // Timer A current value (internal, updated during tick)
+    u16 timer_b;       // Timer B current value (internal, updated during tick)
+    u16 timer_a_read;  // Timer A value visible to CPU reads (captured at start of tick)
+    u16 timer_b_read;  // Timer B value visible to CPU reads (captured at start of tick)
     u16 timer_a_latch; // Timer A reload value
     u16 timer_b_latch; // Timer B reload value
+    u16 timer_a_pb6;   // Shadow counter for PB6 output (counts immediately)
     u16 timer_b_pb7;   // Shadow counter for PB7 output (1 cycle ahead of timer_b)
 
     // Timer pipeline delays (for cycle accuracy)
-    u8 ta_delay;     // Cycles before Timer A starts counting
+    u8 ta_delay;     // Cycles before Timer A register starts counting
+    u8 pb6_delay;    // Cycles before PB6 output starts reacting (separate from ta_delay)
     u8 tb_delay;     // Cycles before Timer B starts counting
     u8 pb7_delay;    // Cycles before PB7 output starts reacting (separate from tb_delay)
     bool ta_started; // Timer A has started
     bool tb_started; // Timer B has started
+    
+    // Post-reload skip flags (COUNT3 pipeline effect)
+    // After underflow+reload, the timer skips ONE decrement cycle
+    bool ta_reload_skip; // Timer A will skip next decrement
+    bool pb6_reload_skip; // Timer A PB6 shadow will skip next decrement
+    bool tb_reload_skip; // Timer B will skip next decrement
+    bool pb7_reload_skip; // Timer B PB7 shadow will skip next decrement
     
     // Pending load operations (2-cycle delay for force load)
     // 0 = no pending, 1 = load next cycle, 2 = load in 2 cycles
@@ -89,6 +100,10 @@ typedef struct
     bool pb7_pulse; // Timer B pulse will be active (internal)
     bool pb6_pulse_out; // Timer A pulse visible to reads
     bool pb7_pulse_out; // Timer B pulse visible to reads
+    
+    // Timer A underflow signal for cascade mode (Timer B counting Timer A)
+    bool ta_underflow; // Timer A underflowed this cycle
+    bool ta_underflow_delay; // Timer A underflow signal delayed by 1 cycle
 
     // Control registers
     u8 cra; // Control register A

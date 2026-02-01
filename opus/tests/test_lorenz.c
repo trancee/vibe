@@ -199,17 +199,34 @@ static bool run_lorenz_test()
             switch (a)
             {
             case 13:
-                printf("\x{1B}[0m");
+                printf("\033[0m");
                 printf("\n");
                 break;
             case 14:
-                printf("\x{1B}[33m");
+                printf("\033[33m");
+                break;
+            case 17:
+                // printf("↓");
+                printf("\033[1B"); // cursor down
+                printf("\033[1m");
+                break;
+            case 29:
+                // printf("→");
+                printf("\033[1C"); // cursor right
+                printf("\033[1m");
                 break;
             case 145:
-                printf("\x{1B}[1A\x{1B}[1m"); // ↑ up arrow
+                // printf("↑");
+                printf("\033[1A"); // cursor up
+                printf("\033[1m");
                 break;
             case 147:
-                printf("\x{1B}c"); // clear
+                printf("\033c"); // clear
+                break;
+            case 157:
+                // printf("←");
+                printf("\033[1D"); // cursor left
+                printf("\033[1m");
                 break;
             default:
                 printf("%c", petscii_to_ascii(a));
@@ -239,7 +256,7 @@ static bool run_lorenz_test()
         // WARM/CARTROM ($8000) - test passed
         if (pc == 0x8000)
         {
-            printf("\x{1B}[31;1;6mWARM\x{1B}[0m\n");
+            printf("\033[31;1;6mWARM\033[0m\n");
 
             lorenz_test_passed = true;
             break;
@@ -248,7 +265,7 @@ static bool run_lorenz_test()
         // READY ($A474) - return to BASIC (error)
         if (pc == 0xA474)
         {
-            printf("\x{1B}[31;1;6mREADY\x{1B}[0m\n");
+            printf("\033[31;1;6mREADY\033[0m\n");
 
             lorenz_test_failed = true;
             break;
