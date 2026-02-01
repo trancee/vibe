@@ -267,9 +267,7 @@ static bool run_lorenz_test()
             break;
         }
 
-        c64_tick(&sys);
-
-        // Execute one CPU instruction
+        // Execute one CPU instruction (memory accesses tick the system)
         cycles += cpu_step(&sys.cpu);
 
         // Check for infinite loop
@@ -303,8 +301,19 @@ TEST(lorenz_cpu_instructions)
 
     printf("\n");
 
-    while (run_lorenz_test())
-        passed++;
+    while (true) {
+        if (run_lorenz_test()) {
+            passed++;
+        } else {
+            // Check if test failed or if there's no more tests
+            if (lorenz_test_failed) {
+                failed++;
+                break;  // Stop on first failure for now
+            }
+
+            break;  // No more tests to load
+        }
+    }
 
     printf("    Lorenz CPU tests: %d passed, %d failed, %d skipped\n",
            passed, failed, skipped);

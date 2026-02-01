@@ -96,12 +96,17 @@ static u8 cpu_read(C64Cpu *cpu, u16 addr)
     {
         if (addr == 0x0000)
         {
+            // Must tick the system even for port reads (every memory access = 1 cycle)
+            c64_tick(cpu->sys);
             if (cpu->sys->debug)
                 printf("CPU #$%04X -> $%02X\n", addr, cpu->port_dir);
             return cpu->port_dir;
         }
         if (addr == 0x0001)
         {
+            // Must tick the system even for port reads (every memory access = 1 cycle)
+            c64_tick(cpu->sys);
+            
             u8 output_bits = cpu->port_dir;
             u8 input_bits = ~cpu->port_dir;
             u8 result = 0;
@@ -229,7 +234,8 @@ static u16 addr_absolute_x(C64Cpu *cpu, bool check_page)
     if (check_page && ((base & 0xFF00) != (result & 0xFF00)))
     {
         cpu->page_crossed = true;
-        cpu->extra_cycles++;
+        // Dummy read at "wrong" address (base + X with original high byte)
+        cpu_read(cpu, (base & 0xFF00) | (result & 0xFF));
     }
     return result;
 }
@@ -243,8 +249,33 @@ static u16 addr_absolute_y(C64Cpu *cpu, bool check_page)
     if (check_page && ((base & 0xFF00) != (result & 0xFF00)))
     {
         cpu->page_crossed = true;
-        cpu->extra_cycles++;
+        // Dummy read at "wrong" address (base + Y with original high byte)
+        cpu_read(cpu, (base & 0xFF00) | (result & 0xFF));
     }
+    return result;
+}
+
+// RMW version of absolute,X - always does dummy read at possibly-wrong address
+static u16 addr_absolute_x_rmw(C64Cpu *cpu)
+{
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 base = lo | (hi << 8);
+    u16 result = base + cpu->X;
+    // RMW always reads at the possibly-wrong address first
+    cpu_read(cpu, (base & 0xFF00) | (result & 0xFF));
+    return result;
+}
+
+// RMW version of absolute,Y - always does dummy read at possibly-wrong address
+static u16 addr_absolute_y_rmw(C64Cpu *cpu)
+{
+    u16 lo = cpu_read(cpu, cpu->PC++);
+    u16 hi = cpu_read(cpu, cpu->PC++);
+    u16 base = lo | (hi << 8);
+    u16 result = base + cpu->Y;
+    // RMW always reads at the possibly-wrong address first
+    cpu_read(cpu, (base & 0xFF00) | (result & 0xFF));
     return result;
 }
 
@@ -279,7 +310,22 @@ static u16 addr_indirect_y(C64Cpu *cpu, bool check_page)
     {
         cpu->page_crossed = true;
         cpu->extra_cycles++;
+        // Dummy read from address with wrong high byte
+        cpu_read(cpu, (base & 0xFF00) | (result & 0x00FF));
     }
+    return result;
+}
+
+// RMW version always does the dummy read cycle
+static u16 addr_indirect_y_rmw(C64Cpu *cpu)
+{
+    u8 ptr = cpu_read(cpu, cpu->PC++);
+    u16 lo = cpu_read(cpu, ptr);
+    u16 hi = cpu_read(cpu, (ptr + 1) & 0xFF);
+    u16 base = lo | (hi << 8);
+    u16 result = base + cpu->Y;
+    // Always do dummy read for RMW
+    cpu_read(cpu, (base & 0xFF00) | (result & 0x00FF));
     return result;
 }
 
@@ -398,9 +444,11 @@ static void do_branch(C64Cpu *cpu, bool condition)
         u16 old_pc = cpu->PC;
         cpu->PC += offset;
         cpu->extra_cycles++;
-        if ((old_pc & 0xFF00) != (cpu->PC & 0xFF00))
+        cpu_read(cpu, old_pc);  // dummy read when branch taken
+        if ((old_pc & 0xFF00) != (cpu->PC & 0xFF00)) {
             cpu->extra_cycles++;
-        cpu_read(cpu, old_pc);
+            cpu_read(cpu, (old_pc & 0xFF00) | (cpu->PC & 0x00FF));  // dummy read on page crossing
+        }
     }
 }
 
@@ -497,6 +545,7 @@ static int op_06(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 5;
 }
@@ -510,6 +559,7 @@ static int op_0E(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 6;
 }
@@ -517,13 +567,15 @@ static int op_16(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 6;
 }
 static int op_1E(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 7;
 }
@@ -716,6 +768,7 @@ static int op_26(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 5;
 }
@@ -729,6 +782,7 @@ static int op_2E(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 6;
 }
@@ -736,13 +790,15 @@ static int op_36(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 6;
 }
 static int op_3E(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 7;
 }
@@ -812,6 +868,7 @@ static int op_46(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 5;
 }
@@ -825,6 +882,7 @@ static int op_4E(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 6;
 }
@@ -832,13 +890,15 @@ static int op_56(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 6;
 }
 static int op_5E(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 7;
 }
@@ -912,6 +972,7 @@ static int op_66(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 5;
 }
@@ -925,6 +986,7 @@ static int op_6E(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 6;
 }
@@ -932,13 +994,15 @@ static int op_76(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 6;
 }
 static int op_7E(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 7;
 }
@@ -961,7 +1025,8 @@ static int op_8D(C64Cpu *cpu)
 }
 static int op_91(C64Cpu *cpu)
 {
-    cpu_write(cpu, addr_indirect_y(cpu, false), cpu->A);
+    // STA (ind),Y always takes 6 cycles with dummy read
+    cpu_write(cpu, addr_indirect_y_rmw(cpu), cpu->A);
     return 6;
 }
 static int op_95(C64Cpu *cpu)
@@ -971,12 +1036,14 @@ static int op_95(C64Cpu *cpu)
 }
 static int op_99(C64Cpu *cpu)
 {
-    cpu_write(cpu, addr_absolute_y(cpu, false), cpu->A);
+    // STA abs,Y always takes 5 cycles, needs dummy read at possibly-wrong address
+    cpu_write(cpu, addr_absolute_y_rmw(cpu), cpu->A);
     return 5;
 }
 static int op_9D(C64Cpu *cpu)
 {
-    cpu_write(cpu, addr_absolute_x(cpu, false), cpu->A);
+    // STA abs,X always takes 5 cycles, needs dummy read at possibly-wrong address
+    cpu_write(cpu, addr_absolute_x_rmw(cpu), cpu->A);
     return 5;
 }
 
@@ -1281,7 +1348,9 @@ static int op_CC(C64Cpu *cpu)
 static int op_C6(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 5;
@@ -1289,7 +1358,9 @@ static int op_C6(C64Cpu *cpu)
 static int op_CE(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 6;
@@ -1297,15 +1368,19 @@ static int op_CE(C64Cpu *cpu)
 static int op_D6(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 6;
 }
 static int op_DE(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
-    u8 v = cpu_read(cpu, a) - 1;
+    u16 a = addr_absolute_x_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 7;
@@ -1315,7 +1390,9 @@ static int op_DE(C64Cpu *cpu)
 static int op_E6(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 5;
@@ -1323,7 +1400,9 @@ static int op_E6(C64Cpu *cpu)
 static int op_EE(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 6;
@@ -1331,15 +1410,19 @@ static int op_EE(C64Cpu *cpu)
 static int op_F6(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 6;
 }
 static int op_FE(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
-    u8 v = cpu_read(cpu, a) + 1;
+    u16 a = addr_absolute_x_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     cpu_update_nz(cpu, v);
     return 7;
@@ -1426,35 +1509,39 @@ static int op_NOP_impl(C64Cpu *cpu)
 // NOP variants - immediate (2 bytes, 2 cycles) - also known as SKB/DOP
 static int op_NOP_imm(C64Cpu *cpu)
 {
-    addr_immediate(cpu);
+    cpu_read(cpu, addr_immediate(cpu));  // read and discard operand
     return 2;
 }
 
 // NOP variants - zeropage (2 bytes, 3 cycles)
 static int op_NOP_zp(C64Cpu *cpu)
 {
-    addr_zeropage(cpu);
+    u16 a = addr_zeropage(cpu);
+    cpu_read(cpu, a);  // dummy read
     return 3;
 }
 
 // NOP variants - zeropage,x (2 bytes, 4 cycles)
 static int op_NOP_zpx(C64Cpu *cpu)
 {
-    addr_zeropage_x(cpu);
+    u16 a = addr_zeropage_x(cpu);
+    cpu_read(cpu, a);  // dummy read
     return 4;
 }
 
 // NOP variants - absolute (3 bytes, 4 cycles) - also known as SKW/TOP
 static int op_NOP_abs(C64Cpu *cpu)
 {
-    addr_absolute(cpu);
+    u16 a = addr_absolute(cpu);
+    cpu_read(cpu, a);  // dummy read
     return 4;
 }
 
 // NOP variants - absolute,x (3 bytes, 4+ cycles)
 static int op_NOP_abx(C64Cpu *cpu)
 {
-    addr_absolute_x(cpu, true);
+    u16 a = addr_absolute_x(cpu, true);
+    cpu_read(cpu, a);  // dummy read
     return 4;
 }
 
@@ -1463,6 +1550,7 @@ static int op_03(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1473,6 +1561,7 @@ static int op_07(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1483,6 +1572,7 @@ static int op_0F(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1491,8 +1581,9 @@ static int op_0F(C64Cpu *cpu)
 }
 static int op_13(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
+    u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1503,6 +1594,7 @@ static int op_17(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1511,8 +1603,9 @@ static int op_17(C64Cpu *cpu)
 }
 static int op_1B(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
+    u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1521,8 +1614,9 @@ static int op_1B(C64Cpu *cpu)
 }
 static int op_1F(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_asl(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A |= v;
@@ -1535,6 +1629,7 @@ static int op_23(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1545,6 +1640,7 @@ static int op_27(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1555,6 +1651,7 @@ static int op_2F(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1563,8 +1660,9 @@ static int op_2F(C64Cpu *cpu)
 }
 static int op_33(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
+    u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1575,6 +1673,7 @@ static int op_37(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1583,8 +1682,9 @@ static int op_37(C64Cpu *cpu)
 }
 static int op_3B(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
+    u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1593,8 +1693,9 @@ static int op_3B(C64Cpu *cpu)
 }
 static int op_3F(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_rol(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A &= v;
@@ -1607,6 +1708,7 @@ static int op_43(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1617,6 +1719,7 @@ static int op_47(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1627,6 +1730,7 @@ static int op_4F(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1635,8 +1739,9 @@ static int op_4F(C64Cpu *cpu)
 }
 static int op_53(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
+    u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1647,6 +1752,7 @@ static int op_57(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1655,8 +1761,9 @@ static int op_57(C64Cpu *cpu)
 }
 static int op_5B(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
+    u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1665,8 +1772,9 @@ static int op_5B(C64Cpu *cpu)
 }
 static int op_5F(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_lsr(cpu, v);
     cpu_write(cpu, a, v);
     cpu->A ^= v;
@@ -1679,6 +1787,7 @@ static int op_63(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1688,6 +1797,7 @@ static int op_67(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1697,6 +1807,7 @@ static int op_6F(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1704,8 +1815,9 @@ static int op_6F(C64Cpu *cpu)
 }
 static int op_73(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
+    u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1715,6 +1827,7 @@ static int op_77(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1722,8 +1835,9 @@ static int op_77(C64Cpu *cpu)
 }
 static int op_7B(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
+    u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1731,8 +1845,9 @@ static int op_7B(C64Cpu *cpu)
 }
 static int op_7F(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
+    u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
     v = op_ror(cpu, v);
     cpu_write(cpu, a, v);
     op_adc(cpu, v);
@@ -1803,7 +1918,9 @@ static int op_BF(C64Cpu *cpu)
 static int op_C3(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 8;
@@ -1811,7 +1928,9 @@ static int op_C3(C64Cpu *cpu)
 static int op_C7(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 5;
@@ -1819,15 +1938,19 @@ static int op_C7(C64Cpu *cpu)
 static int op_CF(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 6;
 }
 static int op_D3(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
-    u8 v = cpu_read(cpu, a) - 1;
+    u16 a = addr_indirect_y_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 8;
@@ -1835,23 +1958,29 @@ static int op_D3(C64Cpu *cpu)
 static int op_D7(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
-    u8 v = cpu_read(cpu, a) - 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 6;
 }
 static int op_DB(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
-    u8 v = cpu_read(cpu, a) - 1;
+    u16 a = addr_absolute_y_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 7;
 }
 static int op_DF(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
-    u8 v = cpu_read(cpu, a) - 1;
+    u16 a = addr_absolute_x_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v--;
     cpu_write(cpu, a, v);
     op_cmp(cpu, cpu->A, v);
     return 7;
@@ -1861,7 +1990,9 @@ static int op_DF(C64Cpu *cpu)
 static int op_E3(C64Cpu *cpu)
 {
     u16 a = addr_indirect_x(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 8;
@@ -1869,7 +2000,9 @@ static int op_E3(C64Cpu *cpu)
 static int op_E7(C64Cpu *cpu)
 {
     u16 a = addr_zeropage(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 5;
@@ -1877,15 +2010,19 @@ static int op_E7(C64Cpu *cpu)
 static int op_EF(C64Cpu *cpu)
 {
     u16 a = addr_absolute(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 6;
 }
 static int op_F3(C64Cpu *cpu)
 {
-    u16 a = addr_indirect_y(cpu, false);
-    u8 v = cpu_read(cpu, a) + 1;
+    u16 a = addr_indirect_y_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 8;
@@ -1893,23 +2030,29 @@ static int op_F3(C64Cpu *cpu)
 static int op_F7(C64Cpu *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
-    u8 v = cpu_read(cpu, a) + 1;
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 6;
 }
 static int op_FB(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_y(cpu, false);
-    u8 v = cpu_read(cpu, a) + 1;
+    u16 a = addr_absolute_y_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 7;
 }
 static int op_FF(C64Cpu *cpu)
 {
-    u16 a = addr_absolute_x(cpu, false);
-    u8 v = cpu_read(cpu, a) + 1;
+    u16 a = addr_absolute_x_rmw(cpu);
+    u8 v = cpu_read(cpu, a);
+    cpu_write(cpu, a, v);  // dummy write (RMW)
+    v++;
     cpu_write(cpu, a, v);
     op_sbc(cpu, v);
     return 7;
@@ -2036,7 +2179,10 @@ static int op_93(C64Cpu *cpu)
     u8 ptr = cpu_read(cpu, cpu->PC++);
     u16 lo = cpu_read(cpu, ptr);
     u16 hi = cpu_read(cpu, (ptr + 1) & 0xFF);
-    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u16 base = lo | (hi << 8);
+    u16 addr = base + cpu->Y;
+    // Dummy read (always happens for stores)
+    cpu_read(cpu, (base & 0xFF00) | (addr & 0x00FF));
     u8 val = cpu->A & cpu->X & ((hi + 1) & 0xFF);
     // On page crossing, high byte of address gets corrupted
     if ((addr & 0xFF00) != (hi << 8))
@@ -2051,7 +2197,10 @@ static int op_9F(C64Cpu *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
-    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u16 base = lo | (hi << 8);
+    u16 addr = base + cpu->Y;
+    // Dummy read (always happens for stores)
+    cpu_read(cpu, (base & 0xFF00) | (addr & 0x00FF));
     u8 val = cpu->A & cpu->X & ((hi + 1) & 0xFF);
     if ((addr & 0xFF00) != (hi << 8))
     {
@@ -2066,7 +2215,10 @@ static int op_9B(C64Cpu *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
-    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u16 base = lo | (hi << 8);
+    u16 addr = base + cpu->Y;
+    // Dummy read (always happens for stores)
+    cpu_read(cpu, (base & 0xFF00) | (addr & 0x00FF));
     cpu->SP = cpu->A & cpu->X;
     u8 val = cpu->SP & ((hi + 1) & 0xFF);
     if ((addr & 0xFF00) != (hi << 8))
@@ -2082,7 +2234,10 @@ static int op_9C(C64Cpu *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
-    u16 addr = (lo | (hi << 8)) + cpu->X;
+    u16 base = lo | (hi << 8);
+    u16 addr = base + cpu->X;
+    // Dummy read (always happens for stores)
+    cpu_read(cpu, (base & 0xFF00) | (addr & 0x00FF));
     u8 val = cpu->Y & ((hi + 1) & 0xFF);
     if ((addr & 0xFF00) != (hi << 8))
     {
@@ -2097,7 +2252,10 @@ static int op_9E(C64Cpu *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
-    u16 addr = (lo | (hi << 8)) + cpu->Y;
+    u16 base = lo | (hi << 8);
+    u16 addr = base + cpu->Y;
+    // Dummy read (always happens for stores)
+    cpu_read(cpu, (base & 0xFF00) | (addr & 0x00FF));
     u8 val = cpu->X & ((hi + 1) & 0xFF);
     if ((addr & 0xFF00) != (hi << 8))
     {
