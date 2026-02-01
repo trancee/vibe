@@ -15,13 +15,14 @@
 typedef void (*render_frame_t)(C64Vic *);
 
 // C64 System structure - contains all components
-struct C64System {
-    C64Cpu    cpu;
+struct C64System
+{
+    C64Cpu cpu;
     C64Memory mem;
-    C64Vic    vic;
-    C64Cia    cia1;   // CIA1: Keyboard, joysticks
-    C64Cia    cia2;   // CIA2: Serial, VIC bank
-    C64Sid    sid;
+    C64Vic vic;
+    C64Cia cia1; // CIA1: Keyboard, joysticks
+    C64Cia cia2; // CIA2: Serial, VIC bank
+    C64Sid sid;
 
     // Global cycle counter
     u64 cycle_count;
@@ -31,7 +32,7 @@ struct C64System {
 
     // Debug/logging
     bool debug;
-    u64  debug_interval;    // Cycles between debug output
+    u64 debug_interval; // Cycles between debug output
 
     render_frame_t frame_renderer;
 };

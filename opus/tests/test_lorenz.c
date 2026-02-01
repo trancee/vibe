@@ -106,6 +106,10 @@ static void lorenz_init_memory(void)
     // WARM vector ($0302-$0303) points to $8000
     mem_write_raw(&sys.mem, 0x0302, 0x00);
     mem_write_raw(&sys.mem, 0x0303, 0x80);
+    
+    // Initialize CIA1 like KERNAL does
+    // Enable Timer A interrupt (bit 0) - KERNAL uses this for keyboard scanning
+    sys.cia1.icr_mask = 0x01;  // Timer A interrupt enabled
 }
 
 // Load a Lorenz test file
@@ -158,7 +162,8 @@ static bool run_lorenz_test()
     lorenz_test_failed = false;
 
     // Initialize CPU
-    sys.cpu.P = FLAG_U | FLAG_I;
+    // On a real C64, KERNAL initialization clears the I flag before running programs
+    sys.cpu.P = FLAG_U;  // I flag clear (interrupts enabled)
     sys.cpu.SP = 0xFF;
 
     // Get start address from test file (already loaded)

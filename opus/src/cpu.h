@@ -48,7 +48,10 @@ typedef struct
     // Interrupt state
     bool nmi_pending;
     bool irq_pending;
-    bool nmi_edge; // NMI is edge-triggered
+    bool irq_pending_new; // IRQ was set during current instruction, don't take yet
+    bool nmi_edge;        // NMI is edge-triggered
+    int irq_pending_age;  // Cycles since irq_pending was set (0 = just set this cycle)
+    int nmi_pending_age;  // Cycles since nmi_pending was set (0 = just set this cycle)
 
     // Cycle tracking
     int extra_cycles;  // Extra cycles from page crossing/branch taken
