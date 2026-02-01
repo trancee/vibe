@@ -47,6 +47,7 @@ typedef struct
 
     // Interrupt state
     bool nmi_pending;
+    bool nmi_sampled; // NMI was sampled during previous instruction
     bool irq_pending;
     bool irq_pending_new; // IRQ was set during current instruction, don't take yet
     bool nmi_edge;        // NMI is edge-triggered

@@ -75,6 +75,7 @@ void cpu_reset(C64Cpu *cpu)
     cpu->port_latch = 0x37;
     cpu->cpu_port_floating = 0xC0;
     cpu->nmi_pending = false;
+    cpu->nmi_sampled = false;
     cpu->irq_pending = false;
     cpu->irq_pending_new = false;
     cpu->nmi_edge = false;
@@ -456,15 +457,40 @@ static void do_branch(C64Cpu *cpu, bool condition)
 
 static void do_interrupt(C64Cpu *cpu, u16 vector, bool brk)
 {
+    // Cycle 2: Read operand (discarded, but we read it)
     cpu_read(cpu, cpu->PC);
     if (brk)
         cpu->PC++;
-    cpu_push16(cpu, cpu->PC);
+
+    // Cycle 3: Push PCH
+    cpu_push(cpu, (cpu->PC >> 8) & 0xFF);
+
+    // Cycle 4: Push PCL
+    cpu_push(cpu, cpu->PC & 0xFF);
+
+    // Cycle 5: Push P (with B flag set for BRK)
     cpu_push(cpu, cpu->P | FLAG_U | (brk ? FLAG_B : 0));
+
+    // NMI hijack check: if NMI is pending at end of cycle 5, use NMI vector
+    // This is the only point where hijacking is checked according to 6502 behavior
+    // Require age >= 1 to ensure NMI was pending BEFORE this cycle started
+    // (NMI triggered during push P has age=0 and shouldn't hijack yet)
+    if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != 0xFFFA)
+    {
+        vector = 0xFFFA;
+        cpu->nmi_pending = false;
+        // Note: keep nmi_edge set - it's only cleared when ICR is read
+        // This prevents spurious second NMI triggers
+    }
+
     cpu->P |= FLAG_I;
-    u16 lo = cpu_read(cpu, vector);
-    u16 hi = cpu_read(cpu, vector + 1);
-    cpu->PC = lo | (hi << 8);
+
+    // Cycles 6-7: Fetch vector
+    {
+        u16 lo = cpu_read(cpu, vector);
+        u16 hi = cpu_read(cpu, vector + 1);
+        cpu->PC = lo | (hi << 8);
+    }
 }
 
 void cpu_trigger_nmi(C64Cpu *cpu)
@@ -472,7 +498,7 @@ void cpu_trigger_nmi(C64Cpu *cpu)
     if (!cpu->nmi_edge)
     {
         cpu->nmi_pending = true;
-        cpu->nmi_pending_age = 0; // Just set this cycle
+        cpu->nmi_pending_age = 0;
         cpu->nmi_edge = true;
     }
 }
@@ -2565,12 +2591,10 @@ int cpu_step(C64Cpu *cpu)
     cpu->extra_cycles = 0;
     cpu->page_crossed = false;
 
-    if (cpu->nmi_pending)
-    {
-        cpu->nmi_pending = false;
-        do_interrupt(cpu, 0xFFFA, false);
-        return 7;
-    }
+    // Sample NMI state at instruction start
+    // NMI is sampled at the penultimate cycle of the previous instruction
+    // We use age>=2 to ensure NMI was pending long enough to be sampled
+    bool nmi_at_start = cpu->nmi_pending && cpu->nmi_pending_age >= 2;
 
     // Sample IRQ state and I flag BEFORE the first cycle tick
     // The CPU samples at phi2 of the previous cycle, so it sees IRQ state
@@ -2582,17 +2606,38 @@ int cpu_step(C64Cpu *cpu)
     u8 opcode = cpu_read(cpu, cpu->PC++);
     int cycles = opcode_table[opcode](cpu);
 
+    // Take NMI if it was pending at start, or if it became pending during
+    // this instruction and was pending long enough (sampled at penultimate cycle)
+    // NMI has higher priority than IRQ, so check it first
+    //
+    // Special case: for BRK (opcode $00), don't take NMI at instruction end
+    // because BRK is itself an interrupt sequence. NMI triggered during BRK
+    // should be taken at the end of the first instruction in the handler.
+    int total_cycles = cycles + cpu->extra_cycles;
+    bool is_3cycle_branch = ((opcode & 0x1F) == 0x10) && (total_cycles == 3);
+    int nmi_threshold = is_3cycle_branch ? 2 : 1;
+    bool take_nmi = nmi_at_start || (cpu->nmi_pending && cpu->nmi_pending_age >= nmi_threshold);
+
+    // Don't take NMI at the end of BRK - it should be taken at the next instruction
+    if (opcode == 0x00)
+    {
+        take_nmi = false;
+    }
+
+    if (take_nmi)
+    {
+        cpu->nmi_pending = false;
+        // Note: nmi_edge stays set - it's cleared when ICR is read
+        do_interrupt(cpu, 0xFFFA, false);
+        return cycles + cpu->extra_cycles + 7;
+    }
+
     // Take IRQ if:
     // 1. IRQ was pending at start of instruction, OR
     // 2. IRQ became pending during the instruction and was pending long enough.
     //    The 6502 samples IRQ at the penultimate cycle of each instruction.
     //    For most instructions, threshold=1 works (IRQ set before last cycle).
     //    For 3-cycle taken branches only, threshold=2 due to internal timing.
-    int total_cycles = cycles + cpu->extra_cycles;
-
-    // Check if this is a 3-cycle taken branch (taken, same page)
-    // Branch opcodes: $10, $30, $50, $70, $90, $B0, $D0, $F0
-    bool is_3cycle_branch = ((opcode & 0x1F) == 0x10) && (total_cycles == 3);
     int threshold = is_3cycle_branch ? 2 : 1;
     bool take_irq = irq_at_start || (cpu->irq_pending && cpu->irq_pending_age >= threshold);
 

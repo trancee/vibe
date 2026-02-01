@@ -71,7 +71,8 @@ static void check_irq(C64Cia *cia)
         !(cia->icr_data & CIA_ICR_IR) &&
         (cia->icr_data & cia->icr_mask & 0x1F))
     {
-        // Use 1-cycle delay for bit 7 and irq_pending
+        // Use 1-cycle delay for ICR bit 7 and interrupt triggering
+        // The interrupt line goes low on the NEXT cycle after the condition is met
         cia->irq_delay = 1;
     }
 }
@@ -85,8 +86,16 @@ void cia_clock(C64Cia *cia)
         if (cia->irq_delay == 0)
         {
             cia->icr_data |= CIA_ICR_IR;
-            cia->sys->cpu.irq_pending = true;
-            cia->sys->cpu.irq_pending_age = 0; // Just set this cycle
+            // Both CIA1 and CIA2 trigger their interrupts after the delay
+            if (cia->cia_num == 1)
+            {
+                cia->sys->cpu.irq_pending = true;
+                cia->sys->cpu.irq_pending_age = 0;
+            }
+            else
+            {
+                cpu_trigger_nmi(&cia->sys->cpu);
+            }
         }
     }
 
@@ -337,7 +346,16 @@ u8 cia_read(C64Cia *cia, u8 reg)
         u8 result = cia->icr_data;
         // Reading ICR clears it and sets acknowledgement flag
         cia->icr_data = 0;
-        cia->sys->cpu.irq_pending = false; // Clear CPU's IRQ pending
+        // CIA1 clears IRQ, CIA2 clears NMI
+        if (cia->cia_num == 1)
+        {
+            cia->sys->cpu.irq_pending = false;
+        }
+        else
+        {
+            cia->sys->cpu.nmi_pending = false;
+            cia->sys->cpu.nmi_edge = false; // Allow new NMI edge
+        }
         cia->irq_delay = 0;
         cia->icr_ack = true; // Inhibit irq_delay for next cycle
         return result;
@@ -464,7 +482,15 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         if (cia->icr_data & cia->icr_mask & 0x1F)
         {
             cia->icr_data |= CIA_ICR_IR;
-            cia->sys->cpu.irq_pending = true;
+            // CIA1 triggers IRQ, CIA2 triggers NMI
+            if (cia->cia_num == 1)
+            {
+                cia->sys->cpu.irq_pending = true;
+            }
+            else
+            {
+                cpu_trigger_nmi(&cia->sys->cpu);
+            }
         }
         break;
 
@@ -472,17 +498,19 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
     {
         bool was_running = cia->cra & CIA_CR_START;
         bool now_running = value & CIA_CR_START;
+        bool force_load = value & CIA_CR_LOAD;
 
-        // Force load bit
-        if (value & CIA_CR_LOAD)
+        // Force load bit - immediately reload timer from latch
+        if (force_load)
         {
             cia->timer_a = cia->timer_a_latch;
         }
 
         // Timer starting: add pipeline delay
+        // The timer starts counting 2 cycles after the write
         if (!was_running && now_running)
         {
-            cia->ta_delay = 2; // 2-cycle delay before counting
+            cia->ta_delay = 2;
         }
 
         cia->cra = value & ~CIA_CR_LOAD; // Load bit not stored

@@ -142,8 +142,93 @@ if (sys->cpu.irq_pending) sys->cpu.irq_pending_age++;
 
 When `irq_pending` becomes true in the CIA, we reset the age to 0. This ensures the threshold check accurately reflects real hardware timing.
 
+## NMI Timing Issues Found and Fixed
+
+The Lorenz `nmi` test validates precise Non-Maskable Interrupt timing, including edge detection, BRK hijacking, and the interaction between CIA timers and NMI triggering. This was one of the most challenging tests due to the cycle-exact timing requirements.
+
+### Edge-Triggered NMI Detection
+
+Unlike IRQ (which is level-triggered), NMI is edge-triggered. The CPU detects a high-to-low transition on the NMI line. We track this with an `nmi_edge` flag:
+
+```c
+void cpu_trigger_nmi(C64Cpu *cpu) {
+    if (!cpu->nmi_edge) {
+        cpu->nmi_pending = true;
+        cpu->nmi_pending_age = 0;
+        cpu->nmi_edge = true;
+    }
+}
+```
+
+The `nmi_edge` flag is only cleared when the CIA's Interrupt Control Register (ICR) is read, which acknowledges the interrupt source.
+
+### CIA Timer Pipeline Delays
+
+The 6526 CIA has specific timing delays that must be accurately emulated:
+
+1. **Timer Start Delay (2 cycles):** When a timer is started by writing to the control register, counting doesn't begin until 2 cycles later. This is tracked with `ta_delay`.
+
+2. **Interrupt Trigger Delay (1 cycle):** When a timer underflows and sets bit 0 of the ICR, there's a 1-cycle delay before the interrupt line (IRQ for CIA1, NMI for CIA2) actually goes low. This is tracked with `irq_delay`.
+
+These delays are critical for the NMI test, which precisely times when NMI should occur relative to a BRK instruction.
+
+### NMI Sampling at Instruction End
+
+The 6502 samples the NMI line at specific points during instruction execution. After extensive testing, we found that NMI should be checked at the **end** of instruction execution (after the instruction has completed) rather than at the start:
+
+```c
+// At end of instruction execution:
+bool take_nmi = nmi_at_start || (cpu->nmi_pending && cpu->nmi_pending_age >= 1);
+```
+
+This ensures the correct PC is pushed to the stack - the address of the next instruction after the one that just completed.
+
+### BRK Special Case: No NMI at End
+
+When a BRK instruction completes, we don't take an NMI at the end of the instruction because BRK is itself an interrupt sequence. Taking NMI at the end of BRK would cause incorrect behavior:
+
+```c
+if (opcode == 0x00) {  // BRK
+    take_nmi = false;
+}
+```
+
+### NMI Hijacking of BRK/IRQ
+
+If an NMI becomes pending during the execution of a BRK instruction (or during an IRQ sequence), it can "hijack" the interrupt. The hijack check occurs after the processor status is pushed (cycle 5 of the interrupt sequence):
+
+```c
+// In do_interrupt(), after push P:
+if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != 0xFFFA) {
+    vector = 0xFFFA;  // Redirect to NMI vector
+    cpu->nmi_pending = false;
+    // Keep nmi_edge set - prevents spurious second NMI
+}
+```
+
+Key points:
+- The hijack requires `nmi_pending_age >= 1` to ensure NMI was pending before the current cycle
+- We don't clear `nmi_edge` on hijack - it stays set until the ICR is read
+- The BRK instruction's B flag is still set in the pushed status, even though NMI is taken
+
+### Age-Based NMI Threshold
+
+Similar to IRQ, we track `nmi_pending_age` to determine if NMI was pending long enough to be sampled:
+
+- **At instruction start:** Use `age >= 2` threshold to check if NMI was pending at the end of the previous instruction
+- **At instruction end:** Use `age >= 1` threshold for normal NMI taking
+- **For hijack:** Use `age >= 1` threshold
+
+### Test Scenarios Covered
+
+The NMI test validates timing with different timer values (CLOCK 0-9), testing:
+
+1. **CLOCK 4-9:** NMI triggers after BRK completes, taken at the end of the subsequent NOP instruction
+2. **CLOCK 0-3:** NMI triggers during BRK execution and hijacks the BRK, redirecting to NMI vector with B flag set
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)
 - [Extra Instructions of the 65xx Series CPU](http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes)
+- [CIA 6526 Datasheet](http://archive.6502.org/datasheets/mos_6526_cia_recreated.pdf)
 - Wolfgang Lorenz C64 Test Suite
