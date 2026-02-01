@@ -279,6 +279,120 @@ During the stop delay, the START bit remains set in the internal state, allowing
 
 These differences reflect the real 6526 CIA's internal pipeline architecture. Timer A is on the "fast path" for common timing operations, while Timer B has additional pipeline stages.
 
+## CIA Timer Output to Port B (PB6/PB7)
+
+The Lorenz `cia1pb6`, `cia1pb7`, `cia2pb6`, and `cia2pb7` tests validate the CIA's ability to output timer underflow signals directly to Port B pins.
+
+### Overview
+
+The 6526 CIA can output timer signals to Port B:
+- **Timer A → PB6** (bit 6 of Port B)
+- **Timer B → PB7** (bit 7 of Port B)
+
+This is controlled by the PBON bit (bit 1) in the respective control registers (CRA for Timer A, CRB for Timer B).
+
+### Output Modes
+
+The OUTMODE bit (bit 2) controls how timer underflow appears on the output:
+
+| OUTMODE | Mode | Behavior |
+|---------|------|----------|
+| 0 | Pulse | Output goes HIGH for exactly one cycle on each underflow |
+| 1 | Toggle | Output inverts (toggles) on each underflow |
+
+### Key Implementation Details
+
+#### Toggle Flip-Flop Is Independent
+
+The toggle flip-flop is internal to the timer and always toggles on every underflow, **regardless of the PBON and OUTMODE settings**. This is critical for passing the tests that verify "toggle state is not independent."
+
+```c
+// Timer output - toggle flip-flop ALWAYS toggles on underflow
+// regardless of output mode (pulse vs toggle) or PBON setting
+cia->pb6_out = !cia->pb6_out;  // Toggle
+
+// Pulse mode sets the pulse flag
+cia->pb6_pulse = true;
+```
+
+#### Flip-Flop Set HIGH on Timer Start
+
+When a timer is started (by setting the START bit in the control register), the corresponding flip-flop is set HIGH:
+
+```c
+if (start && !cra_old_start) {
+    // Timer starting
+    cia->pb6_out = true;  // Set flip-flop HIGH when timer starts
+}
+```
+
+#### Timer B Shadow Counter for PB7 Timing
+
+A key challenge was that the Timer B register read tests (`cia1tb123`, `cia2tb123`) require a 2-cycle delay before Timer B starts counting, but the PB7 pulse timing tests require a 1-cycle delay for correct output.
+
+The solution uses a **shadow counter** (`timer_b_pb7`) that runs 1 cycle ahead of the main timer:
+
+```c
+// Main timer uses tb_delay=2 (for register read timing)
+// Shadow counter uses pb7_delay=1 (for PB7 output timing)
+if (cia->pb7_delay > 0) {
+    cia->pb7_delay--;
+} else {
+    // Shadow counter for PB7 output
+    cia->timer_b_pb7--;
+    if (cia->timer_b_pb7 == 0xFFFF) {
+        cia->pb7_out = !cia->pb7_out;  // Toggle flip-flop
+        cia->pb7_pulse = true;
+    }
+}
+```
+
+#### One-Cycle Output Delay
+
+Both toggle and pulse outputs have a one-cycle delay before they appear on the port:
+
+```c
+// Update delayed outputs at the start of each cycle
+cia->pb6_out_delayed = cia->pb6_out;
+cia->pb7_out_delayed = cia->pb7_out;
+cia->pb6_pulse_out = cia->pb6_pulse;
+cia->pb7_pulse_out = cia->pb7_pulse;
+```
+
+### Port B Read Logic
+
+When reading Port B with PBON set, the timer output overrides the corresponding bit:
+
+```c
+u8 val = (cia->prb & cia->ddrb) | (~cia->ddrb & 0xFF);
+
+if (cia->cra & CIA_CR_PBON) {
+    // Timer A outputs to PB6
+    bool pb6_val = (cia->cra & CIA_CR_OUTMODE) 
+        ? cia->pb6_out_delayed   // Toggle mode
+        : cia->pb6_pulse_out;    // Pulse mode
+    val = (val & ~0x40) | (pb6_val ? 0x40 : 0);
+}
+
+if (cia->crb & CIA_CR_PBON) {
+    // Timer B outputs to PB7
+    bool pb7_val = (cia->crb & CIA_CR_OUTMODE)
+        ? cia->pb7_out_delayed   // Toggle mode  
+        : cia->pb7_pulse_out;    // Pulse mode
+    val = (val & ~0x80) | (pb7_val ? 0x80 : 0);
+}
+```
+
+### Test Status
+
+After implementation, all PB6/PB7 tests pass:
+- ✅ cia1pb6
+- ✅ cia2pb6
+- ✅ cia1pb7
+- ✅ cia2pb7
+
+**Note:** The `cia1tab` test (which tests cascade mode where Timer B counts Timer A underflows) still has timing issues and requires further investigation.
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

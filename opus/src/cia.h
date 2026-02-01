@@ -61,10 +61,12 @@ typedef struct
     u16 timer_b;       // Timer B current value
     u16 timer_a_latch; // Timer A reload value
     u16 timer_b_latch; // Timer B reload value
+    u16 timer_b_pb7;   // Shadow counter for PB7 output (1 cycle ahead of timer_b)
 
     // Timer pipeline delays (for cycle accuracy)
     u8 ta_delay;     // Cycles before Timer A starts counting
     u8 tb_delay;     // Cycles before Timer B starts counting
+    u8 pb7_delay;    // Cycles before PB7 output starts reacting (separate from tb_delay)
     bool ta_started; // Timer A has started
     bool tb_started; // Timer B has started
     
@@ -77,6 +79,16 @@ typedef struct
     // 0 = no pending, 1 = stop next cycle, 2 = stop in 2 cycles
     u8 ta_stop_delay; // Timer A will stop after this many cycles
     u8 tb_stop_delay; // Timer B will stop after this many cycles
+    
+    // Timer output to Port B (PB6 for Timer A, PB7 for Timer B)
+    bool pb6_out; // Timer A output state (toggle mode) - internal
+    bool pb7_out; // Timer B output state (toggle mode) - internal
+    bool pb6_out_delayed; // Timer A output visible to reads (1 cycle delay)
+    bool pb7_out_delayed; // Timer B output visible to reads (1 cycle delay)
+    bool pb6_pulse; // Timer A pulse will be active (internal)
+    bool pb7_pulse; // Timer B pulse will be active (internal)
+    bool pb6_pulse_out; // Timer A pulse visible to reads
+    bool pb7_pulse_out; // Timer B pulse visible to reads
 
     // Control registers
     u8 cra; // Control register A
