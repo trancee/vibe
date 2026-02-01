@@ -67,6 +67,16 @@ typedef struct
     u8 tb_delay;     // Cycles before Timer B starts counting
     bool ta_started; // Timer A has started
     bool tb_started; // Timer B has started
+    
+    // Pending load operations (2-cycle delay for force load)
+    // 0 = no pending, 1 = load next cycle, 2 = load in 2 cycles
+    u8 ta_load_delay; // Timer A force load delay counter
+    u8 tb_load_delay; // Timer B force load delay counter
+    
+    // Pending stop operations (timer counts more cycles before stopping)
+    // 0 = no pending, 1 = stop next cycle, 2 = stop in 2 cycles
+    u8 ta_stop_delay; // Timer A will stop after this many cycles
+    u8 tb_stop_delay; // Timer B will stop after this many cycles
 
     // Control registers
     u8 cra; // Control register A

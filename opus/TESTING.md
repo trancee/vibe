@@ -226,6 +226,59 @@ The NMI test validates timing with different timer values (CLOCK 0-9), testing:
 1. **CLOCK 4-9:** NMI triggers after BRK completes, taken at the end of the subsequent NOP instruction
 2. **CLOCK 0-3:** NMI triggers during BRK execution and hijacks the BRK, redirecting to NMI vector with B flag set
 
+## CIA Timer B Pipeline Delays (cia1tb123/cia2tb123)
+
+The Lorenz `cia1tb123` and `cia2tb123` tests validate Timer B's specific pipeline behavior, which differs from Timer A in several ways.
+
+### Timer B LOAD Pipeline (2-cycle delay)
+
+When the LOAD bit (bit 4) is set in Control Register B ($DC0F/$DD0F), Timer B does NOT reload immediately. Instead, there is a 2-cycle pipeline delay:
+
+```c
+// Timer B LOAD has 2-cycle pipeline delay (unlike Timer A which is immediate)
+if (force_load)
+{
+    cia->tb_load_delay = 2;
+}
+```
+
+The delay is processed in `cia_clock()`:
+```c
+if (cia->tb_load_delay > 0) {
+    cia->tb_load_delay--;
+    if (cia->tb_load_delay == 0) {
+        cia->timer_b = cia->timer_b_latch;
+    }
+}
+```
+
+**Key insight:** Timer A LOAD is immediate, while Timer B LOAD has a 2-cycle delay. This asymmetry is critical for passing the tests.
+
+### Timer B STOP Pipeline (2-cycle delay)
+
+When Timer B is stopped (START bit cleared) after a forced underflow, there's a 2-cycle delay before the timer actually stops:
+
+```c
+// Timer B: stopping after force-underflow has a 2-cycle delay
+if (!start && crb_old_start)
+{
+    cia->tb_stop_delay = 2;
+    // Don't clear START bit yet - it will be cleared by stop_delay processing
+}
+```
+
+During the stop delay, the START bit remains set in the internal state, allowing the timer to continue counting for 2 more cycles.
+
+### Timer A vs Timer B Pipeline Differences
+
+| Operation | Timer A | Timer B |
+|-----------|---------|---------|
+| START     | 2-cycle delay | 2-cycle delay |
+| LOAD      | Immediate | 2-cycle delay |
+| STOP      | Immediate | 2-cycle delay |
+
+These differences reflect the real 6526 CIA's internal pipeline architecture. Timer A is on the "fast path" for common timing operations, while Timer B has additional pipeline stages.
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

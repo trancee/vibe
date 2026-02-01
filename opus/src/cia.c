@@ -36,6 +36,10 @@ void cia_reset(C64Cia *cia)
     cia->tb_delay = 0;
     cia->ta_started = false;
     cia->tb_started = false;
+    cia->ta_load_delay = 0;
+    cia->tb_load_delay = 0;
+    cia->ta_stop_delay = 0;
+    cia->tb_stop_delay = 0;
 
     cia->cra = 0;
     cia->crb = 0;
@@ -79,6 +83,41 @@ static void check_irq(C64Cia *cia)
 
 void cia_clock(C64Cia *cia)
 {
+    // Process pending timer loads with delay counter
+    // Load happens when counter reaches 0
+    if (cia->ta_load_delay > 0)
+    {
+        cia->ta_load_delay--;
+        if (cia->ta_load_delay == 0)
+        {
+            cia->timer_a = cia->timer_a_latch;
+            // When LOAD completes, add 1 cycle delay before timer can count
+            // This ensures the loaded value is stable for one cycle
+            // We set to 2 because the timer counting logic will decrement it
+            // in the same cia_clock() call
+            if ((cia->cra & CIA_CR_START) && cia->ta_delay <= 1)
+            {
+                cia->ta_delay = 2;
+            }
+        }
+    }
+    if (cia->tb_load_delay > 0)
+    {
+        cia->tb_load_delay--;
+        if (cia->tb_load_delay == 0)
+        {
+            cia->timer_b = cia->timer_b_latch;
+            // When LOAD completes, add 1 cycle delay before timer can count
+            // This ensures the loaded value is stable for one cycle
+            // We set to 2 because the timer counting logic will decrement it
+            // in the same cia_clock() call
+            if ((cia->crb & CIA_CR_START) && cia->tb_delay <= 1)
+            {
+                cia->tb_delay = 2;
+            }
+        }
+    }
+
     // Process IRQ delay at start of cycle
     if (cia->irq_delay > 0)
     {
@@ -187,6 +226,25 @@ void cia_clock(C64Cia *cia)
                     }
                 }
             }
+        }
+    }
+
+    // Process pending stop operations after timer counting
+    // This allows the timer to count more cycles before stopping
+    if (cia->ta_stop_delay > 0)
+    {
+        cia->ta_stop_delay--;
+        if (cia->ta_stop_delay == 0)
+        {
+            cia->cra &= ~CIA_CR_START;
+        }
+    }
+    if (cia->tb_stop_delay > 0)
+    {
+        cia->tb_stop_delay--;
+        if (cia->tb_stop_delay == 0)
+        {
+            cia->crb &= ~CIA_CR_START;
         }
     }
 
@@ -501,6 +559,7 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         bool force_load = value & CIA_CR_LOAD;
 
         // Force load bit - immediately reload timer from latch
+        // Note: Timer A LOAD is immediate, unlike Timer B which has pipeline delay
         if (force_load)
         {
             cia->timer_a = cia->timer_a_latch;
@@ -522,9 +581,11 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         bool was_running = cia->crb & CIA_CR_START;
         bool now_running = value & CIA_CR_START;
 
+        // Force load bit - set delay counter for 2-cycle delay
+        // The timer is reloaded after 2 cycles
         if (value & CIA_CR_LOAD)
         {
-            cia->timer_b = cia->timer_b_latch;
+            cia->tb_load_delay = 2;
         }
 
         if (!was_running && now_running)
@@ -532,7 +593,19 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
             cia->tb_delay = 2;
         }
 
-        cia->crb = value & ~CIA_CR_LOAD;
+        // When stopping a running timer, use delayed stop
+        // The timer will count 2 more cycles before actually stopping
+        if (was_running && !now_running)
+        {
+            // Set stop delay - the actual stop happens after 2 cycles
+            cia->tb_stop_delay = 2;
+            // Don't clear START bit yet - it will be cleared by stop_delay processing
+            cia->crb = (value | CIA_CR_START) & ~CIA_CR_LOAD;
+        }
+        else
+        {
+            cia->crb = value & ~CIA_CR_LOAD;
+        }
     }
     break;
     }
