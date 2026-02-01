@@ -50,6 +50,8 @@ void cia_reset(C64Cia *cia)
     cia->tb_load_delay = 0;
     cia->ta_stop_delay = 0;
     cia->tb_stop_delay = 0;
+    cia->ta_cnt_delay = 0;
+    cia->tb_cnt_delay = 0;
     
     cia->pb6_out = true;
     cia->pb7_out = true;
@@ -202,7 +204,13 @@ void cia_clock(C64Cia *cia)
             // Count phi2 cycles
             count = true;
         }
-        // CNT mode not implemented
+        else if (cia->ta_cnt_delay > 0)
+        {
+            // Mode just switched from phi2 to CNT - continue counting during delay
+            cia->ta_cnt_delay--;
+            count = true;
+        }
+        // CNT mode (after delay expires) - not counting
 
         if (count)
         {
@@ -779,12 +787,29 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         bool was_running = cia->cra & CIA_CR_START;
         bool now_running = value & CIA_CR_START;
         bool force_load = value & CIA_CR_LOAD;
+        bool was_cnt_mode = cia->cra & CIA_CR_INMODE;
+        bool now_cnt_mode = value & CIA_CR_INMODE;
 
         // Force load bit - schedule reload from latch
         // Timer A LOAD has a 1-cycle delay before the load takes effect
         if (force_load)
         {
             cia->ta_load_delay = 1;
+        }
+        
+        // Mode switch while timer is running
+        if (now_running)
+        {
+            if (was_cnt_mode && !now_cnt_mode)
+            {
+                // CNT → phi2: 1-cycle delay before counting starts
+                cia->ta_delay = 1;
+            }
+            else if (!was_cnt_mode && now_cnt_mode)
+            {
+                // phi2 → CNT: timer continues counting for 1 more cycle
+                cia->ta_cnt_delay = 1;
+            }
         }
 
         // Timer starting: set up pipeline delays

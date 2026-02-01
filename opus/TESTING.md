@@ -507,6 +507,78 @@ if (can_count_pb7)
 After all fixes:
 - ✅ cia1tab - PASSING
 
+## CIA Timer Input Mode Switching (cnto2)
+
+The Lorenz `cnto2` test validates the timing behavior when switching between the two Timer A input modes: phi2 (system clock) and CNT (external clock pin).
+
+### Test Configuration
+
+The test:
+1. Starts Timer A in CNT mode (not counting since CNT pin isn't pulsed)
+2. Switches to phi2 mode and reads the timer (expects specific value)
+3. Switches back to CNT mode and reads again (expects specific value)
+
+The test verifies that mode switching has a 1-cycle pipeline delay in both directions.
+
+### Key Finding: Mode Switch Delay
+
+When switching between CNT and phi2 modes while the timer is running, there is a **1-cycle delay** before the mode change takes effect:
+
+| Transition | Behavior |
+|------------|----------|
+| CNT → phi2 | Timer delays 1 cycle before starting to count |
+| phi2 → CNT | Timer continues counting for 1 more cycle before stopping |
+
+### Implementation
+
+Two new delay counters were added to track mode transitions:
+
+```c
+// In cia.h
+u8 ta_cnt_delay;  // Timer A counting continues after phi2→CNT switch
+u8 tb_cnt_delay;  // Timer B counting continues after phi2→CNT switch
+```
+
+The mode switch is detected in the CRA write handler:
+
+```c
+if (now_running)
+{
+    if (was_cnt_mode && !now_cnt_mode)
+    {
+        // CNT → phi2: 1-cycle delay before counting starts
+        cia->ta_delay = 1;
+    }
+    else if (!was_cnt_mode && now_cnt_mode)
+    {
+        // phi2 → CNT: timer continues counting for 1 more cycle
+        cia->ta_cnt_delay = 1;
+    }
+}
+```
+
+The counting logic uses the delay counter to continue counting during the transition:
+
+```c
+if (!(cia->cra & CIA_CR_INMODE))
+{
+    // phi2 mode - count
+    count = true;
+}
+else if (cia->ta_cnt_delay > 0)
+{
+    // CNT mode but still in transition - continue counting
+    cia->ta_cnt_delay--;
+    count = true;
+}
+// else: CNT mode after delay - not counting
+```
+
+### Test Status
+
+After implementing mode switch delays:
+- ✅ cnto2 - PASSING
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

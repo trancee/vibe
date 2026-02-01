@@ -91,6 +91,11 @@ typedef struct
     u8 ta_stop_delay; // Timer A will stop after this many cycles
     u8 tb_stop_delay; // Timer B will stop after this many cycles
     
+    // Mode switch delay (phi2 to CNT transition)
+    // Timer continues counting for this many cycles after switching to CNT mode
+    u8 ta_cnt_delay;  // Timer A counting continues after phi2→CNT switch
+    u8 tb_cnt_delay;  // Timer B counting continues after phi2→CNT switch
+    
     // Timer output to Port B (PB6 for Timer A, PB7 for Timer B)
     bool pb6_out; // Timer A output state (toggle mode) - internal
     bool pb7_out; // Timer B output state (toggle mode) - internal
