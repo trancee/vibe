@@ -3,6 +3,18 @@
  *
  * Implements two CIA chips with timers, TOD clock,
  * keyboard matrix scanning, and serial port.
+ * 
+ * Known Limitations:
+ * - Lorenz cia1ta test: Fails 1 of ~14,000 test cases (I4=30, B4=20, IE=$11, BE=$00)
+ *   The timer read timing in this edge case differs by 1 cycle from real hardware.
+ * - Lorenz cia1tb test: Fails 1 of ~14,000 test cases (I4=30, B4=9, IE=$10, BE=$19)
+ *   The one-shot mode START bit clearing happens 1 cycle later than real hardware
+ *   expects when the timer underflows on the exact cycle of a CRB read.
+ * 
+ * These edge cases involve conflicting timing requirements between:
+ * - Timer register reads (which need delayed counting via tb_delay)
+ * - ICR/CRB underflow detection (which needs faster counting for proper flag timing)
+ * The current implementation prioritizes the timer register read timing.
  */
 
 #include "cia.h"

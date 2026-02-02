@@ -808,6 +808,55 @@ case 3: // Timer A underflow while CNT high
 After implementing CNT high by default:
 - ✅ cntdef - PASSING
 
+## Known Limitations
+
+### CIA Timer A Timing (cia1ta)
+
+The Lorenz `cia1ta` test fails 1 of approximately 14,000 test cases.
+
+**Failing Case:** I4=$1E (30), B4=$14 (20), IE=$11, BE=$00
+
+**Root Cause:** Timer read timing differs by 1 cycle from real hardware in this specific edge case. The test sets up Timer A with various latch values (I4) and initial timer values (B4), then reads the timer and interrupt status at precise cycle offsets. In this particular case, our emulation returns the timer value 1 cycle differently than expected.
+
+**Why It Cannot Be Fixed:** The timer implementation uses `ta_delay` to correctly model the delay before a timer starts counting after being loaded. This delay is essential for passing the vast majority of test cases. However, in this specific edge case, the delay causes the timer read to return a value that differs from real hardware by 1 cycle.
+
+### CIA Timer B One-Shot Mode (cia1tb)
+
+The Lorenz `cia1tb` test fails 1 of approximately 14,000 test cases.
+
+**Failing Case:** I4=$1E (30), B4=$09 (9), IE=$10, BE=$19
+
+**Observed Behavior:**
+- Timer value reads correctly: A4=$08, AD=$00 (matches expected R4, RD)
+- CRB reads incorrectly: AE=$09 vs expected RE=$08
+
+The test expects the START bit (bit 0 of CRB) to be cleared when reading CRB, but our emulation still shows it set.
+
+**Root Cause Analysis:**
+
+Through detailed cycle tracing, the issue was identified:
+
+| Cycle | Timer B Value | Event |
+|-------|---------------|-------|
+| ... | 9→8→7→...→1→0 | Timer counting down |
+| N | 0 | CRB READ happens, returns $09 (START still set) |
+| N+1 | 0→$FFFF | Underflow detected, timer reloads, START bit cleared |
+
+The problem is that **Timer B underflows and clears the START bit on the cycle AFTER the CRB read**. Real hardware apparently clears the START bit before or during the read on cycle N, but our emulation clears it on cycle N+1.
+
+**Why It Cannot Be Fixed:**
+
+The timer implementation uses `tb_delay` to correctly model the delay before Timer B starts counting after a force load. This delay is critical for many test cases:
+
+1. Without `tb_delay`, timer register reads return incorrect values
+2. With `tb_delay`, the underflow/START-clearing happens one cycle later than some edge cases expect
+
+Attempted fixes:
+1. **Check underflow before decrement**: Same result - the timing relationship is unchanged
+2. **Remove tb_delay reset after force load**: Fixed cia1tb but broke other test cases (B4=$14 variants)
+
+The fundamental conflict is that timer register reads need the delayed counting (`tb_delay`) for correct values, but ICR/CRB underflow detection would need faster counting for correct flag timing in these edge cases. The implementation prioritizes correct timer register reads since those are far more common in real software.
+
 ## Current Test Status Summary
 
 After all fixes, the following 18 CIA/interrupt-related tests pass:
@@ -827,6 +876,10 @@ After all fixes, the following 18 CIA/interrupt-related tests pass:
 - ✅ flipos - One-shot mode switching
 - ✅ oneshot - Basic one-shot mode
 - ✅ cntdef - CNT default state
+
+Known failing tests (documented limitations):
+- ⚠️ cia1ta - 1 of ~14,000 test cases fails (timer read timing edge case)
+- ⚠️ cia1tb - 1 of ~14,000 test cases fails (one-shot START bit timing edge case)
 
 ## References
 
