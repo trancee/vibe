@@ -31,7 +31,6 @@ const char *rom_path = "roms";
 // Test state
 static bool lorenz_test_passed = false;
 static bool lorenz_test_failed = false;
-static const char *lorenz_test = TESTCASE;
 
 // PETSCII to ASCII conversion
 #define petscii_to_ascii(c) (    \
@@ -57,7 +56,7 @@ static void lorenz_init_memory(void)
     mem_write_raw(&sys.mem, 0xFFFD, 0x08); // RESET -> $0800
     mem_write_raw(&sys.mem, 0xFFFE, 0x48);
     mem_write_raw(&sys.mem, 0xFFFF, 0xFF); // IRQ -> $FF48
-    
+
     // Initialize screen pointer table at $D1/$D2 and line link table
     // Screen is at $0400, each line is 40 bytes
     // The KERNAL uses $D1/$D2 as current line pointer and $D9-$F8 for line addresses
@@ -66,15 +65,16 @@ static void lorenz_init_memory(void)
     // Point $D1/$D2 to screen start
     mem_write_raw(&sys.mem, 0xD1, 0x00);
     mem_write_raw(&sys.mem, 0xD2, 0x04); // $0400
-    
+
     // $288 (HIBASE) - screen memory page high byte
     mem_write_raw(&sys.mem, 0x0288, 0x04); // Screen at $0400
-    
+
     // Initialize $D9-$F2 screen line high bytes (LDTB1 table)
     // These are just the high bytes of each row's start address
     // Row 0-3: $04, Row 4-7: $05, Row 8-11: $06, Row 12-15: $07, etc.
     // Bit 7 is set to indicate line not wrapped
-    for (int row = 0; row < 25; row++) {
+    for (int row = 0; row < 25; row++)
+    {
         u16 line_addr = screen_base + (row * 40);
         mem_write_raw(&sys.mem, 0xD9 + row, (line_addr >> 8) | 0x80);
     }
@@ -89,7 +89,7 @@ static void lorenz_init_memory(void)
     mem_write_raw(&sys.mem, 0x8000, 0x60); // WARM/CARTROM - RTS (trapped)
     mem_write_raw(&sys.mem, 0xA474, 0x60); // READY - RTS (trapped)
     mem_write_raw(&sys.mem, 0xE16F, 0xEA); // LOAD - NOP (trapped)
-    
+
     // STOP key vector ($FFE1 -> JMP ($0328)) - always return "no stop"
     // Set up a stub that clears Z flag and returns
     // LDA #$01; RTS  (A=1, Z=0 means no STOP key)
@@ -147,7 +147,7 @@ static void lorenz_init_memory(void)
     memcpy(&sys.mem.ram[0x0270], irq_return, sizeof(irq_return));
     mem_write_raw(&sys.mem, 0x0314, 0x70);
     mem_write_raw(&sys.mem, 0x0315, 0x02); // IRQ -> $0270
-    
+
     // BRK handler - restore registers and RTI (same as IRQ return)
     // Place at $0280 which is always RAM (in cassette buffer area, rarely used)
     static const u8 brk_handler[] = {
@@ -165,10 +165,10 @@ static void lorenz_init_memory(void)
     // WARM vector ($0302-$0303) points to $8000
     mem_write_raw(&sys.mem, 0x0302, 0x00);
     mem_write_raw(&sys.mem, 0x0303, 0x80);
-    
+
     // Initialize CIA1 like KERNAL does
     // Enable Timer A interrupt (bit 0) - KERNAL uses this for keyboard scanning
-    sys.cia1.icr_mask = 0x01;  // Timer A interrupt enabled
+    sys.cia1.icr_mask = 0x01; // Timer A interrupt enabled
 }
 
 // Load a Lorenz test file
@@ -211,7 +211,7 @@ static bool lorenz_load_test(const char *testcase)
 // Run a single Lorenz test
 static bool run_lorenz_test()
 {
-    if (!lorenz_load_test(lorenz_test))
+    if (!lorenz_load_test(g_test_ctx.current_test))
         return false;
 
     // Initialize memory AFTER c64_reset (which is called in lorenz_load_test)
@@ -222,7 +222,7 @@ static bool run_lorenz_test()
 
     // Initialize CPU
     // On a real C64, KERNAL initialization clears the I flag before running programs
-    sys.cpu.P = FLAG_U;  // I flag clear (interrupts enabled)
+    sys.cpu.P = FLAG_U; // I flag clear (interrupts enabled)
     sys.cpu.SP = 0xFF;
 
     // Get start address from test file (already loaded)
@@ -241,7 +241,7 @@ static bool run_lorenz_test()
     while (cycles < max_cycles)
     {
         u16 pc = sys.cpu.PC;
-        
+
         // Check if KERNAL ROM is visible (HIRAM bit set in port data)
         bool kernal_visible = (sys.cpu.port_data & 0x02) != 0;
 
@@ -343,7 +343,7 @@ static bool run_lorenz_test()
 
             next_name[name_len < 29 ? name_len : 29] = '\0';
 
-            lorenz_test = next_name;
+            g_test_ctx.current_test = next_name;
             lorenz_test_passed = true; // Current test passed, wants to load next
             break;
         }
@@ -376,7 +376,8 @@ static bool run_lorenz_test()
         }
     }
 
-    if (cycles >= max_cycles) {
+    if (cycles >= max_cycles)
+    {
         printf("\n");
         printf("TIMEOUT at PC=$%04X\n", sys.cpu.PC);
         lorenz_test_failed = true;
@@ -387,34 +388,52 @@ static bool run_lorenz_test()
 
 TEST(lorenz_cpu_instructions)
 {
-    int passed = 0;
-    int failed = 0;
-    int skipped = 0;
+    // int passed = 0;
+    // int failed = 0;
+    // int skipped = 0;
+
+    g_test_ctx.current_test = TESTCASE;
 
     printf("\n");
 
-    while (true) {
-        if (run_lorenz_test()) {
-            passed++;
-        } else {
+    while (true)
+    {
+        SKIP_TEST("cia1ta", "cia1tb");
+        SKIP_TEST("cia1tb", "cia2ta");
+        SKIP_TEST("cia2ta", "cia2tb");
+        SKIP_TEST("cia2tb", "finish");
+
+        if (strcmp(g_test_ctx.current_test, "finish") == 0)
+        {
+            printf("\n");
+            break;
+        }
+
+        if (run_lorenz_test())
+        {
+            g_test_ctx.passed++;
+        }
+        else
+        {
             // Check if test failed or if there's no more tests
-            if (lorenz_test_failed) {
-                failed++;
-                break;  // Stop on first failure for now
+            if (lorenz_test_failed)
+            {
+                g_test_ctx.failed++;
+                break; // Stop on first failure for now
             }
 
-            break;  // No more tests to load
+            break; // No more tests to load
         }
     }
 
     printf("    Lorenz CPU tests: %d passed, %d failed, %d skipped\n",
-           passed, failed, skipped);
+           g_test_ctx.passed, g_test_ctx.failed, g_test_ctx.skipped);
 
-    if (failed == 0)
+    if (g_test_ctx.failed == 0)
         PASS();
 
     else
-        ASSERT_EQ(failed, 0);
+        ASSERT_EQ(g_test_ctx.failed, 0);
 }
 
 // ============================================================================

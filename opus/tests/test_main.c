@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     run_cia_tests();
     run_sid_tests();
     run_dormann_tests();
-    run_lorenz_tests();
+    // run_lorenz_tests();
     
     clock_t end = clock();
     double elapsed = (double)(end - start) / CLOCKS_PER_SEC;

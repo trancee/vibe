@@ -11,12 +11,14 @@
 #include <stdbool.h>
 
 // Test result tracking
-typedef struct {
+typedef struct
+{
     int total;
     int passed;
     int failed;
     int skipped;
     const char *current_suite;
+    const char *current_test;
 } TestContext;
 
 // Global test context - defined in test_main.c
@@ -27,134 +29,163 @@ extern TestContext g_test_ctx;
 #endif
 
 // Colors for output
-#define COLOR_RED     "\033[31m"
-#define COLOR_GREEN   "\033[32m"
-#define COLOR_YELLOW  "\033[33m"
-#define COLOR_RESET   "\033[0m"
+#define COLOR_RED "\033[31m"
+#define COLOR_GREEN "\033[32m"
+#define COLOR_YELLOW "\033[33m"
+#define COLOR_RESET "\033[0m"
 
 // Start a test suite
-#define TEST_SUITE(name) \
-    do { \
-        g_test_ctx.current_suite = name; \
+#define TEST_SUITE(name)                                                           \
+    do                                                                             \
+    {                                                                              \
+        g_test_ctx.current_suite = name;                                           \
         printf("\n" COLOR_YELLOW "=== Test Suite: %s ===" COLOR_RESET "\n", name); \
-    } while(0)
+    } while (0)
 
 // Define a test
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_test_##name(void) { \
-        g_test_ctx.total++; \
-        printf("  %-50s ", #name); \
-        fflush(stdout); \
-        test_##name(); \
-    } \
+#define TEST(name)                    \
+    static void test_##name(void);    \
+    static void run_test_##name(void) \
+    {                                 \
+        g_test_ctx.total++;           \
+        printf("  %-50s ", #name);    \
+        fflush(stdout);               \
+        test_##name();                \
+    }                                 \
     static void test_##name(void)
 
 // Run a test
 #define RUN_TEST(name) run_test_##name()
 
 // Assertions
-#define ASSERT(cond) \
-    do { \
-        if (!(cond)) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
-            printf("    Assertion failed: %s\n", #cond); \
+#define ASSERT(cond)                                       \
+    do                                                     \
+    {                                                      \
+        if (!(cond))                                       \
+        {                                                  \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");     \
+            printf("    Assertion failed: %s\n", #cond);   \
             printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            g_test_ctx.failed++;                           \
+            return;                                        \
+        }                                                  \
+    } while (0)
 
-#define ASSERT_EQ(expected, actual) \
-    do { \
-        if ((expected) != (actual)) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
+#define ASSERT_EQ(expected, actual)                                                     \
+    do                                                                                  \
+    {                                                                                   \
+        if ((expected) != (actual))                                                     \
+        {                                                                               \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");                                  \
             printf("    Expected: 0x%X (%d)\n", (unsigned)(expected), (int)(expected)); \
-            printf("    Actual:   0x%X (%d)\n", (unsigned)(actual), (int)(actual)); \
-            printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            printf("    Actual:   0x%X (%d)\n", (unsigned)(actual), (int)(actual));     \
+            printf("    At: %s:%d\n", __FILE__, __LINE__);                              \
+            g_test_ctx.failed++;                                                        \
+            return;                                                                     \
+        }                                                                               \
+    } while (0)
 
-#define ASSERT_NEQ(not_expected, actual) \
-    do { \
-        if ((not_expected) == (actual)) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
+#define ASSERT_NEQ(not_expected, actual)                                  \
+    do                                                                    \
+    {                                                                     \
+        if ((not_expected) == (actual))                                   \
+        {                                                                 \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");                    \
             printf("    Expected NOT: 0x%X\n", (unsigned)(not_expected)); \
-            printf("    Actual:       0x%X\n", (unsigned)(actual)); \
-            printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            printf("    Actual:       0x%X\n", (unsigned)(actual));       \
+            printf("    At: %s:%d\n", __FILE__, __LINE__);                \
+            g_test_ctx.failed++;                                          \
+            return;                                                       \
+        }                                                                 \
+    } while (0)
 
 // Note: ASSERT_TRUE checks if expression is non-zero (truthy)
 //       ASSERT_FALSE checks if expression is zero (falsy)
-#define ASSERT_TRUE(cond) \
-    do { \
-        if (!(cond)) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
-            printf("    Expected: true (non-zero)\n"); \
-            printf("    Actual:   0 (false)\n"); \
+#define ASSERT_TRUE(cond)                                  \
+    do                                                     \
+    {                                                      \
+        if (!(cond))                                       \
+        {                                                  \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");     \
+            printf("    Expected: true (non-zero)\n");     \
+            printf("    Actual:   0 (false)\n");           \
             printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            g_test_ctx.failed++;                           \
+            return;                                        \
+        }                                                  \
+    } while (0)
 
-#define ASSERT_FALSE(cond) \
-    do { \
-        if (cond) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
-            printf("    Expected: false (0)\n"); \
+#define ASSERT_FALSE(cond)                                               \
+    do                                                                   \
+    {                                                                    \
+        if (cond)                                                        \
+        {                                                                \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");                   \
+            printf("    Expected: false (0)\n");                         \
             printf("    Actual:   0x%X (non-zero)\n", (unsigned)(cond)); \
-            printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            printf("    At: %s:%d\n", __FILE__, __LINE__);               \
+            g_test_ctx.failed++;                                         \
+            return;                                                      \
+        }                                                                \
+    } while (0)
 
-#define SKIP(reason) \
-    do { \
+#define SKIP(reason)                                               \
+    do                                                             \
+    {                                                              \
         printf(COLOR_YELLOW "SKIP" COLOR_RESET " (%s)\n", reason); \
-        g_test_ctx.skipped++; \
-        return; \
-    } while(0)
+        g_test_ctx.skipped++;                                      \
+        return;                                                    \
+    } while (0)
 
-#define ASSERT_MEM_EQ(addr, expected) \
-    do { \
-        u8 _val = mem_read_raw(&sys.mem, addr); \
-        if (_val != (expected)) { \
-            printf(COLOR_RED "FAIL" COLOR_RESET "\n"); \
-            printf("    Memory[$%04X]: Expected 0x%02X, got 0x%02X\n", \
+#define SKIP_TEST(testname, nextname)                                  \
+    do                                                                 \
+    {                                                                  \
+        if (strcmp(g_test_ctx.current_test, testname) == 0)            \
+        {                                                              \
+            printf(" - " COLOR_YELLOW "skip" COLOR_RESET "\n" nextname); \
+            g_test_ctx.skipped++;                                      \
+            g_test_ctx.current_test = nextname;                        \
+        }                                                              \
+    } while (0)
+
+#define ASSERT_MEM_EQ(addr, expected)                                       \
+    do                                                                      \
+    {                                                                       \
+        u8 _val = mem_read_raw(&sys.mem, addr);                             \
+        if (_val != (expected))                                             \
+        {                                                                   \
+            printf(COLOR_RED "FAIL" COLOR_RESET "\n");                      \
+            printf("    Memory[$%04X]: Expected 0x%02X, got 0x%02X\n",      \
                    (unsigned)(addr), (unsigned)(expected), (unsigned)_val); \
-            printf("    At: %s:%d\n", __FILE__, __LINE__); \
-            g_test_ctx.failed++; \
-            return; \
-        } \
-    } while(0)
+            printf("    At: %s:%d\n", __FILE__, __LINE__);                  \
+            g_test_ctx.failed++;                                            \
+            return;                                                         \
+        }                                                                   \
+    } while (0)
 
 // Pass the current test
-#define PASS() \
-    do { \
+#define PASS()                                       \
+    do                                               \
+    {                                                \
         printf(COLOR_GREEN "PASS" COLOR_RESET "\n"); \
-        g_test_ctx.passed++; \
-    } while(0)
+        g_test_ctx.passed++;                         \
+    } while (0)
 
 // Print test summary
-#define TEST_SUMMARY() \
-    do { \
-        printf("\n" COLOR_YELLOW "=== Test Summary ===" COLOR_RESET "\n"); \
-        printf("  Total:  %d\n", g_test_ctx.total); \
-        printf("  Passed: " COLOR_GREEN "%d" COLOR_RESET "\n", g_test_ctx.passed); \
-        printf("  Failed: %s%d" COLOR_RESET "\n", \
-               g_test_ctx.failed > 0 ? COLOR_RED : COLOR_GREEN, g_test_ctx.failed); \
-        if (g_test_ctx.skipped > 0) { \
+#define TEST_SUMMARY()                                                                    \
+    do                                                                                    \
+    {                                                                                     \
+        printf("\n" COLOR_YELLOW "=== Test Summary ===" COLOR_RESET "\n");                \
+        printf("  Total:  %d\n", g_test_ctx.total);                                       \
+        printf("  Passed: " COLOR_GREEN "%d" COLOR_RESET "\n", g_test_ctx.passed);        \
+        printf("  Failed: %s%d" COLOR_RESET "\n",                                         \
+               g_test_ctx.failed > 0 ? COLOR_RED : COLOR_GREEN, g_test_ctx.failed);       \
+        if (g_test_ctx.skipped > 0)                                                       \
+        {                                                                                 \
             printf("  Skipped: %s%d" COLOR_RESET "\n", COLOR_YELLOW, g_test_ctx.skipped); \
-        } \
-        printf("\n"); \
-    } while(0)
+        }                                                                                 \
+        printf("\n");                                                                     \
+    } while (0)
 
 // Return test exit code
 #define TEST_EXIT_CODE() (g_test_ctx.failed > 0 ? 1 : 0)

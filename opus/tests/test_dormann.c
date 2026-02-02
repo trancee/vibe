@@ -46,12 +46,12 @@ static bool load_dormann_test(const char *test_name, u16 load_address)
 
     // Reset system
     sys.cycle_count = 0;
-    
+
     // Reset all components
     mem_reset(&sys.mem);
     vic_reset(&sys.vic);
     cpu_reset(&sys.cpu); // CPU last (reads reset vector)
- 
+
     size_t read = fread(&sys.mem.ram[load_address], 1, size, f);
     fclose(f);
 
@@ -82,12 +82,14 @@ TEST(dormann_functional)
     sys.cpu.SP = 0xFF;
     sys.cpu.PC = 0x0400; // Start address
 
-    u16 end_address = 0x3469;    // Success address
+    u16 end_address = 0x3469;      // Success address
     size_t max_cycles = 100000000; // Safety limit
     size_t cycles = 0;
     u16 last_pc = 0;
     int stuck_count = 0;
     u8 last_test_num = 0xFF;
+
+    printf("\n");
 
     while (cycles < max_cycles)
     {
@@ -160,6 +162,8 @@ TEST(dormann_decimal)
     size_t cycles = 0;
     u16 last_pc = 0;
     int stuck_count = 0;
+
+    printf("\n");
 
     while (cycles < max_cycles)
     {
@@ -253,6 +257,8 @@ TEST(dormann_interrupt)
     u16 last_pc = 0;
     int stuck_count = 0;
     bool nmi_last = false; // For NMI edge detection
+
+    printf("\n");
 
     while (cycles < max_cycles)
     {
@@ -368,7 +374,7 @@ void run_dormann_tests(void)
     cpu_init(&sys.cpu, &sys);
     mem_init(&sys.mem, &sys);
     vic_init(&sys.vic, &sys);
-    
+
     // Disable 6510 I/O port for pure 6502 testing
     // (Dormann tests use $00/$01 as regular RAM variables)
     sys.cpu.mode = CPU_MODE_6502;
