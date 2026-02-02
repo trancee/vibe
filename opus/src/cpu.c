@@ -79,6 +79,7 @@ void cpu_reset(C64Cpu *cpu)
     cpu->irq_pending = false;
     cpu->irq_pending_new = false;
     cpu->nmi_edge = false;
+    cpu->nmi_triggered_this_insn = false;
     cpu->extra_cycles = 0;
     cpu->page_crossed = false;
 
@@ -2590,6 +2591,7 @@ int cpu_step(C64Cpu *cpu)
 {
     cpu->extra_cycles = 0;
     cpu->page_crossed = false;
+    cpu->nmi_triggered_this_insn = false;
 
     // Sample NMI state at instruction start
     // NMI is sampled at the penultimate cycle of the previous instruction
@@ -2616,7 +2618,10 @@ int cpu_step(C64Cpu *cpu)
     int total_cycles = cycles + cpu->extra_cycles;
     bool is_3cycle_branch = ((opcode & 0x1F) == 0x10) && (total_cycles == 3);
     int nmi_threshold = is_3cycle_branch ? 2 : 1;
-    bool take_nmi = nmi_at_start || (cpu->nmi_pending && cpu->nmi_pending_age >= nmi_threshold);
+    // nmi_triggered_this_insn catches the case where NMI was triggered during
+    // this instruction but nmi_pending was cleared by reading ICR
+    bool take_nmi = nmi_at_start || cpu->nmi_triggered_this_insn || 
+                    (cpu->nmi_pending && cpu->nmi_pending_age >= nmi_threshold);
 
     // Don't take NMI at the end of BRK - it should be taken at the next instruction
     if (opcode == 0x00)

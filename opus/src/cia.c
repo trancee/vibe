@@ -107,6 +107,11 @@ static void check_irq(C64Cia *cia)
 
 void cia_clock(C64Cia *cia)
 {
+    // Clear icr_ack from previous cycle's read at the START of this cycle
+    // This way, a read sets icr_ack to prevent interrupts from that same cycle,
+    // but the next cycle starts fresh
+    cia->icr_ack = false;
+    
     // Capture Timer A value for reads (1-cycle delay)
     // CPU reads see the value from the PREVIOUS cycle
     cia->timer_a_read = cia->timer_a;
@@ -460,9 +465,6 @@ void cia_clock(C64Cia *cia)
             check_irq(cia);
         }
     }
-
-    // Clear icr_ack at end of cycle (after all interrupt sources processed)
-    cia->icr_ack = false;
 }
 
 u8 cia_read(C64Cia *cia, u8 reg)
@@ -637,11 +639,17 @@ u8 cia_read(C64Cia *cia, u8 reg)
         }
         else
         {
+            // If NMI was pending (bit 7 set), preserve that fact so it still fires
+            // at the end of this instruction - the CPU has already sampled the NMI
+            if (result & 0x80)
+            {
+                cia->sys->cpu.nmi_triggered_this_insn = true;
+            }
             cia->sys->cpu.nmi_pending = false;
             cia->sys->cpu.nmi_edge = false; // Allow new NMI edge
         }
         cia->irq_delay = 0;
-        cia->icr_ack = true; // Inhibit irq_delay for next cycle
+        cia->icr_ack = true; // Inhibit irq_delay for rest of this cycle
         return result;
     }
 
@@ -816,10 +824,9 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         if (!was_running && now_running)
         {
             // Main timer (for register reads) has 1-cycle delay
-            // Combined with timer_a_read capture, gives proper cia1tab timing
             if (force_load)
             {
-                cia->ta_delay = 2;
+                cia->ta_delay = 1;  // Force load: 1 cycle delay before counting
             }
             else
             {

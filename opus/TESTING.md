@@ -579,6 +579,90 @@ else if (cia->ta_cnt_delay > 0)
 After implementing mode switch delays:
 - ✅ cnto2 - PASSING
 
+## CIA ICR Read and NMI Triggering (icr01)
+
+The Lorenz `icr01` test validates the precise interaction between reading the CIA2 Interrupt Control Register ($DD0D) and NMI triggering. This test examines several edge cases around when NMI should and shouldn't fire based on the timing of ICR reads.
+
+### Test Scenarios
+
+The test validates four key scenarios for CIA2 Timer A with NMI enabled:
+
+1. **Read ICR when value is $01** (timer fired, but bit 7 not yet set): First read should see $01, second read should see $00 (cleared), and NMI should NOT fire.
+
+2. **Read ICR when value is $81** (NMI already triggered): First read should see $81, second read should see $00 (cleared), and NMI MUST fire after the instruction completes.
+
+3. **Read ICR when value is $00** (timer hasn't fired yet): First read should see $00, second read should see $81 (timer fired between reads), and NMI MUST fire after the second instruction.
+
+### Key Findings
+
+#### 1. ICR Acknowledge Timing (icr_ack)
+
+The `icr_ack` flag was being cleared at the **end** of `cia_clock()`, but this caused it to persist into the next cycle. If an ICR read happened on one cycle and the timer underflowed on the next, the stale `icr_ack` would incorrectly inhibit the interrupt from triggering.
+
+**Fix:** Move `icr_ack` clearing to the **start** of `cia_clock()`:
+
+```c
+void cia_clock(C64Cia *cia)
+{
+    // Clear icr_ack from previous cycle's read at the START of this cycle
+    // This way, a read sets icr_ack to prevent interrupts from that same cycle,
+    // but the next cycle starts fresh
+    cia->icr_ack = false;
+    
+    // ... rest of cia_clock
+}
+```
+
+This ensures that an ICR read only inhibits interrupt triggering for the remainder of that same cycle, not the following cycle.
+
+#### 2. NMI Preservation on ICR Read (nmi_triggered_this_insn)
+
+When reading ICR with bit 7 set ($81), the read clears both `nmi_pending` and `nmi_edge`. However, if the CPU was in the middle of an instruction when this happened, the NMI that was pending should still fire at the end of that instruction.
+
+**Fix:** Add a flag to track NMI triggering within an instruction:
+
+```c
+// In cpu.h
+bool nmi_triggered_this_insn;  // NMI was triggered during this instruction
+
+// In cia_read() when reading CIA2 ICR:
+if (result & 0x80)
+{
+    cia->sys->cpu.nmi_triggered_this_insn = true;
+}
+cia->sys->cpu.nmi_pending = false;
+cia->sys->cpu.nmi_edge = false;
+
+// In cpu_step() at instruction start:
+cpu->nmi_triggered_this_insn = false;
+
+// In cpu_step() for take_nmi decision:
+bool take_nmi = nmi_at_start || cpu->nmi_triggered_this_insn || 
+                (cpu->nmi_pending && cpu->nmi_pending_age >= nmi_threshold);
+```
+
+This ensures that if NMI was pending at the moment of ICR read (bit 7 was set), the CPU still takes the NMI at the end of the instruction even though the ICR read cleared `nmi_pending`.
+
+### Timing Analysis
+
+For the "read ICR=$81" case with timer latch=1:
+
+| Cycle | Event |
+|-------|-------|
+| STA $DD0E (cycle 4) | Timer starts, force load, ta_delay=2 |
+| LDA $DD0D (cycle 1) | ta_delay 2→1 |
+| LDA $DD0D (cycle 2) | ta_delay 1→0 |
+| LDA $DD0D (cycle 3) | Timer counts 1→0 |
+| LDA $DD0D (cycle 4) | Timer 0→FFFF (underflow), irq_delay=1, reload |
+| After LDA | irq_delay fires, ICR bit 7 set, NMI triggered |
+| LDX $DD0D (cycle 4) | Reads ICR=$81, sets nmi_triggered_this_insn |
+| After LDX | NMI taken because nmi_triggered_this_insn is true |
+
+### Test Status
+
+After both fixes:
+- ✅ icr01 - PASSING
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)
