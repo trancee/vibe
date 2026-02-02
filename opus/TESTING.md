@@ -820,9 +820,9 @@ The Lorenz `cia1ta` test fails 1 of approximately 14,000 test cases.
 
 **Why It Cannot Be Fixed:** The timer implementation uses `ta_delay` to correctly model the delay before a timer starts counting after being loaded. This delay is essential for passing the vast majority of test cases. However, in this specific edge case, the delay causes the timer read to return a value that differs from real hardware by 1 cycle.
 
-### CIA Timer B One-Shot Mode (cia1tb)
+### CIA Timer B One-Shot Mode (cia1tb, cia2tb)
 
-The Lorenz `cia1tb` test fails 1 of approximately 14,000 test cases.
+The Lorenz `cia1tb` and `cia2tb` tests each fail 1 of approximately 14,000 test cases.
 
 **Failing Case:** I4=$1E (30), B4=$09 (9), IE=$10, BE=$19
 
@@ -880,6 +880,7 @@ After all fixes, the following 18 CIA/interrupt-related tests pass:
 Known failing tests (documented limitations):
 - ⚠️ cia1ta - 1 of ~14,000 test cases fails (timer read timing edge case)
 - ⚠️ cia1tb - 1 of ~14,000 test cases fails (one-shot START bit timing edge case)
+- ⚠️ cia2tb - Same issue as cia1tb (CIA2 Timer B has identical timing characteristics)
 
 ## CIA Interrupt Pending Flag Fix
 
