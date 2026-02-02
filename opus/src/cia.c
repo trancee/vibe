@@ -67,6 +67,14 @@ void cia_reset(C64Cia *cia)
 
     cia->cra = 0;
     cia->crb = 0;
+    
+    // RUNMODE 2-stage pipeline - all stages are 0 (continuous mode)
+    cia->runmode_a = false;
+    cia->runmode_a_next = false;
+    cia->runmode_a_pending = false;
+    cia->runmode_b = false;
+    cia->runmode_b_next = false;
+    cia->runmode_b_pending = false;
 
     cia->icr_data = 0;
     cia->icr_mask = 0;
@@ -111,6 +119,14 @@ void cia_clock(C64Cia *cia)
     // This way, a read sets icr_ack to prevent interrupts from that same cycle,
     // but the next cycle starts fresh
     cia->icr_ack = false;
+    
+    // Advance 2-stage RUNMODE pipeline - the one-shot decision uses the value from 2 cycles ago
+    // Stage: runmode_a (used) <- runmode_a_next <- runmode_a_pending (written)
+    // This ensures that a RUNMODE write on cycle N doesn't affect underflow until cycle N+2
+    cia->runmode_a = cia->runmode_a_next;
+    cia->runmode_a_next = cia->runmode_a_pending;
+    cia->runmode_b = cia->runmode_b_next;
+    cia->runmode_b_next = cia->runmode_b_pending;
     
     // Capture Timer A value for reads (1-cycle delay)
     // CPU reads see the value from the PREVIOUS cycle
@@ -240,7 +256,11 @@ void cia_clock(C64Cia *cia)
                     check_irq(cia);
 
                     // One-shot mode: stop timer
-                    if (cia->cra & CIA_CR_RUNMODE)
+                    // Use OR of current CRA and pipelined RUNMODE:
+                    // - SET one-shot takes effect immediately (current CRA)
+                    // - CLR one-shot is delayed (pipelined value preserves old state)
+                    bool oneshot = (cia->cra & CIA_CR_RUNMODE) || cia->runmode_a;
+                    if (oneshot)
                     {
                         cia->cra &= ~CIA_CR_START;
                     }
@@ -285,7 +305,7 @@ void cia_clock(C64Cia *cia)
         case 0: // phi2
             count = true;
             break;
-        case 1: // CNT (not implemented)
+        case 1: // CNT (not implemented - would need CNT pin input)
             break;
         case 2: // Timer A underflow
             // Use delayed underflow signal (1 cycle after TA underflows)
@@ -295,7 +315,13 @@ void cia_clock(C64Cia *cia)
                 count = true;
             }
             break;
-        case 3: // Timer A underflow while CNT high (not implemented)
+        case 3: // Timer A underflow while CNT high
+            // CNT line is high by default (pulled high externally)
+            // Use delayed underflow signal for cascade timing
+            if (cia->ta_underflow_delay)
+            {
+                count = true;
+            }
             break;
         }
 
@@ -329,7 +355,12 @@ void cia_clock(C64Cia *cia)
                     cia->icr_data |= CIA_ICR_TB;
                     check_irq(cia);
 
-                    if (cia->crb & CIA_CR_RUNMODE)
+                    // One-shot mode: stop timer
+                    // Use OR of current CRB and pipelined RUNMODE:
+                    // - SET one-shot takes effect immediately (current CRB)
+                    // - CLR one-shot is delayed (pipelined value preserves old state)
+                    bool oneshot = (cia->crb & CIA_CR_RUNMODE) || cia->runmode_b;
+                    if (oneshot)
                     {
                         cia->crb &= ~CIA_CR_START;
                     }
@@ -848,6 +879,9 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         // Switching from pulse to toggle mode does NOT reset the flip-flop
 
         cia->cra = value & ~CIA_CR_LOAD; // Load bit not stored
+        
+        // Update RUNMODE 2-stage pipeline - write to pending, takes effect in 2 cycles
+        cia->runmode_a_pending = (value & CIA_CR_RUNMODE) != 0;
     }
     break;
 
@@ -898,6 +932,9 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         {
             cia->crb = value & ~CIA_CR_LOAD;
         }
+        
+        // Update RUNMODE 2-stage pipeline - write to pending, takes effect in 2 cycles
+        cia->runmode_b_pending = (value & CIA_CR_RUNMODE) != 0;
     }
     break;
     }

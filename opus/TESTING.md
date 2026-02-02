@@ -723,6 +723,111 @@ case CIA_ICR:
 After implementing the 2-cycle delay:
 - ✅ imr - PASSING
 
+## One-Shot Mode Switching Timing (flipos)
+
+The flipos test validates the timing of switching between one-shot and continuous modes at precise moments relative to timer underflow.
+
+### Test Cases
+
+1. **SET ONESHOT AT T-1**: Start in continuous mode, switch to one-shot 1 cycle before underflow. Timer should STOP.
+2. **CLR ONESHOT AT T-1**: Start in one-shot mode, switch to continuous 1 cycle before underflow. Timer should STOP.
+3. **SET ONESHOT AT T**: Switch to one-shot exactly at underflow. Timer may or may not stop (implementation-defined).
+4. **CLR ONESHOT AT T-2**: Switch from one-shot to continuous 2 cycles before underflow. Timer may not stop.
+
+### Key Finding: Asymmetric RUNMODE Behavior
+
+The one-shot mode has asymmetric timing:
+- **Setting one-shot** takes effect immediately (current cycle)
+- **Clearing one-shot** has a 2-cycle delay (the old one-shot state persists)
+
+This means:
+- If you switch TO one-shot mode just before underflow, the timer stops
+- If you switch FROM one-shot mode just before underflow, the timer still stops (because the change hasn't taken effect yet)
+
+### Implementation: 2-Stage RUNMODE Pipeline
+
+We implement this with a 2-stage pipeline for the RUNMODE bit:
+```c
+// At start of cia_clock():
+cia->runmode_a = cia->runmode_a_next;
+cia->runmode_a_next = cia->runmode_a_pending;
+
+// When writing CRA:
+cia->runmode_a_pending = (value & CIA_CR_RUNMODE) != 0;
+```
+
+At underflow, we use OR logic to combine both immediate and pipelined values:
+```c
+bool oneshot = (cia->cra & CIA_CR_RUNMODE) || cia->runmode_a;
+if (oneshot) {
+    cia->cra &= ~CIA_CR_START;  // Stop timer
+}
+```
+
+This ensures:
+- Setting one-shot: `cra & CIA_CR_RUNMODE` is true immediately → timer stops
+- Clearing one-shot: `runmode_a` retains the old value for 2 cycles → timer stops
+
+### Test Status
+
+After implementing the asymmetric RUNMODE pipeline:
+- ✅ flipos - PASSING
+
+## CNT Default State (cntdef)
+
+The cntdef test validates that the CNT (counter input) pin is high by default.
+
+### Background
+
+Timer B supports four input modes (INMODE bits 6-5 of CRB):
+- 00: Count phi2 clock
+- 01: Count CNT positive edges
+- 10: Count Timer A underflows
+- 11: Count Timer A underflows while CNT is high
+
+Mode 11 (cascade with CNT gate) requires the CNT line to be high for Timer B to count Timer A underflows.
+
+### Key Finding: CNT is High by Default
+
+On real hardware, the CNT pin is typically pulled high externally. The test verifies this by setting Timer B to mode 11 and checking if it counts.
+
+### Implementation
+
+We assume CNT is always high (since we don't emulate external CNT input):
+```c
+case 3: // Timer A underflow while CNT high
+    // CNT line is high by default (pulled high externally)
+    if (cia->ta_underflow_delay) {
+        count = true;
+    }
+    break;
+```
+
+### Test Status
+
+After implementing CNT high by default:
+- ✅ cntdef - PASSING
+
+## Current Test Status Summary
+
+After all fixes, the following 18 CIA/interrupt-related tests pass:
+- ✅ irq - IRQ timing
+- ✅ nmi - NMI timing
+- ✅ cia1tb123 - Timer B cascade modes
+- ✅ cia2tb123 - Timer B cascade modes (CIA2)
+- ✅ cia1pb6 - Timer A PB6 output
+- ✅ cia1pb7 - Timer B PB7 output
+- ✅ cia2pb6 - Timer A PB6 output (CIA2)
+- ✅ cia2pb7 - Timer B PB7 output (CIA2)
+- ✅ cia1tab - Timer A→B cascade
+- ✅ loadth - Timer force load
+- ✅ cnto2 - Timer counting
+- ✅ icr01 - ICR read timing
+- ✅ imr - ICR mask write timing
+- ✅ flipos - One-shot mode switching
+- ✅ oneshot - Basic one-shot mode
+- ✅ cntdef - CNT default state
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

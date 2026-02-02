@@ -113,6 +113,16 @@ typedef struct
     // Control registers
     u8 cra; // Control register A
     u8 crb; // Control register B
+    
+    // RUNMODE 2-stage pipeline - the one-shot decision uses value from 2 cycles before
+    // When CRA/CRB is written, the new RUNMODE takes effect 2 cycles later
+    // Stage: runmode_a (used) <- runmode_a_next <- runmode_a_pending (written)
+    bool runmode_a;         // Current effective RUNMODE for Timer A (used at underflow)
+    bool runmode_a_next;    // Next cycle's RUNMODE for Timer A
+    bool runmode_a_pending; // Value written this cycle, becomes next in 1 cycle
+    bool runmode_b;         // Current effective RUNMODE for Timer B (used at underflow)
+    bool runmode_b_next;    // Next cycle's RUNMODE for Timer B
+    bool runmode_b_pending; // Value written this cycle, becomes next in 1 cycle
 
     // Interrupt registers
     u8 icr_data; // Actual interrupt flags
