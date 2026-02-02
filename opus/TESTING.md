@@ -881,6 +881,93 @@ Known failing tests (documented limitations):
 - ⚠️ cia1ta - 1 of ~14,000 test cases fails (timer read timing edge case)
 - ⚠️ cia1tb - 1 of ~14,000 test cases fails (one-shot START bit timing edge case)
 
+## CIA Interrupt Pending Flag Fix
+
+The unit tests `icr_irq_pending` and `cia2_generates_nmi` were failing because the CIA's internal `irq_pending` flag was not being properly maintained.
+
+### Problem
+
+The CIA struct has an `irq_pending` flag to track whether the CIA is asserting an interrupt. This flag was:
+1. Never set to `true` when a timer underflow triggered an interrupt
+2. Never cleared when the ICR was read (acknowledging the interrupt)
+
+The code was correctly setting `sys->cpu.irq_pending` (the CPU-level interrupt) but not `cia->irq_pending` (the CIA-level status flag).
+
+### Fix
+
+In `cia_clock()`, when the IRQ delay expires and triggers an interrupt:
+```c
+if (cia->irq_delay == 0) {
+    cia->icr_data |= CIA_ICR_IR;
+    cia->irq_pending = true;  // Added
+    // ... trigger CPU interrupt ...
+}
+```
+
+In `cia_read()`, when the ICR register is read:
+```c
+case CIA_ICR: {
+    u8 result = cia->icr_data;
+    cia->icr_data = 0;
+    cia->irq_pending = false;  // Added
+    // ... clear CPU interrupt ...
+}
+```
+
+## NMI Edge Detection Fix
+
+During debugging of the cia2ta test, an issue was found with double-NMI triggering.
+
+### Problem
+
+When reading the CIA2 ICR register mid-instruction, the code would set `nmi_triggered_this_insn = true` to preserve the NMI for execution at the end of the instruction. However, this was happening even when the NMI had already been taken, causing a spurious second NMI.
+
+### Fix
+
+In `cia_read()` for CIA2 ICR read:
+```c
+// Only set nmi_triggered_this_insn if NMI is actually still pending
+if ((result & 0x80) && cia->sys->cpu.nmi_pending) {
+    cia->sys->cpu.nmi_triggered_this_insn = true;
+}
+```
+
+In `cpu_step()` when taking the NMI:
+```c
+if (take_nmi) {
+    cpu->nmi_pending = false;
+    cpu->nmi_triggered_this_insn = false;  // Added - NMI is being taken
+    // ...
+}
+```
+
+## Test Harness Improvements
+
+The Lorenz test harness required several fixes to properly run the CIA timer tests:
+
+### Screen Memory Initialization
+
+The tests use KERNAL routines that clear the screen. Without proper initialization, the screen clear would corrupt page 3 vectors ($0314-$0319):
+
+```c
+// Initialize HIBASE ($0288) to point screen at $0400
+mem_write_raw(&sys.mem, 0x0288, 0x04);
+
+// Initialize screen line table ($D9-$F1)
+for (int row = 0; row < 25; row++) {
+    u16 line_addr = 0x0400 + (row * 40);
+    mem_write_raw(&sys.mem, 0xD9 + row, (line_addr >> 8) | 0x80);
+}
+```
+
+### IRQ Handler in RAM
+
+The IRQ handler at $FF48 jumps through the vector at $0314/$0315. When ROM is visible, writes to $EABF (where the default handler would be) go to RAM but reads still come from ROM. The fix places the IRQ return stub at $0270 in the cassette buffer area, which is always RAM regardless of ROM banking.
+
+### STOP Key Handler
+
+The tests call the KERNAL STOP routine to check for user abort. A stub at $0290 returns with Z=0 (no STOP key pressed) to allow tests to continue.
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

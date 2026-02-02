@@ -57,6 +57,27 @@ static void lorenz_init_memory(void)
     mem_write_raw(&sys.mem, 0xFFFD, 0x08); // RESET -> $0800
     mem_write_raw(&sys.mem, 0xFFFE, 0x48);
     mem_write_raw(&sys.mem, 0xFFFF, 0xFF); // IRQ -> $FF48
+    
+    // Initialize screen pointer table at $D1/$D2 and line link table
+    // Screen is at $0400, each line is 40 bytes
+    // The KERNAL uses $D1/$D2 as current line pointer and $D9-$F8 for line addresses
+    // Initialize properly so screen clears don't corrupt page 3 vectors
+    u16 screen_base = 0x0400;
+    // Point $D1/$D2 to screen start
+    mem_write_raw(&sys.mem, 0xD1, 0x00);
+    mem_write_raw(&sys.mem, 0xD2, 0x04); // $0400
+    
+    // $288 (HIBASE) - screen memory page high byte
+    mem_write_raw(&sys.mem, 0x0288, 0x04); // Screen at $0400
+    
+    // Initialize $D9-$F2 screen line high bytes (LDTB1 table)
+    // These are just the high bytes of each row's start address
+    // Row 0-3: $04, Row 4-7: $05, Row 8-11: $06, Row 12-15: $07, etc.
+    // Bit 7 is set to indicate line not wrapped
+    for (int row = 0; row < 25; row++) {
+        u16 line_addr = screen_base + (row * 40);
+        mem_write_raw(&sys.mem, 0xD9 + row, (line_addr >> 8) | 0x80);
+    }
 
     // KERNAL stubs - these are trap addresses we'll intercept
     mem_write_raw(&sys.mem, 0xFFD2, 0x60); // CHROUT - RTS (trapped)
@@ -68,6 +89,16 @@ static void lorenz_init_memory(void)
     mem_write_raw(&sys.mem, 0x8000, 0x60); // WARM/CARTROM - RTS (trapped)
     mem_write_raw(&sys.mem, 0xA474, 0x60); // READY - RTS (trapped)
     mem_write_raw(&sys.mem, 0xE16F, 0xEA); // LOAD - NOP (trapped)
+    
+    // STOP key vector ($FFE1 -> JMP ($0328)) - always return "no stop"
+    // Set up a stub that clears Z flag and returns
+    // LDA #$01; RTS  (A=1, Z=0 means no STOP key)
+    // Place at $0290 which is always RAM
+    mem_write_raw(&sys.mem, 0x0290, 0xA9); // LDA #$01
+    mem_write_raw(&sys.mem, 0x0291, 0x01);
+    mem_write_raw(&sys.mem, 0x0292, 0x60); // RTS
+    mem_write_raw(&sys.mem, 0x0328, 0x90); // STOP vector -> $0290
+    mem_write_raw(&sys.mem, 0x0329, 0x02);
 
     // IRQ handler at $FF48 (standard location)
     static const u8 irq_handler[] = {
@@ -93,15 +124,43 @@ static void lorenz_init_memory(void)
     };
     memcpy(&sys.mem.ram[0xFF48], irq_handler, sizeof(irq_handler));
 
-    // Default IRQ/BRK vectors
-    mem_write_raw(&sys.mem, 0x0314, 0x31);
-    mem_write_raw(&sys.mem, 0x0315, 0xEA); // IRQ -> $EA31
-    mem_write_raw(&sys.mem, 0x0316, 0x66);
-    mem_write_raw(&sys.mem, 0x0317, 0xFE); // BRK -> $FE66
+    // // Default IRQ/BRK vectors
+    // mem_write_raw(&sys.mem, 0x0314, 0x31);
+    // mem_write_raw(&sys.mem, 0x0315, 0xEA); // IRQ -> $EA31
+    // mem_write_raw(&sys.mem, 0x0316, 0x66);
+    // mem_write_raw(&sys.mem, 0x0317, 0xFE); // BRK -> $FE66
 
-    // RTI at common return points
-    mem_write_raw(&sys.mem, 0xEA31, 0x40); // RTI
-    mem_write_raw(&sys.mem, 0xFE66, 0x40); // RTI
+    // // RTI at common return points
+    // mem_write_raw(&sys.mem, 0xEA31, 0x40); // RTI
+    // mem_write_raw(&sys.mem, 0xFE66, 0x40); // RTI
+
+    // Default IRQ/BRK vectors - these jump to code that restores registers and RTIs
+    // Place IRQ return stub at $0270 (in cassette buffer area, always RAM)
+    static const u8 irq_return[] = {
+        0x68, // PLA (Y was pushed last)
+        0xA8, // TAY
+        0x68, // PLA (X was pushed second)
+        0xAA, // TAX
+        0x68, // PLA (A was pushed first)
+        0x40, // RTI
+    };
+    memcpy(&sys.mem.ram[0x0270], irq_return, sizeof(irq_return));
+    mem_write_raw(&sys.mem, 0x0314, 0x70);
+    mem_write_raw(&sys.mem, 0x0315, 0x02); // IRQ -> $0270
+    
+    // BRK handler - restore registers and RTI (same as IRQ return)
+    // Place at $0280 which is always RAM (in cassette buffer area, rarely used)
+    static const u8 brk_handler[] = {
+        0x68, // PLA
+        0xA8, // TAY
+        0x68, // PLA
+        0xAA, // TAX
+        0x68, // PLA
+        0x40, // RTI
+    };
+    memcpy(&sys.mem.ram[0x0280], brk_handler, sizeof(brk_handler));
+    mem_write_raw(&sys.mem, 0x0316, 0x80);
+    mem_write_raw(&sys.mem, 0x0317, 0x02); // BRK -> $0280
 
     // WARM vector ($0302-$0303) points to $8000
     mem_write_raw(&sys.mem, 0x0302, 0x00);
@@ -298,6 +357,14 @@ static bool run_lorenz_test()
             stuck_count++;
             if (stuck_count > 10)
             {
+                printf("\n");
+                printf("STUCK at PC=$%04X after %zu cycles\n", sys.cpu.PC, cycles);
+                printf("Memory at PC: $%02X $%02X $%02X\n",
+                       mem_read(&sys.mem, sys.cpu.PC),
+                       mem_read(&sys.mem, sys.cpu.PC + 1),
+                       mem_read(&sys.mem, sys.cpu.PC + 2));
+                printf("A=$%02X X=$%02X Y=$%02X P=$%02X SP=$%02X\n",
+                       sys.cpu.A, sys.cpu.X, sys.cpu.Y, sys.cpu.P, sys.cpu.SP);
                 lorenz_test_failed = true;
                 break;
             }
@@ -309,8 +376,11 @@ static bool run_lorenz_test()
         }
     }
 
-    if (cycles >= max_cycles)
+    if (cycles >= max_cycles) {
+        printf("\n");
+        printf("TIMEOUT at PC=$%04X\n", sys.cpu.PC);
         lorenz_test_failed = true;
+    }
 
     return lorenz_test_passed && !lorenz_test_failed;
 }

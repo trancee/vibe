@@ -213,6 +213,7 @@ void cia_clock(C64Cia *cia)
         if (cia->irq_delay == 0)
         {
             cia->icr_data |= CIA_ICR_IR;
+            cia->irq_pending = true;
             // Both CIA1 and CIA2 trigger their interrupts after the delay
             if (cia->cia_num == 1)
             {
@@ -675,6 +676,7 @@ u8 cia_read(C64Cia *cia, u8 reg)
         u8 result = cia->icr_data;
         // Reading ICR clears it and sets acknowledgement flag
         cia->icr_data = 0;
+        cia->irq_pending = false;
         // CIA1 clears IRQ, CIA2 clears NMI
         if (cia->cia_num == 1)
         {
@@ -682,9 +684,10 @@ u8 cia_read(C64Cia *cia, u8 reg)
         }
         else
         {
-            // If NMI was pending (bit 7 set), preserve that fact so it still fires
-            // at the end of this instruction - the CPU has already sampled the NMI
-            if (result & 0x80)
+            // If NMI was pending (bit 7 set) AND we actually have an NMI pending,
+            // preserve that fact so it still fires at the end of this instruction.
+            // Don't set this if NMI was already taken (nmi_pending already false).
+            if ((result & 0x80) && cia->sys->cpu.nmi_pending)
             {
                 cia->sys->cpu.nmi_triggered_this_insn = true;
             }

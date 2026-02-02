@@ -2632,6 +2632,7 @@ int cpu_step(C64Cpu *cpu)
     if (take_nmi)
     {
         cpu->nmi_pending = false;
+        cpu->nmi_triggered_this_insn = false;  // Clear this too - NMI is being taken
         // Note: nmi_edge stays set - it's cleared when ICR is read
         do_interrupt(cpu, 0xFFFA, false);
         return cycles + cpu->extra_cycles + 7;
