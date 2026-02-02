@@ -663,6 +663,66 @@ For the "read ICR=$81" case with timer latch=1:
 After both fixes:
 - ✅ icr01 - PASSING
 
+## CIA ICR Mask Write Timing (imr)
+
+The Lorenz `imr` test validates the timing of interrupt triggering when writing to the CIA Interrupt Control Register ($DC0D/$DD0D) to enable an interrupt that already has a pending source.
+
+### Test Configuration
+
+The test:
+1. Starts Timer A in one-shot mode with latch=0 (causes immediate underflow)
+2. Timer underflows and sets ICR bit 0, but interrupt mask is disabled
+3. Later, writes $81 to ICR to enable Timer A interrupt
+4. Checks that IRQ does NOT fire on "clock 2" (2nd cycle after the write)
+5. Checks that IRQ DOES fire on "clock 3" (3rd cycle after the write)
+
+### Key Finding: 2-Cycle Delay for ICR Mask Write
+
+When writing to the ICR mask register to enable an interrupt that already has a pending source (e.g., timer underflow already set ICR bit 0), there is a **2-cycle delay** before the interrupt line goes low.
+
+This differs from the 1-cycle delay used when a timer underflows with the interrupt already enabled. The extra cycle accounts for the fact that:
+1. The ICR mask write happens **after** `cia_clock()` runs for that cycle
+2. The `irq_delay` counter is processed at the **start** of the next `cia_clock()`
+
+### Implementation
+
+```c
+case CIA_ICR:
+    // Bit 7: Set or clear mode
+    if (value & 0x80)
+    {
+        cia->icr_mask |= (value & 0x1F);
+    }
+    else
+    {
+        cia->icr_mask &= ~(value & 0x1F);
+    }
+
+    // Check if we now have enabled pending interrupt
+    // When writing to ICR mask, if a pending interrupt exists, use 2-cycle delay
+    // because the write happens after cia_clock runs for this cycle
+    if (!cia->icr_ack &&
+        !cia->irq_delay &&
+        !(cia->icr_data & CIA_ICR_IR) &&
+        (cia->icr_data & cia->icr_mask & 0x1F))
+    {
+        cia->irq_delay = 2;
+    }
+    break;
+```
+
+### Timing Comparison
+
+| Interrupt Source | Delay Cycles |
+|------------------|--------------|
+| Timer underflow (interrupt already enabled) | 1 cycle |
+| ICR mask write (enabling pending interrupt) | 2 cycles |
+
+### Test Status
+
+After implementing the 2-cycle delay:
+- ✅ imr - PASSING
+
 ## References
 
 - [6502 Instruction Timing](http://www.oxyron.de/html/opcodes02.html)

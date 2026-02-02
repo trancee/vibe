@@ -775,18 +775,14 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
         }
 
         // Check if we now have enabled pending interrupt
-        if (cia->icr_data & cia->icr_mask & 0x1F)
+        // When writing to ICR mask, if a pending interrupt exists, use 2-cycle delay
+        // because the write happens after cia_clock runs for this cycle
+        if (!cia->icr_ack &&
+            !cia->irq_delay &&
+            !(cia->icr_data & CIA_ICR_IR) &&
+            (cia->icr_data & cia->icr_mask & 0x1F))
         {
-            cia->icr_data |= CIA_ICR_IR;
-            // CIA1 triggers IRQ, CIA2 triggers NMI
-            if (cia->cia_num == 1)
-            {
-                cia->sys->cpu.irq_pending = true;
-            }
-            else
-            {
-                cpu_trigger_nmi(&cia->sys->cpu);
-            }
+            cia->irq_delay = 2;
         }
         break;
 
