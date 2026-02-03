@@ -51,7 +51,9 @@ static void test_sid_init(void) {
         TEST_ASSERT_EQ(0, sid.voice[i].frequency, "Voice frequency initialized to 0");
         TEST_ASSERT_EQ(0, sid.voice[i].pulse_width, "Voice pulse width initialized to 0");
         TEST_ASSERT_EQ(0, sid.voice[i].control, "Voice control initialized to 0");
-        TEST_ASSERT_EQ(ENV_IDLE, sid.voice[i].env_state, "Voice envelope in IDLE state");
+        // Real SID chip starts in RELEASE state with hold_zero = true (per reSID)
+        TEST_ASSERT_EQ(ENV_RELEASE, sid.voice[i].env_state, "Voice envelope in RELEASE state");
+        TEST_ASSERT_EQ(true, sid.voice[i].hold_zero, "Voice envelope frozen at zero");
     }
 }
 
@@ -345,6 +347,138 @@ static void test_sid_voice3_readback(void) {
 }
 
 // ============================================================================
+// SID Output Quality Tests
+// ============================================================================
+
+static void test_sid_output_quality(void) {
+    printf("\n=== SID Output Quality Tests ===\n");
+    
+    SID sid;
+    sid_init(&sid, 985248, 44100);
+    
+    // Set up a simple sawtooth sound
+    sid_write(&sid, SID_MEM_START + SID_V1_FREQ_HI, 0x10);
+    sid_write(&sid, SID_MEM_START + SID_V1_FREQ_LO, 0x00);
+    sid_write(&sid, SID_MEM_START + SID_V1_AD, 0x00);
+    sid_write(&sid, SID_MEM_START + SID_V1_SR, 0xF0);
+    sid_write(&sid, SID_MEM_START + SID_V1_CTRL, SID_CTRL_GATE | SID_CTRL_SAW);
+    sid_write(&sid, SID_MEM_START + SID_MODE_VOL, 0x0F);
+    
+    // Generate samples
+    int16_t buffer[2048];
+    memset(buffer, 0, sizeof(buffer));
+    sid_set_audio_buffer(&sid, buffer, 2048);
+    
+    sid_clock(&sid, 50000);
+    
+    uint32_t samples = sid_get_samples(&sid);
+    TEST_ASSERT(samples > 100, "Sufficient samples generated");
+    
+    // Check that output is not clipping constantly
+    int clip_count = 0;
+    for (uint32_t i = 0; i < samples; i++) {
+        if (buffer[i] == 32767 || buffer[i] == -32768) {
+            clip_count++;
+        }
+    }
+    float clip_ratio = (float)clip_count / samples;
+    TEST_ASSERT(clip_ratio < 0.1f, "Output not excessively clipping");
+    
+    // Check that output has variation (not stuck at one value)
+    int16_t min_val = buffer[0], max_val = buffer[0];
+    for (uint32_t i = 1; i < samples; i++) {
+        if (buffer[i] < min_val) min_val = buffer[i];
+        if (buffer[i] > max_val) max_val = buffer[i];
+    }
+    TEST_ASSERT(max_val > min_val, "Output has variation");
+}
+
+// ============================================================================
+// SID Filter Stability Tests
+// ============================================================================
+
+static void test_sid_filter_stability(void) {
+    printf("\n=== SID Filter Stability Tests ===\n");
+    
+    SID sid;
+    sid_init(&sid, 985248, 44100);
+    
+    // Set up sound with filter at extreme settings
+    sid_write(&sid, SID_MEM_START + SID_V1_FREQ_HI, 0x20);
+    sid_write(&sid, SID_MEM_START + SID_V1_AD, 0x00);
+    sid_write(&sid, SID_MEM_START + SID_V1_SR, 0xF0);
+    sid_write(&sid, SID_MEM_START + SID_V1_CTRL, SID_CTRL_GATE | SID_CTRL_SAW);
+    
+    // Max resonance, voice 1 through filter
+    sid_write(&sid, SID_MEM_START + SID_RES_FILT, 0xF1);
+    // High cutoff, LP mode, max volume
+    sid_write(&sid, SID_MEM_START + SID_FC_HI, 0xFF);
+    sid_write(&sid, SID_MEM_START + SID_MODE_VOL, 0x1F);
+    
+    // Generate samples
+    int16_t buffer[2048];
+    memset(buffer, 0, sizeof(buffer));
+    sid_set_audio_buffer(&sid, buffer, 2048);
+    
+    sid_clock(&sid, 100000);
+    
+    uint32_t samples = sid_get_samples(&sid);
+    TEST_ASSERT(samples > 0, "Samples generated with filter");
+    
+    // Check filter state hasn't exploded
+    TEST_ASSERT(sid.filter.Vlp >= -32768 && sid.filter.Vlp <= 32767, "LP state bounded");
+    TEST_ASSERT(sid.filter.Vbp >= -32768 && sid.filter.Vbp <= 32767, "BP state bounded");
+    TEST_ASSERT(sid.filter.Vhp >= -32768 && sid.filter.Vhp <= 32767, "HP state bounded");
+}
+
+// ============================================================================
+// SID Noise Per-Voice Tests
+// ============================================================================
+
+static void test_sid_noise_per_voice(void) {
+    printf("\n=== SID Noise Per-Voice Tests ===\n");
+    
+    SID sid;
+    sid_init(&sid, 985248, 44100);
+    
+    // Set up all three voices with noise at different frequencies
+    sid_write(&sid, SID_MEM_START + SID_V1_FREQ_HI, 0x10);
+    sid_write(&sid, SID_MEM_START + SID_V2_FREQ_HI, 0x20);
+    sid_write(&sid, SID_MEM_START + SID_V3_FREQ_HI, 0x40);
+    
+    for (int v = 0; v < 3; v++) {
+        sid_write(&sid, SID_MEM_START + v * 7 + SID_V1_AD, 0x00);
+        sid_write(&sid, SID_MEM_START + v * 7 + SID_V1_SR, 0xF0);
+        sid_write(&sid, SID_MEM_START + v * 7 + SID_V1_CTRL, SID_CTRL_GATE | SID_CTRL_NOISE);
+    }
+    sid_write(&sid, SID_MEM_START + SID_MODE_VOL, 0x0F);
+    
+    // Store initial shift register states
+    uint32_t initial_sr[3];
+    for (int v = 0; v < 3; v++) {
+        initial_sr[v] = sid.voice[v].shift_register;
+    }
+    
+    // Clock for a bit
+    sid_clock(&sid, 10000);
+    
+    // Each voice's shift register should have changed independently
+    bool all_changed = true;
+    for (int v = 0; v < 3; v++) {
+        if (sid.voice[v].shift_register == initial_sr[v]) {
+            all_changed = false;
+        }
+    }
+    TEST_ASSERT(all_changed, "All noise shift registers changed");
+    
+    // Shift registers should be different from each other (different frequencies)
+    bool all_different = (sid.voice[0].shift_register != sid.voice[1].shift_register) &&
+                         (sid.voice[1].shift_register != sid.voice[2].shift_register) &&
+                         (sid.voice[0].shift_register != sid.voice[2].shift_register);
+    TEST_ASSERT(all_different, "Noise shift registers are independent");
+}
+
+// ============================================================================
 // Main Test Runner
 // ============================================================================
 
@@ -363,6 +497,9 @@ int main(void) {
     test_sid_output();
     test_sid_audio_buffer();
     test_sid_voice3_readback();
+    test_sid_output_quality();
+    test_sid_filter_stability();
+    test_sid_noise_per_voice();
     
     printf("\n========================================\n");
     printf("   Test Results\n");

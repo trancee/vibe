@@ -98,13 +98,16 @@ typedef struct {
     // Oscillator state
     uint32_t accumulator;      // 24-bit phase accumulator
     uint32_t shift_register;   // 23-bit LFSR for noise
+    uint32_t prev_bit19;       // Previous bit 19 state for noise clocking
     
     // Envelope state
     envelope_state_t env_state;
-    uint32_t env_counter;      // Envelope rate counter
+    uint16_t env_counter;      // 15-bit rate counter
     uint8_t env_level;         // Current envelope level (0-255)
-    uint32_t env_rate;         // Current rate counter period
+    uint16_t env_rate;         // Current rate counter period
     uint8_t exp_counter;       // Exponential counter for decay/release
+    uint8_t exp_period;        // Exponential counter period (1,2,4,8,16,30)
+    bool hold_zero;            // Envelope frozen at zero
     
     // Sync/Ring state
     bool sync_bit;             // MSB of accumulator (for sync)

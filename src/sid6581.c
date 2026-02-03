@@ -2,67 +2,33 @@
 #include <string.h>
 #include <stdlib.h>
 
-// Attack rate lookup table (in cycles)
-// Values from C64 Programmer's Reference Guide
-static const uint32_t attack_rates[] = {
-    2,      // 2ms
-    8,      // 8ms
-    16,     // 16ms
-    24,     // 24ms
-    38,     // 38ms
-    56,     // 56ms
-    68,     // 68ms
-    80,     // 80ms
-    100,    // 100ms
-    250,    // 250ms
-    500,    // 500ms
-    800,    // 800ms
-    1000,   // 1s
-    3000,   // 3s
-    5000,   // 5s
-    8000    // 8s
+// Rate counter periods - hardware verified values from reSID
+// These are the exact number of clock cycles between envelope counter updates
+// Verified by sampling ENV3 on real hardware
+static const uint16_t rate_counter_period[] = {
+    9,      //   2ms*1.0MHz/256 =     7.81
+    32,     //   8ms*1.0MHz/256 =    31.25
+    63,     //  16ms*1.0MHz/256 =    62.50
+    95,     //  24ms*1.0MHz/256 =    93.75
+    149,    //  38ms*1.0MHz/256 =   148.44
+    220,    //  56ms*1.0MHz/256 =   218.75
+    267,    //  68ms*1.0MHz/256 =   265.63
+    313,    //  80ms*1.0MHz/256 =   312.50
+    392,    // 100ms*1.0MHz/256 =   390.63
+    977,    // 250ms*1.0MHz/256 =   976.56
+    1954,   // 500ms*1.0MHz/256 =  1953.13
+    3126,   // 800ms*1.0MHz/256 =  3125.00
+    3907,   //   1 s*1.0MHz/256 =  3906.25
+    11720,  //   3 s*1.0MHz/256 = 11718.75
+    19532,  //   5 s*1.0MHz/256 = 19531.25
+    31251   //   8 s*1.0MHz/256 = 31250.00
 };
 
-// Decay/Release rate lookup table (in cycles)
-static const uint32_t decay_release_rates[] = {
-    6,      // 6ms
-    24,     // 24ms
-    48,     // 48ms
-    72,     // 72ms
-    114,    // 114ms
-    168,    // 168ms
-    204,    // 204ms
-    240,    // 240ms
-    300,    // 300ms
-    750,    // 750ms
-    1500,   // 1.5s
-    2400,   // 2.4s
-    3000,   // 3s
-    9000,   // 9s
-    15000,  // 15s
-    24000   // 24s
+// Sustain levels - both nibbles must match for comparison
+static const uint8_t sustain_level[] = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
 };
-
-// Exponential counter period for decay/release
-// The envelope uses an exponential curve during decay and release
-// Periods: 0xFF-0x5D: 1, 0x5C-0x36: 2, 0x35-0x1A: 4, 0x19-0x0E: 8, 0x0D-0x06: 16, 0x05-0x00: 30
-
-// Get exponential counter period based on envelope level
-static uint8_t get_exp_period(uint8_t level) {
-    if (level >= 0x5D) return 1;
-    if (level >= 0x36) return 2;
-    if (level >= 0x1A) return 4;
-    if (level >= 0x0E) return 8;
-    if (level >= 0x06) return 16;
-    return 30;
-}
-
-// Calculate rate counter period from ADSR value and clock rate
-static uint32_t calc_rate_period(uint32_t time_ms, uint32_t clock_rate) {
-    // Convert milliseconds to clock cycles for full envelope sweep
-    // Rate counter increments, period = total_cycles / 256 levels
-    return (time_ms * clock_rate) / (1000 * 256);
-}
 
 void sid_init(SID *sid, uint32_t clock_rate, uint32_t sample_rate) {
     memset(sid, 0, sizeof(SID));
@@ -95,11 +61,14 @@ void sid_reset(SID *sid) {
         v->release = 0;
         v->accumulator = 0;
         v->shift_register = 0x7FFFF8;
-        v->env_state = ENV_IDLE;
+        v->prev_bit19 = 0;
+        v->env_state = ENV_RELEASE;
         v->env_counter = 0;
         v->env_level = 0;
-        v->env_rate = 0;
+        v->env_rate = rate_counter_period[0];  // Release rate 0
         v->exp_counter = 0;
+        v->exp_period = 1;
+        v->hold_zero = true;
         v->sync_bit = false;
         v->prev_sync_bit = false;
         v->output = 0;
@@ -156,11 +125,12 @@ void sid_write(SID *sid, uint16_t addr, uint8_t data) {
             if ((data & SID_CTRL_GATE) && !(sid->voice[0].control & SID_CTRL_GATE)) {
                 // Gate on - start attack
                 sid->voice[0].env_state = ENV_ATTACK;
-                sid->voice[0].env_rate = calc_rate_period(attack_rates[sid->voice[0].attack], sid->clock_rate);
+                sid->voice[0].env_rate = rate_counter_period[sid->voice[0].attack];
+                sid->voice[0].hold_zero = false;
             } else if (!(data & SID_CTRL_GATE) && (sid->voice[0].control & SID_CTRL_GATE)) {
                 // Gate off - start release
                 sid->voice[0].env_state = ENV_RELEASE;
-                sid->voice[0].env_rate = calc_rate_period(decay_release_rates[sid->voice[0].release], sid->clock_rate);
+                sid->voice[0].env_rate = rate_counter_period[sid->voice[0].release];
             }
             // TEST bit resets oscillator
             if (data & SID_CTRL_TEST) {
@@ -194,10 +164,11 @@ void sid_write(SID *sid, uint16_t addr, uint8_t data) {
         case SID_V2_CTRL:
             if ((data & SID_CTRL_GATE) && !(sid->voice[1].control & SID_CTRL_GATE)) {
                 sid->voice[1].env_state = ENV_ATTACK;
-                sid->voice[1].env_rate = calc_rate_period(attack_rates[sid->voice[1].attack], sid->clock_rate);
+                sid->voice[1].env_rate = rate_counter_period[sid->voice[1].attack];
+                sid->voice[1].hold_zero = false;
             } else if (!(data & SID_CTRL_GATE) && (sid->voice[1].control & SID_CTRL_GATE)) {
                 sid->voice[1].env_state = ENV_RELEASE;
-                sid->voice[1].env_rate = calc_rate_period(decay_release_rates[sid->voice[1].release], sid->clock_rate);
+                sid->voice[1].env_rate = rate_counter_period[sid->voice[1].release];
             }
             if (data & SID_CTRL_TEST) {
                 sid->voice[1].accumulator = 0;
@@ -230,10 +201,11 @@ void sid_write(SID *sid, uint16_t addr, uint8_t data) {
         case SID_V3_CTRL:
             if ((data & SID_CTRL_GATE) && !(sid->voice[2].control & SID_CTRL_GATE)) {
                 sid->voice[2].env_state = ENV_ATTACK;
-                sid->voice[2].env_rate = calc_rate_period(attack_rates[sid->voice[2].attack], sid->clock_rate);
+                sid->voice[2].env_rate = rate_counter_period[sid->voice[2].attack];
+                sid->voice[2].hold_zero = false;
             } else if (!(data & SID_CTRL_GATE) && (sid->voice[2].control & SID_CTRL_GATE)) {
                 sid->voice[2].env_state = ENV_RELEASE;
-                sid->voice[2].env_rate = calc_rate_period(decay_release_rates[sid->voice[2].release], sid->clock_rate);
+                sid->voice[2].env_rate = rate_counter_period[sid->voice[2].release];
             }
             if (data & SID_CTRL_TEST) {
                 sid->voice[2].accumulator = 0;
@@ -300,16 +272,16 @@ static void clock_oscillator(SID_Voice *voice) {
     voice->sync_bit = (voice->accumulator & 0x800000) != 0;
     
     // Clock noise LFSR when bit 19 goes high
-    static uint32_t prev_bit19[3] = {0, 0, 0};
     uint32_t bit19 = voice->accumulator & 0x080000;
     
-    // We need to track this per-voice, using a simple approach here
-    if (bit19 && !prev_bit19[0]) {  // This is simplified
+    // Track per-voice using the prev_bit19 field in voice struct
+    if (bit19 && !voice->prev_bit19) {
         // LFSR feedback: bit 22 XOR bit 17
         uint32_t bit22 = (voice->shift_register >> 22) & 1;
         uint32_t bit17 = (voice->shift_register >> 17) & 1;
         voice->shift_register = ((voice->shift_register << 1) | (bit22 ^ bit17)) & 0x7FFFFF;
     }
+    voice->prev_bit19 = bit19;
 }
 
 // Generate waveform output for a voice
@@ -389,45 +361,53 @@ uint16_t sid_oscillator(SID_Voice *voice, SID_Voice *sync_source, bool ring_mod)
     return output;
 }
 
-// Clock envelope generator
+// Clock envelope generator - hardware accurate implementation
 void sid_envelope_clock(SID_Voice *voice) {
-    if (voice->env_rate == 0) {
+    // Increment rate counter (15-bit with wrap-around)
+    voice->env_counter++;
+    if (voice->env_counter & 0x8000) {
+        voice->env_counter &= 0x7FFF;
+    }
+    
+    // Check if rate counter matches rate period
+    if (voice->env_counter != voice->env_rate) {
         return;
     }
     
-    voice->env_counter++;
+    // Reset rate counter
+    voice->env_counter = 0;
     
-    if (voice->env_counter >= voice->env_rate) {
-        voice->env_counter = 0;
+    // Attack state resets exponential counter
+    if (voice->env_state == ENV_ATTACK || 
+        ++voice->exp_counter == voice->exp_period) {
+        voice->exp_counter = 0;
+        
+        // Check if envelope is frozen at zero
+        if (voice->hold_zero) {
+            return;
+        }
         
         switch (voice->env_state) {
             case ENV_ATTACK:
+                // Increment envelope counter
                 voice->env_level++;
-                if (voice->env_level >= 0xFF) {
-                    voice->env_level = 0xFF;
+                voice->env_level &= 0xFF;
+                
+                if (voice->env_level == 0xFF) {
+                    // Attack complete, switch to decay
                     voice->env_state = ENV_DECAY;
-                    voice->env_rate = calc_rate_period(
-                        decay_release_rates[voice->decay], 
-                        1000000  // Approximate clock rate
-                    );
-                    voice->exp_counter = 0;
+                    voice->env_rate = rate_counter_period[voice->decay];
                 }
                 break;
                 
             case ENV_DECAY:
-                // Exponential decay
-                voice->exp_counter++;
-                if (voice->exp_counter >= get_exp_period(voice->env_level)) {
-                    voice->exp_counter = 0;
-                    if (voice->env_level > 0) {
-                        voice->env_level--;
-                    }
-                    // Check if we've reached sustain level
-                    uint8_t sustain_level = voice->sustain | (voice->sustain << 4);
-                    if (voice->env_level <= sustain_level) {
-                        voice->env_level = sustain_level;
-                        voice->env_state = ENV_SUSTAIN;
-                    }
+                // Check if we've reached sustain level
+                if (voice->env_level == sustain_level[voice->sustain]) {
+                    return;
+                }
+                // Decrement envelope counter
+                if (voice->env_level > 0) {
+                    voice->env_level--;
                 }
                 break;
                 
@@ -436,20 +416,31 @@ void sid_envelope_clock(SID_Voice *voice) {
                 break;
                 
             case ENV_RELEASE:
-                // Exponential release
-                voice->exp_counter++;
-                if (voice->exp_counter >= get_exp_period(voice->env_level)) {
-                    voice->exp_counter = 0;
-                    if (voice->env_level > 0) {
-                        voice->env_level--;
-                    } else {
-                        voice->env_state = ENV_IDLE;
-                    }
+                // Decrement envelope counter
+                if (voice->env_level > 0) {
+                    voice->env_level--;
+                    voice->env_level &= 0xFF;
+                } else {
+                    voice->hold_zero = true;
                 }
                 break;
                 
             case ENV_IDLE:
-                // Do nothing
+                break;
+        }
+        
+        // Update exponential counter period based on envelope level
+        // These thresholds are hardware-verified from reSID
+        switch (voice->env_level) {
+            case 0xFF: voice->exp_period = 1;  break;
+            case 0x5D: voice->exp_period = 2;  break;
+            case 0x36: voice->exp_period = 4;  break;
+            case 0x1A: voice->exp_period = 8;  break;
+            case 0x0E: voice->exp_period = 16; break;
+            case 0x06: voice->exp_period = 30; break;
+            case 0x00:
+                voice->exp_period = 1;
+                voice->hold_zero = true;
                 break;
         }
     }
@@ -457,25 +448,43 @@ void sid_envelope_clock(SID_Voice *voice) {
 
 // Simple state-variable filter
 int16_t sid_filter_output(SID *sid, int32_t input) {
+    // If no filter mode selected, just return input
+    if ((sid->filter.mode & (SID_MODE_LP | SID_MODE_BP | SID_MODE_HP)) == 0) {
+        return (int16_t)(input > 32767 ? 32767 : (input < -32768 ? -32768 : input));
+    }
+    
     // Calculate filter coefficients
     // Cutoff frequency: approximate mapping from 11-bit value
-    // Real SID has complex cutoff curve, this is simplified
-    int32_t w0 = sid->filter.cutoff * 6;  // Rough approximation
-    if (w0 > 2047) w0 = 2047;
+    // Scale for stability - lower coefficient means more stable
+    int32_t w0 = (sid->filter.cutoff * 3) >> 4;  // Much smaller coefficient
+    if (w0 < 1) w0 = 1;
+    if (w0 > 512) w0 = 512;
     
-    // Resonance: Q = 1 / (1 - res/16)
+    // Resonance: Q factor (inverted - high res = low damping)
     int32_t q = sid->filter.resonance;
-    int32_t Q1024 = 1024 - (q * 64);  // Scaled by 1024
-    if (Q1024 < 64) Q1024 = 64;  // Limit Q
+    int32_t damping = 1024 - (q * 60);  // Scaled damping factor
+    if (damping < 100) damping = 100;  // Prevent self-oscillation
     
-    // State variable filter update
+    // State variable filter update with limiting
+    // Scale input down to prevent overflow
+    int32_t scaled_input = input >> 2;
+    
     // Vhp = input - Vlp - Q * Vbp
-    // Vbp = Vbp + w * Vhp
-    // Vlp = Vlp + w * Vbp
+    sid->filter.Vhp = scaled_input - sid->filter.Vlp - ((sid->filter.Vbp * damping) >> 10);
     
-    sid->filter.Vhp = input - sid->filter.Vlp - ((sid->filter.Vbp * Q1024) >> 10);
-    sid->filter.Vbp += (w0 * sid->filter.Vhp) >> 12;
-    sid->filter.Vlp += (w0 * sid->filter.Vbp) >> 12;
+    // Limit Vhp to prevent runaway
+    if (sid->filter.Vhp > 32767) sid->filter.Vhp = 32767;
+    if (sid->filter.Vhp < -32768) sid->filter.Vhp = -32768;
+    
+    // Vbp = Vbp + w * Vhp
+    sid->filter.Vbp += (w0 * sid->filter.Vhp) >> 10;
+    if (sid->filter.Vbp > 32767) sid->filter.Vbp = 32767;
+    if (sid->filter.Vbp < -32768) sid->filter.Vbp = -32768;
+    
+    // Vlp = Vlp + w * Vbp
+    sid->filter.Vlp += (w0 * sid->filter.Vbp) >> 10;
+    if (sid->filter.Vlp > 32767) sid->filter.Vlp = 32767;
+    if (sid->filter.Vlp < -32768) sid->filter.Vlp = -32768;
     
     // Select output based on mode
     int32_t output = 0;
@@ -489,6 +498,9 @@ int16_t sid_filter_output(SID *sid, int32_t input) {
         output += sid->filter.Vhp;
     }
     
+    // Scale back up
+    output <<= 2;
+    
     // Clamp output
     if (output > 32767) output = 32767;
     if (output < -32768) output = -32768;
@@ -499,19 +511,17 @@ int16_t sid_filter_output(SID *sid, int32_t input) {
 // Clock SID for specified number of cycles
 void sid_clock(SID *sid, uint32_t cycles) {
     for (uint32_t i = 0; i < cycles; i++) {
-        // Clock oscillators
+        // Clock oscillators every cycle
         for (int v = 0; v < 3; v++) {
             if (!(sid->voice[v].control & SID_CTRL_TEST)) {
                 clock_oscillator(&sid->voice[v]);
             }
         }
         
-        // Clock envelope generators (at a slower rate)
-        // Real SID clocks envelopes at ~1MHz / 15
-        if ((sid->cycle_count % 15) == 0) {
-            for (int v = 0; v < 3; v++) {
-                sid_envelope_clock(&sid->voice[v]);
-            }
+        // Clock envelope generators every cycle
+        // The rate counter inside the envelope handles the timing
+        for (int v = 0; v < 3; v++) {
+            sid_envelope_clock(&sid->voice[v]);
         }
         
         // Generate sample at sample rate
@@ -545,15 +555,15 @@ int16_t sid_output(SID *sid) {
     for (int v = 0; v < 3; v++) {
         SID_Voice *voice = &sid->voice[v];
         
-        // Get oscillator output (12-bit, unsigned)
+        // Get oscillator output (12-bit, unsigned 0-4095)
         bool ring_mod = (voice->control & SID_CTRL_RING) != 0;
         uint16_t osc = sid_oscillator(voice, sync_sources[v], ring_mod);
         
-        // Convert to signed and apply envelope
+        // Convert to signed (-2048 to +2047) and apply envelope (0-255)
+        // Keep full precision for mixing
         int32_t output = ((int32_t)osc - 2048) * voice->env_level;
-        output >>= 8;  // Scale down
         
-        voice->output = (int16_t)output;
+        voice->output = (int16_t)(output >> 8);
         
         // Check if voice 3 is muted
         if (v == 2 && (sid->filter.mode & SID_MODE_3OFF)) {
@@ -568,13 +578,17 @@ int16_t sid_output(SID *sid) {
         }
     }
     
+    // Scale down mixed signals before filter (3 voices * 2048 * 255 max)
+    mixed_filtered >>= 6;
+    mixed_direct >>= 6;
+    
     // Apply filter to filtered voices
     int16_t filtered_output = sid_filter_output(sid, mixed_filtered);
     
     // Mix filtered and direct
     int32_t total = filtered_output + mixed_direct;
     
-    // Apply master volume
+    // Apply master volume (0-15)
     total = (total * sid->volume) >> 4;
     
     // Clamp to 16-bit range
