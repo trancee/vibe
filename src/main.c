@@ -21,9 +21,7 @@
 
 #define SAMPLE_RATE 44100
 #define AUDIO_BUFFER_SIZE 2048
-#define FPS 50
 #define CPU_CLOCK 985248
-#define CYCLES_PER_FRAME (CPU_CLOCK / FPS)
 
 /* Audio ring buffer */
 #define RING_BUFFER_SIZE (SAMPLE_RATE * 2) /* 2 seconds of audio */
@@ -136,6 +134,11 @@ int main(int argc, char **argv)
     if (argc < 2)
     {
         filename = "roms/Ikari_Union.sid";
+        // filename = "roms/Wizball.sid";
+        // filename = "roms/Hawkeye.sid";
+        // filename = "roms/RoboCop.sid";
+        // filename = "roms/Cybernoid.sid";
+        // filename = "roms/Cybernoid_II.sid";
         printf("No file specified, using default: %s\n\n", filename);
     }
     else
@@ -183,56 +186,26 @@ int main(int argc, char **argv)
     /* Load SID data into C64 memory */
     c64_write_data(&c64, sid.real_load_address, sid.data, sid.data_length);
 
+    /* Determine playback rate: CIA timer = 60Hz, VBI = 50Hz (PAL) or 60Hz (NTSC) */
+    int fps;
+    if (sid_song_uses_cia(&sid, sid.start_song))
+    {
+        fps = 60; /* CIA timer tunes run at 60Hz */
+    }
+    else
+    {
+        fps = (sid.flags.clock == SID_CLOCK_NTSC) ? 60 : 50; /* VBI rate */
+    }
+    uint32_t cycles_per_frame = CPU_CLOCK / fps;
+    printf("Playback rate: %d Hz (%u cycles/frame)\n", fps, cycles_per_frame);
+
     /* Set up SID audio buffer */
-    int16_t sid_buffer[SAMPLE_RATE / FPS + 100]; /* Samples per frame + margin */
+    int16_t sid_buffer[SAMPLE_RATE / 50 + 100]; /* Samples per frame + margin (50Hz worst case) */
     sid_set_audio_buffer(&c64.sid, sid_buffer, sizeof(sid_buffer) / sizeof(sid_buffer[0]));
 
     /* Set up C64 environment for SID playback */
     /* $02A6 = PAL/NTSC flag (1 = PAL, 0 = NTSC) */
     c64_write_byte(&c64, 0x02A6, (sid.flags.clock == SID_CLOCK_NTSC) ? 0x00 : 0x01);
-
-    /* Initialize the tune: call init_address with song number in A */
-    uint16_t init_addr = sid.init_address ? sid.init_address : sid.real_load_address;
-
-    /* Write a small bootstrap to call init and then loop calling play */
-    /* We'll put this at $0340 (cassette buffer area) */
-    uint16_t bootstrap_addr = 0x0340;
-    uint8_t song_num = sid.start_song > 0 ? sid.start_song - 1 : 0; /* Songs are 0-indexed for init */
-
-    /*
-     * Bootstrap code:
-     * $0340: LDA #song_num
-     * $0342: JSR init_addr
-     * $0345: JSR play_addr  (or just RTS if play_addr == 0)
-     * $0348: JMP $0345      (loop calling play)
-     */
-    c64_write_byte(&c64, bootstrap_addr + 0, 0xA9); /* LDA # */
-    c64_write_byte(&c64, bootstrap_addr + 1, song_num);
-    c64_write_byte(&c64, bootstrap_addr + 2, 0x20); /* JSR */
-    c64_write_byte(&c64, bootstrap_addr + 3, init_addr & 0xFF);
-    c64_write_byte(&c64, bootstrap_addr + 4, (init_addr >> 8) & 0xFF);
-
-    uint16_t play_loop_addr = bootstrap_addr + 5;
-    if (sid.play_address != 0)
-    {
-        c64_write_byte(&c64, bootstrap_addr + 5, 0x20); /* JSR */
-        c64_write_byte(&c64, bootstrap_addr + 6, sid.play_address & 0xFF);
-        c64_write_byte(&c64, bootstrap_addr + 7, (sid.play_address >> 8) & 0xFF);
-        c64_write_byte(&c64, bootstrap_addr + 8, 0x4C); /* JMP */
-        c64_write_byte(&c64, bootstrap_addr + 9, (bootstrap_addr + 5) & 0xFF);
-        c64_write_byte(&c64, bootstrap_addr + 10, ((bootstrap_addr + 5) >> 8) & 0xFF);
-    }
-    else
-    {
-        /* play_address == 0: tune uses IRQ, just loop forever */
-        c64_write_byte(&c64, bootstrap_addr + 5, 0x4C); /* JMP */
-        c64_write_byte(&c64, bootstrap_addr + 6, (bootstrap_addr + 5) & 0xFF);
-        c64_write_byte(&c64, bootstrap_addr + 7, ((bootstrap_addr + 5) >> 8) & 0xFF);
-        play_loop_addr = bootstrap_addr + 5;
-    }
-
-    /* Start execution */
-    c64_set_pc(&c64, bootstrap_addr);
 
     /* Set up signal handler for clean exit */
     signal(SIGINT, signal_handler);
@@ -248,24 +221,32 @@ int main(int argc, char **argv)
     uint32_t frames = 0;
     Uint32 start_time = SDL_GetTicks();
 
-    /* Run init first (execute until we reach the play loop) */
-    while (running && c64_get_pc(&c64) != play_loop_addr)
+    /* Initialize the tune: call init_address with song number in A */
+    uint16_t init_addr = sid.init_address ? sid.init_address : sid.real_load_address;
+    uint16_t play_addr = sid.play_address ? sid.play_address : sid.real_load_address + 2;
+
+    /* Start execution at init bootstrap */
+    c64_set_pc(&c64, init_addr);
+
+    c64.cpu.A = sid.start_song; /* Song number in A register */
+
+    /* Run init first (execute until we reach the idle loop) */
+    while (running && c64_get_pc(&c64) != 0x0001)
     {
         c64_step(&c64);
         total_cycles++;
-        
+
         /* Discard any audio generated during init */
         c64.sid.buffer_pos = 0;
-        
+
         if (total_cycles > 1000000)
         { /* Timeout after 1M cycles */
             printf("Init took too long, starting playback anyway\n");
-            c64_set_pc(&c64, play_loop_addr);
             break;
         }
     }
     total_cycles = 0;
-    
+
     /* Clear any stale audio in ring buffer before starting playback */
     ring_write_pos = 0;
     ring_read_pos = 0;
@@ -276,17 +257,24 @@ int main(int argc, char **argv)
         /* Reset SID audio buffer for this frame */
         c64.sid.buffer_pos = 0;
 
-        /* Run one frame worth of cycles */
-        uint32_t frame_cycles = 0;
-        while (frame_cycles < CYCLES_PER_FRAME)
+        c64_set_pc(&c64, play_addr);
+
+        /* Execute until play returns (CPU reaches idle loop) */
+        uint32_t play_cycles = 0;
+        while (c64_get_pc(&c64) != 0x0001 && play_cycles < cycles_per_frame)
         {
             uint8_t cycles = c64_step(&c64);
-            frame_cycles += cycles;
+            play_cycles += cycles;
+        }
+        total_cycles += play_cycles;
 
-            /* Note: SID is clocked inside c64_step(), no need to clock it here */
+        /* Now run remaining cycles for this frame (clocking SID) */
+        uint32_t remaining_cycles = cycles_per_frame > play_cycles ? cycles_per_frame - play_cycles : 0;
+        if (remaining_cycles > 0)
+        {
+            sid_clock(&c64.sid, remaining_cycles);
         }
 
-        total_cycles += frame_cycles;
         frames++;
 
         /* Push generated samples to audio buffer */
@@ -294,12 +282,6 @@ int main(int argc, char **argv)
         if (samples > 0)
         {
             audio_push_samples(sid_buffer, samples);
-        }
-
-        /* Sync to real time - wait if audio buffer is getting full */
-        while (audio_buffered_samples() > SAMPLE_RATE / 4 && running)
-        {
-            SDL_Delay(5);
         }
 
         /* Handle SDL events */
@@ -312,13 +294,27 @@ int main(int argc, char **argv)
             }
         }
 
+        /*
+         * Sync to real time using wall clock.
+         * Each frame should take (1000/fps) milliseconds.
+         * Use cumulative timing to avoid drift.
+         */
+        Uint32 target_time = start_time + (frames * 1000 / fps);
+        Uint32 now = SDL_GetTicks();
+
+        if (target_time > now)
+        {
+            SDL_Delay(target_time - now);
+        }
+
         /* Print status every second */
-        if (frames % FPS == 0)
+        if (frames % fps == 0)
         {
             Uint32 elapsed = SDL_GetTicks() - start_time;
-            printf("\rPlaying: %02u:%02u  Buffer: %5u samples  ",
+            uint32_t actual_fps = frames * 1000 / (elapsed ? elapsed : 1);
+            printf("\rPlaying: %02u:%02u  Buffer: %5u  FPS: %u  ",
                    (elapsed / 1000) / 60, (elapsed / 1000) % 60,
-                   audio_buffered_samples());
+                   audio_buffered_samples(), actual_fps);
             fflush(stdout);
         }
     }
