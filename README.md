@@ -10,10 +10,11 @@ A complete, feature-rich implementation of the MOS 6510 microprocessor (as used 
 - **Full 64KB Memory**: Complete memory map with read/write access
 - **Stack Operations**: Full implementation of stack push/pull operations
 - **Flag Management**: Complete status register with all flags
+- **SID 6581 Emulation**: Hardware-accurate sound chip with 3 voices, filters, and envelopes
+- **SID File Parser**: Load and parse PSID/RSID files (v1-v4) from the High Voltage SID Collection
 - **Comprehensive Tests**: Extensive test suite with 354+ test cases
 - **Clean API**: Simple, well-documented interface
 - **Static Library**: Build as both static library and executable examples
-- **SID File Parser**: Load and parse PSID/RSID files (v1-v4) from the High Voltage SID Collection
 
 ## Project Structure
 
@@ -21,17 +22,20 @@ A complete, feature-rich implementation of the MOS 6510 microprocessor (as used 
 mos6510/
 ├── include/
 │   ├── mos6510.h          # Main header file with API
+│   ├── sid6581.h          # SID 6581 sound chip header
 │   └── sid_file.h         # SID file format parser header
 ├── src/
 │   ├── mos6510.c         # Core CPU implementation
 │   ├── opcodes.c         # Legal opcode implementations
 │   ├── illegal_opcodes.c # Illegal opcode implementations
 │   ├── instructions.c    # Complete opcode table
+│   ├── sid6581.c         # SID sound chip emulation
 │   ├── sid_file.c        # SID file format parser
 │   └── example.c         # Example usage
 ├── tests/
 │   ├── test_opcodes.c    # Comprehensive test suite
-│   └── test_sid_file.c   # SID file parser tests
+│   ├── test_sid.c        # SID emulation tests (65 tests)
+│   └── test_sid_file.c   # SID file parser tests (72 tests)
 ├── build/                # Build output directory
 ├── Makefile             # Build configuration
 └── README.md            # This file
@@ -276,6 +280,69 @@ typedef struct {
     size_t data_length;         // Length of binary data
 } sid_file_t;
 ```
+
+### SID 6581 Sound Chip Emulation
+
+Hardware-accurate emulation of the MOS 6581/8580 Sound Interface Device based on the C64 Programmer's Reference Guide and [reSID](https://github.com/daglem/reSID) reverse-engineering.
+
+#### Features
+
+- **3 Independent Voices** with 4 waveforms each (Triangle, Sawtooth, Pulse, Noise)
+- **24-bit Phase Accumulator** oscillators with proper frequency calculation
+- **23-bit LFSR Noise Generator** with 2-cycle pipeline delay (hardware-accurate)
+- **ADSR Envelope Generator** with exponential decay curves
+- **12dB/octave State-Variable Filter** (Low-pass, Band-pass, High-pass, Notch)
+- **Ring Modulation and Oscillator Sync** between voices
+
+#### Implementation Details
+
+| Component | Specification |
+|-----------|--------------|
+| Oscillator | 24-bit accumulator, freq added to lower 16 bits per cycle |
+| Noise LFSR | 23-bit, feedback: `bit0 = (bit22 \| test) ^ bit17` |
+| Envelope | 15-bit rate counter, exponential decay at thresholds 255, 93, 54, 26, 14, 6 |
+| Filter | Two-integrator-loop biquadratic (confirmed by Bob Yannes) |
+| Rate Periods | Hardware-verified: 9, 32, 63, 95, 149, 220, 267, 313, 392, 977, 1954, 3126, 3907, 11720, 19532, 31251 cycles |
+
+#### Basic Usage
+
+```c
+#include "sid6581.h"
+
+// Initialize SID (PAL clock, 44.1kHz output)
+SID sid;
+sid_init(&sid, 985248, 44100);
+
+// Set up a simple tone on voice 1
+sid_write(&sid, SID_V1_FREQ_LO, 0x00);   // Frequency low
+sid_write(&sid, SID_V1_FREQ_HI, 0x1C);   // Frequency high (~440Hz)
+sid_write(&sid, SID_V1_AD, 0x00);        // Attack=0, Decay=0
+sid_write(&sid, SID_V1_SR, 0xF0);        // Sustain=15, Release=0
+sid_write(&sid, SID_V1_CTRL, 0x11);      // Triangle + Gate on
+sid_write(&sid, SID_MODE_VOL, 0x0F);     // Max volume
+
+// Set up audio buffer
+int16_t buffer[4096];
+sid_set_audio_buffer(&sid, buffer, 4096);
+
+// Generate audio by clocking the SID
+sid_clock(&sid, 20000);  // Clock for ~20ms
+
+// Get generated samples
+uint32_t samples = sid_get_samples(&sid);
+```
+
+#### SID Registers
+
+| Address | Register | Description |
+|---------|----------|-------------|
+| $D400-$D406 | Voice 1 | Freq, PW, Control, AD, SR |
+| $D407-$D40D | Voice 2 | Freq, PW, Control, AD, SR |
+| $D40E-$D414 | Voice 3 | Freq, PW, Control, AD, SR |
+| $D415-$D416 | FC | Filter cutoff (11-bit) |
+| $D417 | RES/FILT | Resonance + voice routing |
+| $D418 | MODE/VOL | Filter mode + master volume |
+| $D419-$D41C | Read-only | POT X/Y, OSC3, ENV3 |
 
 ## Testing
 
