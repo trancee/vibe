@@ -13,21 +13,25 @@ A complete, feature-rich implementation of the MOS 6510 microprocessor (as used 
 - **Comprehensive Tests**: Extensive test suite with 354+ test cases
 - **Clean API**: Simple, well-documented interface
 - **Static Library**: Build as both static library and executable examples
+- **SID File Parser**: Load and parse PSID/RSID files (v1-v4) from the High Voltage SID Collection
 
 ## Project Structure
 
 ```
 mos6510/
 ├── include/
-│   └── mos6510.h          # Main header file with API
+│   ├── mos6510.h          # Main header file with API
+│   └── sid_file.h         # SID file format parser header
 ├── src/
 │   ├── mos6510.c         # Core CPU implementation
 │   ├── opcodes.c         # Legal opcode implementations
 │   ├── illegal_opcodes.c # Illegal opcode implementations
 │   ├── instructions.c    # Complete opcode table
+│   ├── sid_file.c        # SID file format parser
 │   └── example.c         # Example usage
 ├── tests/
-│   └── test_opcodes.c    # Comprehensive test suite
+│   ├── test_opcodes.c    # Comprehensive test suite
+│   └── test_sid_file.c   # SID file parser tests
 ├── build/                # Build output directory
 ├── Makefile             # Build configuration
 └── README.md            # This file
@@ -203,6 +207,74 @@ bool get_flag_zero(CPU *cpu);
 void set_flag_carry(CPU *cpu, bool set);
 void set_flag_zero(CPU *cpu, bool set);
 // ... etc for all flags
+```
+
+### SID File Parser
+
+The SID file parser supports loading PSID/RSID files (v1-v4) from the High Voltage SID Collection:
+
+```c
+#include "sid_file.h"
+
+// Load a SID file
+sid_file_t sid;
+sid_error_t err = sid_file_load("music.sid", &sid);
+if (err != SID_OK) {
+    fprintf(stderr, "Error: %s\n", sid_error_string(err));
+    return 1;
+}
+
+// Access metadata
+printf("Name:   %s\n", sid.name);
+printf("Author: %s\n", sid.author);
+printf("Songs:  %d\n", sid.songs);
+
+// Load C64 binary data into memory at real_load_address
+// sid.data contains the C64 code, sid.data_length is its size
+// sid.real_load_address is where to load it
+
+// Initialize tune by calling init_address with song number in A
+// Call play_address periodically (or use IRQ if play_address == 0)
+
+// Check if song uses CIA timer or VBI
+if (sid_song_uses_cia(&sid, 1)) {
+    // Song 1 uses CIA timer (60Hz)
+} else {
+    // Song 1 uses vertical blank interrupt
+}
+
+// Free resources when done
+sid_file_free(&sid);
+```
+
+#### Supported Formats
+
+| Format | Version | Features |
+|--------|---------|----------|
+| PSID | v1 | Basic header with load/init/play addresses |
+| PSID | v2/v2NG | Extended flags, clock, SID model, relocation |
+| PSID | v3 | Second SID chip address |
+| PSID | v4 | Third SID chip address |
+| RSID | v2-v4 | Real C64 environment required |
+
+#### SID File Structure
+
+```c
+typedef struct {
+    sid_file_type_t type;       // PSID or RSID
+    uint16_t version;           // 1-4
+    uint16_t real_load_address; // Where to load C64 data
+    uint16_t init_address;      // Init subroutine address
+    uint16_t play_address;      // Play subroutine (0 = uses IRQ)
+    uint16_t songs;             // Number of songs (1-256)
+    uint16_t start_song;        // Default song number
+    char name[33];              // Tune name
+    char author[33];            // Author name
+    char released[33];          // Release info
+    sid_flags_t flags;          // Clock, SID model, etc.
+    uint8_t *data;              // C64 binary data
+    size_t data_length;         // Length of binary data
+} sid_file_t;
 ```
 
 ## Testing

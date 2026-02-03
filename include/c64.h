@@ -8,7 +8,6 @@
 #include "cia6526.h"
 #include "sid6581.h"
 #include "vic.h"
-#include "clock.h"
 
 #define PAL_CPU_FREQUENCY  985248
 #define NTSC_CPU_FREQUENCY 1022727
@@ -94,8 +93,6 @@ typedef struct
     uint8_t kernal[KERNAL_ROM_SIZE];
 
     zero_ram_t zero_ram;
-
-    clock_t clock;
 } C64;
 
 void c64_init(C64 *c64);

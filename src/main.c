@@ -4,7 +4,6 @@
    SDL2 Audio + Video + Glue
 */
 
-// #include <SDL2/SDL.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,37 +11,49 @@
 
 #include "c64.h"
 
+#include "sid_file.h"
+
 #define DEBUG true
 
 /* ===== Globals ===== */
-
-// SDL_AudioDeviceID audio_dev;
-// SDL_Window *window;
-// SDL_Renderer *renderer;
-// SDL_Texture *texture;
 
 #define SAMPLE_RATE 44100
 #define FPS 50
 #define CPU_CLOCK 985248
 #define CYCLES_PER_FRAME (CPU_CLOCK / FPS)
 
-// uint32_t framebuffer[320 * 200];
+int siddy(const char *filename, sid_file_t *sid)
+{
+    sid_error_t err;
 
-/* ============================================================
-   SDL Audio Callback
-   ============================================================ */
+    err = sid_file_load(filename, sid);
+    if (err != SID_OK)
+    {
+        fprintf(stderr, "Error loading SID file: %s\n", sid_error_string(err));
+        return 1;
+    }
 
-// void audio_callback(void *userdata, Uint8 *stream, int len)
-// {
-//     float *out = (float *)stream;
-//     int samples = len / sizeof(float);
+    sid_file_print_info(sid);
 
-//     for (int i = 0; i < samples; i++)
-//     {
-//         /* sid_tick already produces samples internally */
-//         out[i] = 0.0f;
-//     }
-// }
+    /* Print speed information for first few songs */
+    printf("\nSong speed information:\n");
+    for (uint16_t i = 1; i <= sid->songs && i <= 8; i++)
+    {
+        printf("  Song %2d: %s\n", i,
+               sid_song_uses_cia(sid, i) ? "CIA timer (60Hz)" : "VBI (50/60Hz)");
+    }
+
+    /* Show first few bytes of data */
+    printf("\nFirst 32 bytes of C64 data:\n");
+    for (size_t i = 0; i < 32 && i < sid->data_length; i++)
+    {
+        printf("%02X ", sid->data[i]);
+        if ((i + 1) % 16 == 0)
+            printf("\n");
+    }
+    printf("\n");
+    return 0;
+}
 
 /* ============================================================
    Main
@@ -53,71 +64,50 @@ int main(int argc, char **argv)
     for (int i = 0; i < argc; i++)
         printf("\t%d: %s\n", i, argv[i]);
 
+    const char *filename;
+
+    if (argc < 2)
+    {
+        filename = "roms/Ikari_Union.sid";
+        printf("No file specified, using default: %s\n\n", filename);
+    }
+    else
+    {
+        filename = argv[1];
+    }
+
+    sid_file_t sid;
+    if (siddy(filename, &sid) != 0)
+    {
+        return 1;
+    }
+
     C64 c64;
-    c64_init(&c64, DEBUG);
+    c64_init(&c64);
+    c64_set_debug(&c64, DEBUG, NULL);
 
-    /* SDL Init */
-    // SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
-
-    // window = SDL_CreateWindow(
-    //     "C64 Emulator",
-    //     SDL_WINDOWPOS_CENTERED,
-    //     SDL_WINDOWPOS_CENTERED,
-    //     640, 400,
-    //     SDL_WINDOW_SHOWN);
-
-    // renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-    // texture = SDL_CreateTexture(
-    //     renderer,
-    //     SDL_PIXELFORMAT_ARGB8888,
-    //     SDL_TEXTUREACCESS_STREAMING,
-    //     320, 200);
-
-    // /* Audio */
-    // SDL_AudioSpec want = {0};
-    // want.freq = SAMPLE_RATE;
-    // want.format = AUDIO_F32SYS;
-    // want.channels = 1;
-    // want.samples = 1024;
-    // want.callback = audio_callback;
-
-    // audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
-    // SDL_PauseAudioDevice(audio_dev, 0);
-
+    c64_write_data(&c64, sid.real_load_address, sid.data, sid.data_length);
+    c64_set_pc(&c64, sid.init_address ? sid.init_address : sid.real_load_address);
+    
     /* Main loop */
     int running = 1;
-    // SDL_Event e;
+    uint64_t cycles = 0;
 
     while (running)
     {
-
-        // uint32_t start = SDL_GetTicks();
-
         /* One PAL frame */
         for (size_t i = 0; i < CYCLES_PER_FRAME; i++)
         {
-            c64_step(&c64);
+            cycles += c64_step(&c64);
+
+            if (cycles >= 10000 || c64_get_pc(&c64) == 0x0001) {
+                running = 0;
+                break;
+            }
         }
-
-        /* Video (placeholder background) */
-        // SDL_UpdateTexture(texture, NULL, framebuffer, 320 * sizeof(uint32_t));
-        // SDL_RenderClear(renderer);
-        // SDL_RenderCopy(renderer, texture, NULL, NULL);
-        // SDL_RenderPresent(renderer);
-
-        // while (SDL_PollEvent(&e))
-        // {
-        //     if (e.type == SDL_QUIT)
-        //         running = 0;
-        // }
-
-        // /* Frame sync */
-        // uint32_t elapsed = SDL_GetTicks() - start;
-        // if (elapsed < (1000 / FPS))
-        //     SDL_Delay((1000 / FPS) - elapsed);
     }
 
-    // SDL_Quit();
+    sid_file_free(&sid);
+
     return 0;
 }
