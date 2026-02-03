@@ -253,6 +253,10 @@ int main(int argc, char **argv)
     {
         c64_step(&c64);
         total_cycles++;
+        
+        /* Discard any audio generated during init */
+        c64.sid.buffer_pos = 0;
+        
         if (total_cycles > 1000000)
         { /* Timeout after 1M cycles */
             printf("Init took too long, starting playback anyway\n");
@@ -261,6 +265,11 @@ int main(int argc, char **argv)
         }
     }
     total_cycles = 0;
+    
+    /* Clear any stale audio in ring buffer before starting playback */
+    ring_write_pos = 0;
+    ring_read_pos = 0;
+    c64.sid.buffer_pos = 0;
 
     while (running)
     {
@@ -274,8 +283,7 @@ int main(int argc, char **argv)
             uint8_t cycles = c64_step(&c64);
             frame_cycles += cycles;
 
-            /* Clock the SID */
-            sid_clock(&c64.sid, cycles);
+            /* Note: SID is clocked inside c64_step(), no need to clock it here */
         }
 
         total_cycles += frame_cycles;

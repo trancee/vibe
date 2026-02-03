@@ -344,6 +344,38 @@ uint32_t samples = sid_get_samples(&sid);
 | $D418 | MODE/VOL | Filter mode + master volume |
 | $D419-$D41C | Read-only | POT X/Y, OSC3, ENV3 |
 
+#### Audio Output
+
+The SID emulator generates 16-bit signed PCM audio samples at the configured sample rate. Integration with SDL2 (or similar audio libraries) is straightforward:
+
+```c
+// Set up audio buffer
+int16_t buffer[4096];
+sid_set_audio_buffer(&sid, buffer, 4096);
+
+// In your main loop, clock the SID and push samples
+sid.buffer_pos = 0;  // Reset buffer position each frame
+sid_clock(&sid, cycles_per_frame);
+uint32_t samples = sid_get_samples(&sid);
+// Push samples to your audio system
+```
+
+**Audio Test Program**: A standalone test program (`src/test_sid_audio.c`) verifies the audio pipeline by generating a major chord (A4-C#5-E5) using all three voices with cycling waveforms. This test confirms:
+
+- ✅ All waveforms working (Triangle, Sawtooth, Pulse, Noise)
+- ✅ ADSR envelopes functioning correctly
+- ✅ Multi-voice mixing operational
+- ✅ Audio output to SDL2 clean and stable
+
+Build and run with:
+```bash
+cc -std=c11 -Wall -O2 -I include $(sdl2-config --cflags) \
+   src/test_sid_audio.c src/sid6581.c $(sdl2-config --libs) \
+   -o build/test_sid_audio && ./build/test_sid_audio
+```
+
+**Note on SID Files**: Some SID files (particularly those by Jeroen Tel and other demo scene composers) use advanced techniques like "digi samples" via rapid volume modulation ($D418). These techniques toggle the master volume at audio rates to play sampled audio, which may sound different than expected if you're unfamiliar with this C64 technique.
+
 ## Testing
 
 The project includes a comprehensive test suite covering:
