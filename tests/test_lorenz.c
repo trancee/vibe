@@ -5,7 +5,7 @@
 
 #include "c64.h"
 
-#define DEBUG true
+#define DEBUG false
 
 #define TESTCASE "start"
 #define MAX_STEPS 1300000000
@@ -111,7 +111,6 @@ void ready_handler(CPU *cpu)
 void setup_c64(C64 *c64)
 {
     c64_init(c64);
-
     c64_set_debug(c64, DEBUG, NULL);
 
     // Enable CIA1 Timer A interrupt (like KERNAL does)
@@ -151,8 +150,8 @@ uint8_t irq_handler[] = {
 
 void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    // cpu_write_byte(cpu, D6510, 0x2F);
-    // cpu_write_byte(cpu, R6510, 0x04); // trap15 not working if commented out
+    cpu_write_byte(cpu, D6510, 0x2F);
+    cpu_write_byte(cpu, R6510, 0x37);
 
     cpu_write_byte(cpu, UNUSED, 0x00);
 

@@ -523,7 +523,13 @@ uint8_t cpu_step(CPU *cpu)
 
     handler_t handler = find_trap(pc);
     if (handler != NULL)
+    {
         handler(cpu);
+
+        // If trap handler changed PC, don't execute the instruction at old PC
+        if (cpu_get_pc(cpu) != pc)
+            return 0;
+    }
 
     uint8_t opcode = cpu_read_byte(cpu, pc);
     const instruction_t *instruction = &instructions[opcode];
@@ -531,7 +537,6 @@ uint8_t cpu_step(CPU *cpu)
     if (cpu->debug)
         dump_step(cpu, instruction);
 
-    // uint16_t pc = cpu_get_pc(cpu);
     instruction->execute(cpu);
 
     return instruction->cycles;
