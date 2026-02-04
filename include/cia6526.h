@@ -6,9 +6,9 @@
 #include <stddef.h>
 
 #define CIA1_MEM_START 0xDC00
-#define CIA1_MEM_END CIA1_MEM_START + CIA_MEM_SIZE - 1
+#define CIA1_MEM_END (CIA1_MEM_START + CIA_MEM_SIZE - 1)
 #define CIA2_MEM_START 0xDD00
-#define CIA2_MEM_END CIA2_MEM_START + CIA_MEM_SIZE - 1
+#define CIA2_MEM_END (CIA2_MEM_START + CIA_MEM_SIZE - 1)
 #define CIA_MEM_SIZE 0x0100
 
 // CIA Register Addresses

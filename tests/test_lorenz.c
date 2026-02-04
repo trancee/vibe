@@ -150,29 +150,29 @@ uint8_t irq_handler[] = {
 
 void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    cpu_write_byte(cpu, D6510, 0x2F);
-    cpu_write_byte(cpu, R6510, 0x37);
+    mem_write_byte(cpu->mem, D6510, 0x2F);
+    mem_write_byte(cpu->mem, R6510, 0x37);
 
-    cpu_write_byte(cpu, UNUSED, 0x00);
+    mem_write_byte(cpu->mem, UNUSED, 0x00);
 
-    cpu_write_word(cpu, WARM, 0x8000); // 0xA002
-    cpu_write_word(cpu, PC, 0x7FFF);   // 0x01FE
-    cpu_write_word(cpu, IRQ, 0xFF48);  // 0xFFFE
+    mem_write_word(cpu->mem, WARM, 0x8000); // 0xA002
+    mem_write_word(cpu->mem, PC, 0x7FFF);   // 0x01FE
+    mem_write_word(cpu->mem, IRQ, 0xFF48);  // 0xFFFE
 
     // Put RTSes in some of the stubbed calls
-    cpu_write_byte(cpu, CHROUT, 0x60);  // 0xFFD2
-    cpu_write_byte(cpu, CARTROM, 0x60); // 0x8000
-    cpu_write_byte(cpu, READY, 0x60);   // 0xA474
+    mem_write_byte(cpu->mem, CHROUT, 0x60);  // 0xFFD2
+    mem_write_byte(cpu->mem, CARTROM, 0x60); // 0x8000
+    mem_write_byte(cpu->mem, READY, 0x60);   // 0xA474
 
     // NOP the loading routine
-    cpu_write_byte(cpu, 0xE16F, 0xEA);
+    mem_write_byte(cpu->mem, 0xE16F, 0xEA);
 
     // scan keyboard is LDA #3: RTS
-    cpu_write_data(cpu, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
+    mem_write_data(cpu->mem, GETIN, (uint8_t[]){0xA9, 0x03, 0x60}, 3); // 0xFFE4
 
-    cpu_write_data(cpu, PULS, irq_handler, sizeof(irq_handler));
+    mem_write_data(cpu->mem, PULS, irq_handler, sizeof(irq_handler));
 
-    cpu_write_data(cpu, addr, data, size);
+    mem_write_data(cpu->mem, addr, data, size);
 
     cpu_reset_pc(cpu, addr);
     cpu_push16(cpu, 0x7FFF); // Return to WARM trap

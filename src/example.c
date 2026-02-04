@@ -9,9 +9,14 @@ int main()
 {
     printf("=== MOS 6510 CPU Example ===\n\n");
 
+    // Initialize Memory
+    MEM mem;
+    mem_init(&mem);
+
     // Initialize CPU
     CPU cpu;
-    cpu_init(&cpu);
+    cpu_init(&cpu, &mem);
+
     cpu_set_debug(&cpu, DEBUG, NULL);
 
     printf("Initial CPU state:\n");
@@ -24,12 +29,12 @@ int main()
     printf("\n");
 
     // Load a simple program: LDA #$42, STA $2000, BRK
-    cpu.memory[0x1000] = 0xA9; // LDA #$42
-    cpu.memory[0x1001] = 0x42;
-    cpu.memory[0x1002] = 0x8D; // STA $2000
-    cpu.memory[0x1003] = 0x00;
-    cpu.memory[0x1004] = 0x20;
-    cpu.memory[0x1005] = 0x00; // BRK
+    mem_write_byte(&mem, 0x1000, 0xA9); // LDA #$42
+    mem_write_byte(&mem, 0x1001, 0x42);
+    mem_write_byte(&mem, 0x1002, 0x8D); // STA $2000
+    mem_write_byte(&mem, 0x1003, 0x00);
+    mem_write_byte(&mem, 0x1004, 0x20);
+    mem_write_byte(&mem, 0x1005, 0x00); // BRK
 
     cpu_set_pc(&cpu, 0x1000);
 
@@ -44,7 +49,7 @@ int main()
     do
     {
         pc = cpu_get_pc(&cpu);
-        uint8_t opcode = cpu.memory[pc];
+        uint8_t opcode = mem_read_byte(&mem, pc);
 
         printf("Step %d: PC=$%04X, Opcode=$%02X", step, pc, opcode);
 
@@ -72,7 +77,7 @@ int main()
             printf("Too many steps, stopping...\n");
             break;
         }
-    } while (pc != cpu_get_pc(&cpu) && cpu.memory[cpu_get_pc(&cpu)] != 0x00);
+    } while (pc != cpu_get_pc(&cpu) && mem_read_byte(&mem, cpu_get_pc(&cpu)) != 0x00);
 
     printf("Final CPU state:\n");
     printf("  PC: $%04X\n", cpu_get_pc(&cpu));
@@ -81,7 +86,7 @@ int main()
     printf("  Y: $%02X\n", cpu.Y);
     printf("  SP: $%02X\n", cpu.SP);
     printf("  P: $%02X\n", cpu.P);
-    printf("  Memory $2000: $%02X\n", cpu.memory[0x2000]);
+    printf("  Memory $2000: $%02X\n", mem_read_byte(&mem, 0x2000));
     printf("\n");
 
     // Test flag operations

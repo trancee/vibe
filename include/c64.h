@@ -8,6 +8,7 @@
 #include "cia6526.h"
 #include "sid6581.h"
 #include "vic.h"
+#include "mem.h"
 
 #define PAL_CPU_FREQUENCY  985248
 #define NTSC_CPU_FREQUENCY 1022727
@@ -21,6 +22,13 @@
 #define KERNAL_ROM_START 0xE000
 #define KERNAL_ROM_END KERNAL_ROM_START + (KERNAL_ROM_SIZE - 1)
 #define KERNAL_ROM_SIZE 0x2000
+
+#define COLOR_RAM_SIZE 0x0400
+
+// Memory configuration bits (from $01)
+#define MEM_LORAM   0x01  // BASIC ROM visible
+#define MEM_HIRAM   0x02  // KERNAL ROM visible
+#define MEM_CHAREN  0x04  // CHAR ROM visible (when I/O not mapped)
 
 typedef union
 {
@@ -88,9 +96,17 @@ typedef struct
     SID sid;
     VIC vic;
 
-    uint8_t basic[BASIC_ROM_SIZE];
-    uint8_t characters[CHAR_ROM_SIZE];
-    uint8_t kernal[KERNAL_ROM_SIZE];
+    MEM mem;
+
+    uint8_t color_ram[COLOR_RAM_SIZE]; // 1KB Color RAM
+
+    uint8_t basic_rom[BASIC_ROM_SIZE];   // 8KB BASIC ROM
+    uint8_t kernal_rom[KERNAL_ROM_SIZE]; // 8KB KERNAL ROM
+    uint8_t char_rom[CHAR_ROM_SIZE];     // 4KB Character ROM
+
+    bool has_basic_rom;
+    bool has_kernal_rom;
+    bool has_char_rom;
 
     zero_ram_t zero_ram;
 } C64;

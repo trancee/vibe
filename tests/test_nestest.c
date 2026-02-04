@@ -32,9 +32,11 @@
 // Helper functions
 static CPU *setup_cpu(FILE *stream)
 {
-    CPU *cpu = malloc(sizeof(CPU));
+    MEM *mem = malloc(sizeof(MEM));
+    mem_init(mem);
 
-    cpu_init(cpu);
+    CPU *cpu = malloc(sizeof(CPU));
+    cpu_init(cpu, mem);
 
     cpu_set_decimal_mode(cpu, false);
     cpu_set_debug(cpu, DEBUG, stream);
@@ -44,6 +46,7 @@ static CPU *setup_cpu(FILE *stream)
 
 static void teardown_cpu(CPU *cpu)
 {
+    free(cpu->mem);
     free(cpu);
 }
 
@@ -85,13 +88,13 @@ int main()
 
     CPU *cpu = setup_cpu(stream);
 
-    load_test(cpu->memory);
+    load_test(cpu->mem);
 
     for (size_t i = 0; i < 0x20; i++)
     {
-        cpu->memory[0x4000 + i] = 0xFF;
+        mem_write_byte(cpu->mem, 0x4000 + i, 0xFF);
     }
-    cpu->memory[0xA9A9] = 0xA9;
+    mem_write_byte(cpu->mem, 0xA9A9, 0xA9);
 
     cpu_push16(cpu, 0x07FF);
 
@@ -120,6 +123,7 @@ int main()
                 if (strncmp(buffer + buffer_position, line, read - 1 - 1) != 0)
                 {
                     printf("%s\x{1B}[31;1;6m✗ differ\x{1B}[0m\n", line);
+                    // mem_dump(cpu->mem, 0x0000);
                     exit(1);
                 }
 
@@ -143,8 +147,8 @@ int main()
     free(buffer);
 
     printf("---\n");
-    printf("$02 #$%02X %s\n", cpu->memory[0x02], cpu->memory[0x02] == 0x00 ? "OK" : "FAIL");
-    printf("$03 #$%02X %s\n", cpu->memory[0x03], cpu->memory[0x03] == 0x00 ? "OK" : "FAIL");
+    printf("$02 #$%02X %s\n", mem_read_byte(cpu->mem, 0x02), mem_read_byte(cpu->mem, 0x02) == 0x00 ? "OK" : "FAIL");
+    printf("$03 #$%02X %s\n", mem_read_byte(cpu->mem, 0x03), mem_read_byte(cpu->mem, 0x03) == 0x00 ? "OK" : "FAIL");
 
     teardown_cpu(cpu);
 

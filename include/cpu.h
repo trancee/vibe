@@ -5,10 +5,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "mem.h"
+
 #define page_boundary(a, b) ((a & 0xFF00) != (b & 0xFF00))
 
-typedef uint8_t (*read_t)(void *ptr, uint16_t addr);
-typedef void (*write_t)(void *ptr, uint16_t addr, uint8_t data);
+#define cpu_read(cpu, addr) mem_read(cpu->mem, addr)
+#define cpu_read_byte(cpu, addr) cpu_read(cpu, addr)
+#define cpu_read_word(cpu, addr) (cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, addr + 1) << 8))
+#define cpu_read_word_zp(cpu, addr) (cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8))
+
+#define cpu_write(cpu, addr, data) mem_write(cpu->mem, addr, data)
+#define cpu_write_byte(cpu, addr, data) cpu_write(cpu, addr, data)
 
 typedef struct
 {
@@ -18,19 +25,16 @@ typedef struct
     uint8_t SP;  // Stack Pointer
     uint8_t P;   // Status Register
     uint16_t PC; // Program Counter
-    //
-    uint8_t memory[65536]; // 64KB memory
-    //
+
+    MEM *mem; // Memory reference
+
     bool nmi;
     bool irq;
-    //
+
     bool decimal_mode;
-    //
+
     bool debug;
     FILE *debug_file;
-    //
-    read_t read;
-    write_t write;
 } CPU;
 
 typedef void (*handler_t)(CPU *);
@@ -104,9 +108,7 @@ typedef struct
     bool illegal;
 } instruction_t;
 
-#define PCL 0x01FE
-#define PCH 0x01FF
-
+///
 #define NMI 0xFFFA   // WORD
 #define RESET 0xFFFC // WORD
 #define IRQ 0xFFFE   // WORD
@@ -122,26 +124,17 @@ typedef struct
 #define FLAG_NEGATIVE 0x80
 
 // CPU functions
-void cpu_init(CPU *cpu);
+void cpu_init(CPU *cpu, MEM *mem);
 void cpu_reset(CPU *cpu);
+
 void cpu_reset_pc(CPU *cpu, uint16_t pc);
-uint8_t cpu_step(CPU *cpu);
 uint16_t cpu_get_pc(CPU *cpu);
 void cpu_set_pc(CPU *cpu, uint16_t addr);
-uint8_t cpu_read(void *cpu, uint16_t addr); // internal use
-uint8_t cpu_read_byte(CPU *cpu, uint16_t addr);
-uint16_t cpu_read_word(CPU *cpu, uint16_t addr);
-uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr);
-void cpu_write(void *cpu, uint16_t addr, uint8_t data); // internal use
-void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data);
-void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data);
-void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size);
+
+uint8_t cpu_step(CPU *cpu);
 
 void cpu_nmi(CPU *cpu);
 void cpu_irq(CPU *cpu);
-// bool cpu_interrupts(CPU *cpu);
-
-void cpu_set_read_write(CPU *cpu, read_t read, write_t write);
 
 bool cpu_get_debug(CPU *cpu);
 void cpu_set_debug(CPU *cpu, bool debug, FILE *debug_file);
@@ -151,6 +144,17 @@ bool cpu_get_decimal_mode(CPU *cpu);
 void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode);
 
 bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
+
+// Stack operations
+void cpu_push(CPU *cpu, uint8_t data);
+void cpu_push16(CPU *cpu, uint16_t data);
+uint8_t cpu_pull(CPU *cpu);
+uint16_t cpu_pull16(CPU *cpu);
+
+// Addressing mode helpers
+uint16_t fetch_address(CPU *cpu, addr_mode_t mode);
+uint8_t fetch_operand(CPU *cpu, addr_mode_t mode);
+const instruction_t *fetch_instruction(CPU *cpu);
 
 // Flag operations
 static inline bool get_flag_carry(CPU *cpu) { return cpu->P & FLAG_CARRY; }
@@ -212,16 +216,5 @@ static inline void set_flag_negative(CPU *cpu, bool set)
     else
         cpu->P &= ~FLAG_NEGATIVE;
 }
-
-// Stack operations
-void cpu_push(CPU *cpu, uint8_t data);
-void cpu_push16(CPU *cpu, uint16_t data);
-uint8_t cpu_pull(CPU *cpu);
-uint16_t cpu_pull16(CPU *cpu);
-
-// Addressing mode helpers
-uint16_t fetch_address(CPU *cpu, addr_mode_t mode);
-uint8_t fetch_operand(CPU *cpu, addr_mode_t mode);
-const instruction_t *fetch_instruction(CPU *cpu);
 
 #endif // CPU_H

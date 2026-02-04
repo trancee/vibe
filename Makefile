@@ -9,7 +9,7 @@ LDFLAGS := $(shell sdl2-config --libs)
 CXXFLAGS := $(shell sdl2-config --cflags)
 
 # Source files
-SOURCES = $(SRC_DIR)/c64.c $(SRC_DIR)/cpu.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/instructions.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c $(SRC_DIR)/sid6581.c $(SRC_DIR)/sid_file.c
+SOURCES = $(SRC_DIR)/c64.c $(SRC_DIR)/cpu.c $(SRC_DIR)/opcodes.c $(SRC_DIR)/illegal_opcodes.c $(SRC_DIR)/instructions.c $(SRC_DIR)/mem.c $(SRC_DIR)/vic.c $(SRC_DIR)/cia6526.c $(SRC_DIR)/sid6581.c $(SRC_DIR)/sid_file.c
 TEST_OPCODES_SRC = $(TEST_DIR)/test_opcodes.c
 TEST_DORMANN_SRC = $(TEST_DIR)/test_dormann.c
 TEST_LORENZ_SRC = $(TEST_DIR)/test_lorenz.c

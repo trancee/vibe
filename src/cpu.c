@@ -5,9 +5,6 @@
 #include "cpu.h"
 #include "mos6510.h"
 
-#define read8() cpu_read_byte(cpu, pc + 1)
-#define read16() cpu_read_word(cpu, pc + 1)
-
 trap_t traps[] = {{}, {}, {}, {}, {}};
 
 bool add_trap(trap_t *trap)
@@ -35,7 +32,237 @@ handler_t find_trap(const uint16_t address)
     return NULL;
 }
 
-#define DUMP_BUFFER_SIZE 128
+void cpu_init(CPU *cpu, MEM *mem)
+{
+    memset(cpu, 0, sizeof(CPU));
+
+    cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
+    cpu->SP = 0xFF;
+
+    cpu->mem = mem;
+
+    cpu_set_decimal_mode(cpu, true);
+    // cpu_set_read_write(cpu, cpu_read, cpu_write);
+}
+
+void cpu_reset(CPU *cpu)
+{
+    cpu_reset_pc(cpu, cpu_read_word(cpu, RESET));
+}
+
+// void cpu_set_read_write(CPU *cpu, read_t read, write_t write)
+// {
+//     cpu->read = read != NULL ? read : cpu_read;
+//     cpu->write = write != NULL ? write : cpu_write;
+// }
+
+void cpu_reset_pc(CPU *cpu, uint16_t addr)
+{
+    cpu->A = 0x00;
+    cpu->X = 0x00;
+    cpu->Y = 0x00;
+    cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
+    cpu->SP = 0xFF;
+    cpu->PC = addr;
+}
+uint16_t cpu_get_pc(CPU *cpu)
+{
+    return cpu->PC;
+}
+void cpu_set_pc(CPU *cpu, uint16_t addr)
+{
+    cpu->PC = addr;
+}
+
+void cpu_push(CPU *cpu, uint8_t data)
+{
+    cpu_write_byte(cpu, 0x0100 | cpu->SP, data);
+    cpu->SP--;
+}
+void cpu_push16(CPU *cpu, uint16_t data)
+{
+    cpu_push(cpu, (data >> 8) & 0xFF);
+    cpu_push(cpu, data & 0xFF);
+}
+uint8_t cpu_pull(CPU *cpu)
+{
+    cpu->SP++;
+    return cpu_read_byte(cpu, 0x0100 | cpu->SP);
+}
+uint16_t cpu_pull16(CPU *cpu)
+{
+    return cpu_pull(cpu) | (cpu_pull(cpu) << 8);
+}
+
+bool cpu_get_debug(CPU *cpu)
+{
+    return cpu->debug;
+}
+void cpu_set_debug(CPU *cpu, bool debug, FILE *debug_file)
+{
+    cpu->debug = debug;
+    cpu->debug_file = debug_file;
+}
+FILE *cpu_get_debug_file(CPU *cpu)
+{
+    return cpu->debug_file;
+}
+
+bool cpu_get_decimal_mode(CPU *cpu)
+{
+    return cpu->decimal_mode;
+}
+void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode)
+{
+    cpu->decimal_mode = decimal_mode;
+}
+
+bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
+{
+    if (cpu == NULL || handler == NULL)
+        return false;
+
+    trap_t trap = {addr, handler};
+    return add_trap(&trap);
+}
+
+uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
+{
+    uint16_t addr;
+    uint8_t low_byte, high_byte;
+
+    switch (mode)
+    {
+    case Implied:
+        return 0; // Not used for implied addressing
+
+    case Immediate:
+        return cpu_get_pc(cpu) + 1;
+
+    case ZeroPage:
+        return cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+
+    case ZeroPageX:
+        return (cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->X) & 0xFF;
+
+    case ZeroPageY:
+        return (cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->Y) & 0xFF;
+
+    case Absolute:
+        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
+        return (high_byte << 8) | low_byte;
+
+    case AbsoluteX:
+        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
+        addr = (high_byte << 8) | low_byte;
+        return addr + cpu->X;
+
+    case AbsoluteY:
+        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
+        addr = (high_byte << 8) | low_byte;
+        return addr + cpu->Y;
+
+    case Indirect:
+        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
+        addr = (high_byte << 8) | low_byte;
+
+        // 6502 bug: if page boundary crossed, high byte wraps
+        if (low_byte == 0xFF)
+            return cpu_read_word_zp(cpu, addr);
+        else
+            return cpu_read_word(cpu, addr);
+
+    case IndexedIndirect:
+    {
+        uint8_t ptr = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->X;
+        low_byte = cpu_read_byte(cpu, ptr);
+        high_byte = cpu_read_byte(cpu, (ptr + 1) & 0xFF);
+        return (high_byte << 8) | low_byte;
+    }
+
+    case IndirectIndexed:
+    {
+        uint8_t ptr = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
+        low_byte = cpu_read_byte(cpu, ptr);
+        high_byte = cpu_read_byte(cpu, (ptr + 1) & 0xFF);
+        addr = (high_byte << 8) | low_byte;
+        return addr + cpu->Y;
+    }
+
+    case Relative:
+        return cpu_get_pc(cpu) + 1;
+
+    default:
+        return 0;
+    }
+}
+
+uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
+{
+    uint16_t addr = fetch_address(cpu, mode);
+    return cpu_read_byte(cpu, addr);
+}
+
+const instruction_t *fetch_instruction(CPU *cpu)
+{
+    uint8_t opcode = cpu_read_byte(cpu, cpu_get_pc(cpu));
+    return &instructions[opcode];
+}
+
+/// triggers a NMI IRQ in the processor
+/// this is very similar to the BRK instruction
+void cpu_nmi(CPU *cpu)
+{
+    printf("*** NMI $%04X #$%04X\n", NMI, cpu_read_word(cpu, NMI));
+
+    cpu_push16(cpu, cpu_get_pc(cpu));
+    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
+
+    set_flag_interrupt(cpu, true);
+
+    cpu_set_pc(cpu, cpu_read_word(cpu, NMI));
+}
+
+/// triggers a normal IRQ
+/// this is very similar to the BRK instruction
+void cpu_irq(CPU *cpu)
+{
+    if (has_interrupt(cpu))
+        return;
+
+    printf("*** IRQ $%04X #$%04X\n", IRQ, cpu_read_word(cpu, IRQ));
+
+    cpu_push16(cpu, cpu_get_pc(cpu));
+    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
+
+    set_flag_interrupt(cpu, true);
+
+    cpu_set_pc(cpu, cpu_read_word(cpu, IRQ));
+}
+
+bool cpu_interrupts(CPU *cpu)
+{
+    if (cpu->nmi)
+    {
+        cpu->nmi = false;
+        cpu_nmi(cpu);
+        return true;
+    }
+    else if (cpu->irq && !has_interrupt(cpu))
+    {
+        cpu->irq = false;
+        cpu_irq(cpu);
+        return true;
+    }
+    return false;
+}
+
+#define read8() cpu_read_byte(cpu, pc + 1)
+#define read16() cpu_read_word(cpu, pc + 1)
 
 void dump_step(CPU *cpu, const instruction_t *instruction)
 {
@@ -240,276 +467,6 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
     printf("%s", buffer);
 
     free(buffer);
-}
-
-void cpu_init(CPU *cpu)
-{
-    memset(cpu, 0, sizeof(CPU));
-
-    cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
-    cpu->SP = 0xFF;
-
-    cpu_set_decimal_mode(cpu, true);
-    cpu_set_read_write(cpu, cpu_read, cpu_write);
-}
-
-void cpu_reset(CPU *cpu)
-{
-    cpu_reset_pc(cpu, cpu_read_word(cpu, 0xFFFC));
-}
-void cpu_reset_pc(CPU *cpu, uint16_t addr)
-{
-    cpu->A = 0x00;
-    cpu->X = 0x00;
-    cpu->Y = 0x00;
-    cpu->P = FLAG_RESERVED | FLAG_INTERRUPT_DISABLE;
-    cpu->SP = 0xFF;
-    cpu->PC = addr;
-}
-
-uint16_t cpu_get_pc(CPU *cpu)
-{
-    return cpu->PC;
-}
-void cpu_set_pc(CPU *cpu, uint16_t addr)
-{
-    cpu->PC = addr;
-}
-
-uint8_t cpu_read(void *cpu, uint16_t addr)
-{
-    // printf("C64 #$%04X → $%02X\n", addr, ((CPU *)cpu)->memory[addr]);
-
-    return ((CPU *)cpu)->memory[addr];
-}
-uint8_t cpu_read_byte(CPU *cpu, uint16_t addr)
-{
-    return cpu->read(cpu, addr);
-}
-uint16_t cpu_read_word(CPU *cpu, uint16_t addr)
-{
-    return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, addr + 1) << 8);
-}
-uint16_t cpu_read_word_zp(CPU *cpu, uint16_t addr)
-{
-    return cpu_read_byte(cpu, addr) | (cpu_read_byte(cpu, ((addr + 1) & 0x00FF) | (addr & 0xFF00)) << 8);
-}
-
-void cpu_write(void *cpu, uint16_t addr, uint8_t data)
-{
-    // printf("C64 #$%04X ← $%02X\n", addr, data);
-
-    ((CPU *)cpu)->memory[addr] = data;
-}
-void cpu_write_byte(CPU *cpu, uint16_t addr, uint8_t data)
-{
-    cpu->write(cpu, addr, data);
-}
-void cpu_write_word(CPU *cpu, uint16_t addr, uint16_t data)
-{
-    cpu_write_byte(cpu, addr, data & 0xFF);
-    cpu_write_byte(cpu, addr + 1, (data >> 8) & 0xFF);
-}
-
-void cpu_write_data(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
-{
-    for (size_t i = 0; i < size; i++)
-    {
-        cpu_write_byte(cpu, addr + i, data[i]);
-    }
-}
-
-void cpu_push(CPU *cpu, uint8_t data)
-{
-    cpu_write_byte(cpu, 0x0100 | cpu->SP, data);
-    cpu->SP--;
-}
-void cpu_push16(CPU *cpu, uint16_t data)
-{
-    cpu_push(cpu, (data >> 8) & 0xFF);
-    cpu_push(cpu, data & 0xFF);
-}
-uint8_t cpu_pull(CPU *cpu)
-{
-    cpu->SP++;
-    return cpu_read_byte(cpu, 0x0100 | cpu->SP);
-}
-uint16_t cpu_pull16(CPU *cpu)
-{
-    return cpu_pull(cpu) | (cpu_pull(cpu) << 8);
-}
-
-void cpu_set_read_write(CPU *cpu, read_t read, write_t write)
-{
-    cpu->read = read != NULL ? read : cpu_read;
-    cpu->write = write != NULL ? write : cpu_write;
-}
-
-bool cpu_get_debug(CPU *cpu)
-{
-    return cpu->debug;
-}
-void cpu_set_debug(CPU *cpu, bool debug, FILE *debug_file)
-{
-    cpu->debug = debug;
-    cpu->debug_file = debug_file;
-}
-FILE *cpu_get_debug_file(CPU *cpu)
-{
-    return cpu->debug_file;
-}
-
-bool cpu_get_decimal_mode(CPU *cpu)
-{
-    return cpu->decimal_mode;
-}
-void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode)
-{
-    cpu->decimal_mode = decimal_mode;
-}
-
-bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
-{
-    if (cpu == NULL || handler == NULL)
-        return false;
-
-    trap_t trap = {addr, handler};
-    return add_trap(&trap);
-}
-
-uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
-{
-    uint16_t addr;
-    uint8_t low_byte, high_byte;
-
-    switch (mode)
-    {
-    case Implied:
-        return 0; // Not used for implied addressing
-
-    case Immediate:
-        return cpu_get_pc(cpu) + 1;
-
-    case ZeroPage:
-        return cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-
-    case ZeroPageX:
-        return (cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->X) & 0xFF;
-
-    case ZeroPageY:
-        return (cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->Y) & 0xFF;
-
-    case Absolute:
-        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
-        return (high_byte << 8) | low_byte;
-
-    case AbsoluteX:
-        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
-        addr = (high_byte << 8) | low_byte;
-        return addr + cpu->X;
-
-    case AbsoluteY:
-        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
-        addr = (high_byte << 8) | low_byte;
-        return addr + cpu->Y;
-
-    case Indirect:
-        low_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-        high_byte = cpu_read_byte(cpu, cpu_get_pc(cpu) + 2);
-        addr = (high_byte << 8) | low_byte;
-
-        // 6502 bug: if page boundary crossed, high byte wraps
-        if (low_byte == 0xFF)
-            return cpu_read_word_zp(cpu, addr);
-        else
-            return cpu_read_word(cpu, addr);
-
-    case IndexedIndirect:
-    {
-        uint8_t ptr = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1) + cpu->X;
-        low_byte = cpu_read_byte(cpu, ptr);
-        high_byte = cpu_read_byte(cpu, (ptr + 1) & 0xFF);
-        return (high_byte << 8) | low_byte;
-    }
-
-    case IndirectIndexed:
-    {
-        uint8_t ptr = cpu_read_byte(cpu, cpu_get_pc(cpu) + 1);
-        low_byte = cpu_read_byte(cpu, ptr);
-        high_byte = cpu_read_byte(cpu, (ptr + 1) & 0xFF);
-        addr = (high_byte << 8) | low_byte;
-        return addr + cpu->Y;
-    }
-
-    case Relative:
-        return cpu_get_pc(cpu) + 1;
-
-    default:
-        return 0;
-    }
-}
-
-uint8_t fetch_operand(CPU *cpu, addr_mode_t mode)
-{
-    uint16_t addr = fetch_address(cpu, mode);
-    return cpu_read_byte(cpu, addr);
-}
-
-const instruction_t *fetch_instruction(CPU *cpu)
-{
-    uint8_t opcode = cpu_read_byte(cpu, cpu_get_pc(cpu));
-    return &instructions[opcode];
-}
-
-/// triggers a NMI IRQ in the processor
-/// this is very similar to the BRK instruction
-void cpu_nmi(CPU *cpu)
-{
-    printf("*** NMI $%04X #$%04X\n", NMI, cpu_read_word(cpu, NMI));
-
-    cpu_push16(cpu, cpu_get_pc(cpu));
-    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
-
-    set_flag_interrupt(cpu, true);
-
-    cpu_set_pc(cpu, cpu_read_word(cpu, NMI));
-}
-
-/// triggers a normal IRQ
-/// this is very similar to the BRK instruction
-void cpu_irq(CPU *cpu)
-{
-    if (has_interrupt(cpu))
-        return;
-
-    printf("*** IRQ $%04X #$%04X\n", IRQ, cpu_read_word(cpu, IRQ));
-
-    cpu_push16(cpu, cpu_get_pc(cpu));
-    cpu_push(cpu, cpu->P & ~FLAG_BREAK);
-
-    set_flag_interrupt(cpu, true);
-
-    cpu_set_pc(cpu, cpu_read_word(cpu, IRQ));
-}
-
-bool cpu_interrupts(CPU *cpu)
-{
-    if (cpu->nmi)
-    {
-        cpu->nmi = false;
-        cpu_nmi(cpu);
-        return true;
-    }
-    else if (cpu->irq && !has_interrupt(cpu))
-    {
-        cpu->irq = false;
-        cpu_irq(cpu);
-        return true;
-    }
-    return false;
 }
 
 uint8_t cpu_step(CPU *cpu)

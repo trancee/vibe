@@ -24,27 +24,30 @@ void c64_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
 
 void c64_init(C64 *c64)
 {
-    cpu_init(&c64->cpu);
+    mem_init(&c64->mem);
 
-    cpu_set_read_write(&c64->cpu, c64_read, c64_write);
+    // Initialize Color RAM to light blue (default C64 color)
+    memset(c64->color_ram, 0x0E, sizeof(c64->color_ram));
+
+    cpu_init(&c64->cpu, &c64->mem);
 
     cia_init(&c64->cia1, CIA1_MEM_START);
     cia_init(&c64->cia2, CIA2_MEM_START);
 
-    vic_init(&c64->vic, c64->cpu.memory);
+    vic_init(&c64->vic, &c64->mem);
 
     /* Initialize SID (PAL clock rate ~985248 Hz, 44100 Hz sample rate) */
     sid_init(&c64->sid, PAL_CPU_FREQUENCY, 44100);
 
     /* Clear ROMs */
-    memset(c64->basic, 0, BASIC_ROM_SIZE);
-    memset(c64->characters, 0, CHAR_ROM_SIZE);
-    memset(c64->kernal, 0, KERNAL_ROM_SIZE);
+    memset(c64->basic_rom, 0, BASIC_ROM_SIZE);
+    memset(c64->kernal_rom, 0, KERNAL_ROM_SIZE);
+    memset(c64->char_rom, 0, CHAR_ROM_SIZE);
 
     /* Load ROMs */
-    load_rom("roms/basic.901226-01.bin", c64->basic, BASIC_ROM_SIZE);
-    load_rom("roms/characters.901225-01.bin", c64->characters, CHAR_ROM_SIZE);
-    load_rom("roms/kernal.901227-03.bin", c64->kernal, KERNAL_ROM_SIZE);
+    load_rom("roms/basic.901226-01.bin", c64->basic_rom, BASIC_ROM_SIZE);
+    load_rom("roms/kernal.901227-03.bin", c64->kernal_rom, KERNAL_ROM_SIZE);
+    load_rom("roms/characters.901225-01.bin", c64->char_rom, CHAR_ROM_SIZE);
 
     /* Reset chips */
     c64_reset(c64);
@@ -52,6 +55,8 @@ void c64_init(C64 *c64)
 
 void c64_reset(C64 *c64)
 {
+    mem_reset(&c64->mem);
+
     cpu_reset(&c64->cpu);
 
     cia_reset(&c64->cia1);
@@ -228,14 +233,61 @@ void c64_set_debug(C64 *c64, bool debug, FILE *debug_file)
       /HiRam
 */
 
+// Get current memory configuration from CPU port $01
+static uint8_t get_mem_config(MEM *mem)
+{
+    // Bits 0-2 of $01 control memory mapping
+    // We need the effective value, combining output bits from dr
+    // and input bits from external hardware (pullups on bits 0-2)
+    uint8_t ddr = mem->ram[0x0000]; // Data Direction Register at $00
+    uint8_t dr = mem->ram[0x0001];  // Data Register at $01
+
+    // For output bits (DDR=1), use port_data
+    // For input bits (DDR=0), use external state (bits 0-2 pulled high)
+    uint8_t output_bits = ddr;
+    uint8_t input_bits = ~ddr;
+    uint8_t external = 0x07; // Bits 0-2 pulled high by external resistors
+
+    uint8_t effective = (dr & output_bits) | (external & input_bits);
+    return effective & 0x07;
+}
+
+// Check if BASIC ROM is visible
+static bool basic_visible(uint8_t config)
+{
+    // BASIC visible when LORAM=1 and HIRAM=1
+    return (config & MEM_LORAM) && (config & MEM_HIRAM);
+}
+
+// Check if KERNAL ROM is visible
+static bool kernal_visible(uint8_t config)
+{
+    // KERNAL visible when HIRAM=1
+    return (config & MEM_HIRAM);
+}
+
+// Check if I/O area is visible (vs Char ROM)
+static bool io_visible(uint8_t config)
+{
+    // I/O visible when CHAREN=1 and (LORAM=1 or HIRAM=1)
+    return (config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
+}
+
+// Check if Char ROM is visible
+static bool char_visible(uint8_t config)
+{
+    // Char ROM visible when CHAREN=0 and (LORAM=1 or HIRAM=1)
+    return !(config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
+}
+
 #define LORAM(ddr, dr) ((ddr.loram && dr.loram) || !ddr.loram)
 #define HIRAM(ddr, dr) ((ddr.hiram && dr.hiram) || !ddr.hiram)
 #define CHAREN(ddr, dr) ((ddr.charen && dr.charen) || !ddr.charen)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
-    data_direction_register_t ddr = (data_direction_register_t)cpu_read(&c64->cpu, D6510);
-    data_register_t dr = (data_register_t)cpu_read(&c64->cpu, R6510);
+    data_direction_register_t ddr = (data_direction_register_t)mem_read(&c64->mem, D6510);
+    data_register_t dr = (data_register_t)mem_read(&c64->mem, R6510);
 
     if (!HIRAM(ddr, dr) && !LORAM(ddr, dr)) // %x00
     {
@@ -248,7 +300,7 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
         if (HIRAM(ddr, dr) && LORAM(ddr, dr)) // %x11
         {
             // printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
-            return c64->basic[addr - BASIC_ROM_START];
+            return c64->basic_rom[addr - BASIC_ROM_START];
         }
     }
 
@@ -257,8 +309,8 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
         // Char. ROM  = ((NOT (/CharEn)) AND (/LoRam OR /HiRam))
         if (!CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %0xx
         {
-            // printf("CHARROM #$%04X → $%02X\n", addr, c64->characters[addr - CHAR_ROM_START]);
-            return c64->characters[addr - CHAR_ROM_START];
+            // printf("CHARROM #$%04X → $%02X\n", addr, c64->char_rom[addr - CHAR_ROM_START]);
+            return c64->char_rom[addr - CHAR_ROM_START];
         }
 
         // I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
@@ -293,8 +345,8 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
         // Kernal ROM = (/HiRam)
         if (HIRAM(ddr, dr)) // %x1x
         {
-            // printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal[addr - KERNAL_ROM_START]);
-            return c64->kernal[addr - KERNAL_ROM_START];
+            // printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal_rom[addr - KERNAL_ROM_START]);
+            return c64->kernal_rom[addr - KERNAL_ROM_START];
         }
     }
 
@@ -315,17 +367,17 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     }
 
     // printf("C64 #$%04X → $%02X\n", addr, cpu_read(&c64->cpu, addr));
-    return cpu_read(&c64->cpu, addr);
+    return mem_read(&c64->mem, addr);
 }
 uint16_t c64_read_word(C64 *c64, uint16_t addr)
 {
-    return cpu_read_word(&c64->cpu, addr);
+    return mem_read_word(&c64->mem, addr);
 }
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    data_direction_register_t ddr = (data_direction_register_t)cpu_read(&c64->cpu, D6510);
-    data_register_t dr = (data_register_t)cpu_read(&c64->cpu, R6510);
+    data_direction_register_t ddr = (data_direction_register_t)mem_read(&c64->mem, D6510);
+    data_register_t dr = (data_register_t)mem_read(&c64->mem, R6510);
 
     // if (addr == D6510)
     //     printf("\n----  #$%02X\n", data);
@@ -374,22 +426,30 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
     }
 
     // printf("C64 #$%04X ← $%02X\n", addr, data);
-    cpu_write(&c64->cpu, addr, data);
+    mem_write(&c64->mem, addr, data);
 }
 void c64_write_word(C64 *c64, uint16_t addr, uint16_t data)
 {
-    cpu_write_word(&c64->cpu, addr, data);
+    mem_write_word(&c64->mem, addr, data);
 }
 
 void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size)
 {
-    cpu_write_data(&c64->cpu, addr, data, size);
+    mem_write_data(&c64->mem, addr, data, size);
 }
+
+/* ============================================================
+   CPU Trap
+   ============================================================ */
 
 bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
 {
     return cpu_trap(&c64->cpu, addr, handler);
 }
+
+/* ============================================================
+   CPU Step
+   ============================================================ */
 
 uint8_t c64_step(C64 *c64)
 {

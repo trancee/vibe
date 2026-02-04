@@ -32,8 +32,11 @@ void irq_handler(CPU *cpu)
 // Helper functions
 static CPU *setup_cpu()
 {
+    MEM *mem = malloc(sizeof(MEM));
+    mem_init(mem);
+
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu);
+    cpu_init(cpu, mem);
 
     cpu_set_debug(cpu, DEBUG, NULL);
 
@@ -46,10 +49,11 @@ static CPU *setup_cpu()
 
 static void teardown_cpu(CPU *cpu)
 {
+    free(cpu->mem);
     free(cpu);
 }
 
-void load_test(uint8_t *memory, uint16_t address, const char *test_name)
+void load_test(MEM *mem, uint16_t address, const char *test_name)
 {
     char test_path[256];
     snprintf(test_path, sizeof(test_path), "tests/dormann/%s.bin", test_name);
@@ -64,10 +68,7 @@ void load_test(uint8_t *memory, uint16_t address, const char *test_name)
     uint8_t buffer[65536];
     size_t read = fread(buffer, 1, sizeof(buffer), stream);
 
-    for (size_t i = 0; i < read; i++)
-    {
-        memory[address + i] = buffer[i];
-    }
+    mem_write_data(mem, address, buffer, read);
 
     fclose(stream);
 }
@@ -91,9 +92,9 @@ size_t functional_test(CPU *cpu, test_case_t test_case)
 {
     uint16_t pc = cpu_get_pc(cpu);
 
-    if (cpu->memory[test_case.test_address] != last_test)
+    if (mem_read_byte(cpu->mem, test_case.test_address) != last_test)
     {
-        last_test = cpu->memory[test_case.test_address];
+        last_test = mem_read_byte(cpu->mem, test_case.test_address);
         printf("test case #$%02X at $%04X\n", last_test, pc);
     }
 
@@ -171,9 +172,9 @@ size_t extended_opcodes_test(CPU *cpu, test_case_t test_case)
 {
     uint16_t pc = cpu_get_pc(cpu);
 
-    if (cpu->memory[test_case.test_address] != last_test)
+    if (mem_read_byte(cpu->mem, test_case.test_address) != last_test)
     {
-        last_test = cpu->memory[test_case.test_address];
+        last_test = mem_read_byte(cpu->mem, test_case.test_address);
         printf("test case #$%02X at $%04X\n", last_test, pc);
     }
 
@@ -197,7 +198,7 @@ int main()
         printf("\n--- %s\n", test_case.test_name);
 
         CPU *cpu = setup_cpu();
-        load_test(cpu->memory, test_case.load_address, test_case.test_name);
+        load_test(cpu->mem, test_case.load_address, test_case.test_name);
 
         cpu_set_pc(cpu, test_case.start_address);
 

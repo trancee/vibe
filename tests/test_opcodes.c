@@ -61,13 +61,18 @@ static int total_tests = 0;
 // Helper functions
 static CPU *setup_cpu()
 {
+    MEM *mem = malloc(sizeof(MEM));
+    mem_init(mem);
+
     CPU *cpu = malloc(sizeof(CPU));
-    cpu_init(cpu);
+    cpu_init(cpu, mem); // Memory will be set up in individual tests
+
     return cpu;
 }
 
 static void teardown_cpu(CPU *cpu)
 {
+    free(cpu->mem);
     free(cpu);
 }
 
@@ -75,7 +80,7 @@ static void write_instruction(CPU *cpu, uint16_t addr, const uint8_t *bytes, int
 {
     for (int i = 0; i < len; i++)
     {
-        cpu->memory[addr + i] = bytes[i];
+        cpu_write_byte(cpu, addr + i, bytes[i]);
     }
     cpu_set_pc(cpu, addr);
 }
@@ -224,7 +229,7 @@ static void test_ADC_zp(CPU *cpu)
 {
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
-    cpu->memory[0x42] = 0x20;
+    mem_write_byte(cpu->mem, 0x42, 0x20);
     uint8_t instr[] = {0x65, 0x42}; // ADC $42
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -236,7 +241,7 @@ static void test_ADC_zpx(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->X = 0x05;
-    cpu->memory[0x47] = 0x20;
+    mem_write_byte(cpu->mem, 0x47, 0x20);
     uint8_t instr[] = {0x75, 0x42}; // ADC $42,X
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -249,7 +254,7 @@ static void test_ADC_zpx_wrap(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->X = 0x10;
-    cpu->memory[0x0F] = 0x25; // $FF + $10 wraps to $0F
+    mem_write_byte(cpu->mem, 0x0F, 0x25); // $FF + $10 wraps to $0F
     uint8_t instr[] = {0x75, 0xFF}; // ADC $FF,X
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -260,7 +265,7 @@ static void test_ADC_abs(CPU *cpu)
 {
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
-    cpu->memory[0x2000] = 0x30;
+    mem_write_byte(cpu->mem, 0x2000, 0x30);
     uint8_t instr[] = {0x6D, 0x00, 0x20}; // ADC $2000
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -272,7 +277,7 @@ static void test_ADC_absx(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->X = 0x10;
-    cpu->memory[0x2010] = 0x30;
+    mem_write_byte(cpu->mem, 0x2010, 0x30);
     uint8_t instr[] = {0x7D, 0x00, 0x20}; // ADC $2000,X
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -284,7 +289,7 @@ static void test_ADC_absy(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->Y = 0x10;
-    cpu->memory[0x2010] = 0x30;
+    mem_write_byte(cpu->mem, 0x2010, 0x30);
     uint8_t instr[] = {0x79, 0x00, 0x20}; // ADC $2000,Y
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -296,9 +301,9 @@ static void test_ADC_indx(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->X = 0x04;
-    cpu->memory[0x24] = 0x00;  // Low byte of address
-    cpu->memory[0x25] = 0x20;  // High byte of address
-    cpu->memory[0x2000] = 0x30;
+    mem_write_byte(cpu->mem, 0x24, 0x00);  // Low byte of address
+    mem_write_byte(cpu->mem, 0x25, 0x20);  // High byte of address
+    mem_write_byte(cpu->mem, 0x2000, 0x30);
     uint8_t instr[] = {0x61, 0x20}; // ADC ($20,X)
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -310,9 +315,9 @@ static void test_ADC_indy(CPU *cpu)
     set_flag_carry(cpu, false);
     cpu->A = 0x10;
     cpu->Y = 0x10;
-    cpu->memory[0x20] = 0x00;  // Low byte of base address
-    cpu->memory[0x21] = 0x20;  // High byte of base address
-    cpu->memory[0x2010] = 0x30;
+    mem_write_byte(cpu->mem, 0x20, 0x00);  // Low byte of base address
+    mem_write_byte(cpu->mem, 0x21, 0x20);  // High byte of base address
+    mem_write_byte(cpu->mem, 0x2010, 0x30);
     uint8_t instr[] = {0x71, 0x20}; // ADC ($20),Y
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -542,11 +547,11 @@ static void test_ASL_acc_no_carry(CPU *cpu)
 
 static void test_ASL_zp(CPU *cpu)
 {
-    cpu->memory[0x0010] = 0x01;
+    mem_write_byte(cpu->mem, 0x0010, 0x01);
     uint8_t instr[] = {0x06, 0x10}; // ASL $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x02, cpu->memory[0x0010], "ASL zero page shifts memory left");
+    TEST_ASSERT_EQ(0x02, mem_read_byte(cpu->mem, 0x0010), "ASL zero page shifts memory left");
     TEST_ASSERT_EQ(false, get_flag_carry(cpu), "ASL zero page clears carry");
 }
 
@@ -598,11 +603,11 @@ static void test_LSR_acc_no_carry(CPU *cpu)
 
 static void test_LSR_zp(CPU *cpu)
 {
-    cpu->memory[0x10] = 0x02;
+    mem_write_byte(cpu->mem, 0x10, 0x02);
     uint8_t instr[] = {0x46, 0x10}; // LSR $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x01, cpu->memory[0x10], "LSR zero page shifts memory right");
+    TEST_ASSERT_EQ(0x01, mem_read_byte(cpu->mem, 0x10), "LSR zero page shifts memory right");
 }
 
 // ============================================================================
@@ -806,7 +811,7 @@ static void test_branch_backward_page_crossing(CPU *cpu)
 static void test_BIT_zp(CPU *cpu)
 {
     cpu->A = 0x40;
-    cpu->memory[0x0020] = 0xC0;
+    mem_write_byte(cpu->mem, 0x0020, 0xC0);
     uint8_t instr[] = {0x24, 0x20}; // BIT $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -818,7 +823,7 @@ static void test_BIT_zp(CPU *cpu)
 static void test_BIT_zero_result(CPU *cpu)
 {
     cpu->A = 0x0F;
-    cpu->memory[0x0020] = 0xF0;
+    mem_write_byte(cpu->mem, 0x0020, 0xF0);
     uint8_t instr[] = {0x24, 0x20}; // BIT $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -831,7 +836,7 @@ static void test_BIT_flags_from_memory(CPU *cpu)
 {
     // Test that N and V flags come from memory, not AND result
     cpu->A = 0xFF;
-    cpu->memory[0x0020] = 0x00; // Both bits 6 and 7 clear
+    mem_write_byte(cpu->mem, 0x0020, 0x00); // Both bits 6 and 7 clear
     uint8_t instr[] = {0x24, 0x20}; // BIT $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -843,7 +848,7 @@ static void test_BIT_flags_from_memory(CPU *cpu)
 static void test_BIT_abs(CPU *cpu)
 {
     cpu->A = 0xFF;
-    cpu->memory[0x2000] = 0x80;
+    mem_write_byte(cpu->mem, 0x2000, 0x80);
     uint8_t instr[] = {0x2C, 0x00, 0x20}; // BIT $2000
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -984,21 +989,21 @@ static void test_INY(CPU *cpu)
 
 static void test_INC_zp(CPU *cpu)
 {
-    cpu->memory[0x10] = 0xFF;
+    mem_write_byte(cpu->mem, 0x10, 0xFF);
     uint8_t instr[] = {0xE6, 0x10}; // INC $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x10], "INC zero page wraps");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x10), "INC zero page wraps");
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "INC sets zero flag");
 }
 
 static void test_DEC_zp(CPU *cpu)
 {
-    cpu->memory[0x10] = 0x01;
+    mem_write_byte(cpu->mem, 0x10, 0x01);
     uint8_t instr[] = {0xC6, 0x10}; // DEC $10
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x10], "DEC zero page");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x10), "DEC zero page");
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "DEC sets zero flag");
 }
 
@@ -1016,8 +1021,8 @@ static void test_JMP_abs(CPU *cpu)
 
 static void test_JMP_ind(CPU *cpu)
 {
-    cpu->memory[0x2000] = 0x34;
-    cpu->memory[0x2001] = 0x12;
+    mem_write_byte(cpu->mem, 0x2000, 0x34);
+    mem_write_byte(cpu->mem, 0x2001, 0x12);
     uint8_t instr[] = {0x6C, 0x00, 0x20}; // JMP ($2000)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -1030,9 +1035,9 @@ static void test_JMP_ind(CPU *cpu)
 static void test_JMP_ind_page_boundary_bug(CPU *cpu)
 {
     // JMP ($20FF) should read low byte from $20FF and high byte from $2000 (not $2100)
-    cpu->memory[0x20FF] = 0x34;  // Low byte of target
-    cpu->memory[0x2000] = 0x12;  // High byte (wrapped, not from $2100)
-    cpu->memory[0x2100] = 0x56;  // This should NOT be used
+    mem_write_byte(cpu->mem, 0x20FF, 0x34);  // Low byte of target
+    mem_write_byte(cpu->mem, 0x2000, 0x12);  // High byte (wrapped, not from $2100)
+    mem_write_byte(cpu->mem, 0x2100, 0x56);  // This should NOT be used
     uint8_t instr[] = {0x6C, 0xFF, 0x20}; // JMP ($20FF)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -1042,8 +1047,8 @@ static void test_JMP_ind_page_boundary_bug(CPU *cpu)
 static void test_JMP_ind_no_bug_when_not_at_boundary(CPU *cpu)
 {
     // Normal case: JMP ($2000) should work correctly
-    cpu->memory[0x2000] = 0xCD;
-    cpu->memory[0x2001] = 0xAB;
+    mem_write_byte(cpu->mem, 0x2000, 0xCD);
+    mem_write_byte(cpu->mem, 0x2001, 0xAB);
     uint8_t instr[] = {0x6C, 0x00, 0x20}; // JMP ($2000)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
@@ -1062,8 +1067,8 @@ static void test_JSR(CPU *cpu)
     cpu_step(cpu);
     TEST_ASSERT_EQ16(0x1234, cpu_get_pc(cpu), "JSR jumps to subroutine");
     TEST_ASSERT_EQ(0xFD, cpu->SP, "JSR pushes return address to stack");
-    TEST_ASSERT_EQ(0x10, cpu->memory[0x01FF], "JSR pushes high byte of return address");
-    TEST_ASSERT_EQ(0x02, cpu->memory[0x01FE], "JSR pushes low byte of return address");
+    TEST_ASSERT_EQ(0x10, mem_read_byte(cpu->mem, 0x01FF), "JSR pushes high byte of return address");
+    TEST_ASSERT_EQ(0x02, mem_read_byte(cpu->mem, 0x01FE), "JSR pushes low byte of return address");
 }
 
 static void test_JSR_RTS_round_trip(CPU *cpu)
@@ -1156,7 +1161,7 @@ static void test_PHA_PLA(CPU *cpu)
     write_instruction(cpu, 0x1000, instr_pha, 1);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0xFE, cpu->SP, "PHA decrements stack pointer");
-    TEST_ASSERT_EQ(0x42, cpu->memory[0x01FF], "PHA stores accumulator on stack");
+    TEST_ASSERT_EQ(0x42, mem_read_byte(cpu->mem, 0x01FF), "PHA stores accumulator on stack");
 
     // Test PLA
     cpu->A = 0x00;
@@ -1170,8 +1175,8 @@ static void test_PHA_PLA(CPU *cpu)
 static void test_RTS(CPU *cpu)
 {
     cpu->SP = 0xFD;
-    cpu->memory[0x01FF] = 0x10;
-    cpu->memory[0x01FE] = 0x02;
+    mem_write_byte(cpu->mem, 0x01FF, 0x10);
+    mem_write_byte(cpu->mem, 0x01FE, 0x02);
 
     uint8_t instr[] = {0x60}; // RTS
     write_instruction(cpu, 0x1000, instr, 1);
@@ -1186,7 +1191,7 @@ static void test_STA_zp(CPU *cpu)
     uint8_t instr[] = {0x85, 0x20}; // STA $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x42, cpu->memory[0x0020], "STA zero page stores accumulator");
+    TEST_ASSERT_EQ(0x42, mem_read_byte(cpu->mem, 0x0020), "STA zero page stores accumulator");
 }
 
 static void test_TAX_TAY(CPU *cpu)
@@ -1230,7 +1235,8 @@ static void test_BRK(CPU *cpu)
 {
     cpu->P = FLAG_RESERVED;
 
-    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+    mem_write_word(cpu->mem, IRQ, 0xABCD);
+    // cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
 
     // $C000 BRK
     cpu_write_byte(cpu, 0xC000, 0x00); // BRK opcode
@@ -1240,10 +1246,10 @@ static void test_BRK(CPU *cpu)
     TEST_ASSERT_EQ(7, cpu_step(cpu), "BRK takes 7 cycles");
     TEST_ASSERT_EQ(0xABCD, cpu_get_pc(cpu), "BRK sets PC to IRQ vector");
     TEST_ASSERT_EQ(0xFC, cpu->SP, "BRK pushes PC and P to stack");
-    TEST_ASSERT_EQ(0x02, cpu->memory[PCL], "BRK pushes low byte of PC");
-    TEST_ASSERT_EQ(0xC0, cpu->memory[PCH], "BRK pushes high byte of PC");
+    TEST_ASSERT_EQ(0x02, mem_read_byte(cpu->mem, 0x01FE), "BRK pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC0, mem_read_byte(cpu->mem, 0x01FF), "BRK pushes high byte of PC");
     TEST_ASSERT_EQ(0xC002, cpu_read_word(cpu, 0x01FE), "BRK pushes correct PC onto stack");
-    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_BREAK, cpu->memory[0x01FD], "BRK pushes P with BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_BREAK, mem_read_byte(cpu->mem, 0x01FD), "BRK pushes P with BREAK flag set");
     TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "BRK sets INTERRUPT flag in P");
 }
 
@@ -1251,8 +1257,10 @@ static void test_IRQ(CPU *cpu)
 {
     cpu->P = FLAG_RESERVED;
 
-    cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
-    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+    mem_write_word(cpu->mem, IRQ, 0xABCD);
+    mem_write_word(cpu->mem, NMI, 0x7788);
+    // cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+    // cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
 
     cpu_set_pc(cpu, 0xC123);
 
@@ -1261,10 +1269,10 @@ static void test_IRQ(CPU *cpu)
     TEST_ASSERT_EQ(7, cpu_step(cpu), "IRQ takes 7 cycles");
     TEST_ASSERT_EQ(0xABCD, cpu_get_pc(cpu), "IRQ sets PC to IRQ vector");
     TEST_ASSERT_EQ(0xFC, cpu->SP, "IRQ pushes PC and P to stack");
-    TEST_ASSERT_EQ(0x23, cpu->memory[PCL], "IRQ pushes low byte of PC");
-    TEST_ASSERT_EQ(0xC1, cpu->memory[PCH], "IRQ pushes high byte of PC");
+    TEST_ASSERT_EQ(0x23, mem_read_byte(cpu->mem, 0x01FE), "IRQ pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC1, mem_read_byte(cpu->mem, 0x01FF), "IRQ pushes high byte of PC");
     TEST_ASSERT_EQ(0xC123, cpu_read_word(cpu, 0x01FE), "IRQ pushes correct PC onto stack");
-    TEST_ASSERT_EQ(FLAG_RESERVED, cpu->memory[0x01FD], "IRQ pushes P without BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED, mem_read_byte(cpu->mem, 0x01FD), "IRQ pushes P without BREAK flag set");
     TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "IRQ sets INTERRUPT flag in P");
 }
 
@@ -1272,8 +1280,10 @@ static void test_NMI(CPU *cpu)
 {
     cpu->P = FLAG_RESERVED;
 
-    cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
-    cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+    mem_write_word(cpu->mem, IRQ, 0xABCD);
+    mem_write_word(cpu->mem, NMI, 0x7788);
+    // cpu_write_data(cpu, IRQ, (uint8_t[]){0xCD, 0xAB}, 2);
+    // cpu_write_data(cpu, NMI, (uint8_t[]){0x88, 0x77}, 2);
 
     cpu_set_pc(cpu, 0xC123);
 
@@ -1282,10 +1292,10 @@ static void test_NMI(CPU *cpu)
     TEST_ASSERT_EQ(7, cpu_step(cpu), "NMI takes 7 cycles");
     TEST_ASSERT_EQ16(0x7788, cpu_get_pc(cpu), "NMI sets PC to NMI vector");
     TEST_ASSERT_EQ(0xFC, cpu->SP, "NMI pushes PC and P to stack");
-    TEST_ASSERT_EQ(0x23, cpu->memory[PCL], "NMI pushes low byte of PC");
-    TEST_ASSERT_EQ(0xC1, cpu->memory[PCH], "NMI pushes high byte of PC");
+    TEST_ASSERT_EQ(0x23, mem_read_byte(cpu->mem, 0x01FE), "NMI pushes low byte of PC");
+    TEST_ASSERT_EQ(0xC1, mem_read_byte(cpu->mem, 0x01FF), "NMI pushes high byte of PC");
     TEST_ASSERT_EQ16(0xC123, cpu_read_word(cpu, 0x01FE), "NMI pushes correct PC onto stack");
-    TEST_ASSERT_EQ(FLAG_RESERVED, cpu->memory[0x01FD], "NMI pushes P without BREAK flag set");
+    TEST_ASSERT_EQ(FLAG_RESERVED, mem_read_byte(cpu->mem, 0x01FD), "NMI pushes P without BREAK flag set");
     TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_INTERRUPT_DISABLE, cpu->P, "NMI sets INTERRUPT flag in P");
 }
 
@@ -1303,14 +1313,14 @@ static void test_PHP_pushes_break_flag(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 1);
     cpu_step(cpu);
     
-    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_BREAK, cpu->memory[0x01FF], "PHP pushes P with BREAK flag always set");
+    TEST_ASSERT_EQ(FLAG_RESERVED | FLAG_BREAK, mem_read_byte(cpu->mem, 0x01FF), "PHP pushes P with BREAK flag always set");
 }
 
 static void test_PLP_clears_break_flag(CPU *cpu)
 {
     // PLP should ignore the B flag and always clear it
     cpu->SP = 0xFE;
-    cpu->memory[0x01FF] = FLAG_RESERVED | FLAG_BREAK | FLAG_CARRY;
+    mem_write_byte(cpu->mem, 0x01FF, FLAG_RESERVED | FLAG_BREAK | FLAG_CARRY);
     
     uint8_t instr[] = {0x28}; // PLP
     write_instruction(cpu, 0x1000, instr, 1);
@@ -1324,7 +1334,7 @@ static void test_PLP_sets_reserved_flag(CPU *cpu)
 {
     // PLP should always set the reserved flag
     cpu->SP = 0xFE;
-    cpu->memory[0x01FF] = 0x00;  // No flags set
+    mem_write_byte(cpu->mem, 0x01FF, 0x00);  // No flags set
     
     uint8_t instr[] = {0x28}; // PLP
     write_instruction(cpu, 0x1000, instr, 1);
@@ -1340,9 +1350,9 @@ static void test_PLP_sets_reserved_flag(CPU *cpu)
 static void test_RTI(CPU *cpu)
 {
     cpu->SP = 0xFC;
-    cpu->memory[0x01FD] = FLAG_RESERVED | FLAG_CARRY;  // Status to restore
-    cpu->memory[0x01FE] = 0x34;  // PC low
-    cpu->memory[0x01FF] = 0x12;  // PC high
+    mem_write_byte(cpu->mem, 0x01FD, FLAG_RESERVED | FLAG_CARRY);  // Status to restore
+    mem_write_byte(cpu->mem, 0x01FE, 0x34);  // PC low
+    mem_write_byte(cpu->mem, 0x01FF, 0x12);  // PC high
     
     uint8_t instr[] = {0x40}; // RTI
     write_instruction(cpu, 0x1000, instr, 1);
@@ -1356,9 +1366,9 @@ static void test_RTI(CPU *cpu)
 static void test_RTI_clears_break_flag(CPU *cpu)
 {
     cpu->SP = 0xFC;
-    cpu->memory[0x01FD] = FLAG_RESERVED | FLAG_BREAK | FLAG_CARRY;
-    cpu->memory[0x01FE] = 0x00;
-    cpu->memory[0x01FF] = 0x20;
+    mem_write_byte(cpu->mem, 0x01FD, FLAG_RESERVED | FLAG_BREAK | FLAG_CARRY);
+    mem_write_byte(cpu->mem, 0x01FE, 0x00);
+    mem_write_byte(cpu->mem, 0x01FF, 0x20);
     
     uint8_t instr[] = {0x40}; // RTI
     write_instruction(cpu, 0x1000, instr, 1);
@@ -1376,7 +1386,7 @@ static void test_zp_indexed_wrapping(CPU *cpu)
     // Per 64doc.txt: Indexed zero page addressing modes never fix the page address
     // on crossing the zero page boundary
     cpu->X = 0x10;
-    cpu->memory[0x0F] = 0x42;  // $FF + $10 wraps to $0F
+    mem_write_byte(cpu->mem, 0x0F, 0x42);  // $FF + $10 wraps to $0F
     
     uint8_t instr[] = {0xB5, 0xFF}; // LDA $FF,X
     write_instruction(cpu, 0x1000, instr, 2);
@@ -1388,7 +1398,7 @@ static void test_zp_indexed_wrapping(CPU *cpu)
 static void test_zpy_indexed_wrapping(CPU *cpu)
 {
     cpu->Y = 0x20;
-    cpu->memory[0x1F] = 0x55;  // $FF + $20 wraps to $1F
+    mem_write_byte(cpu->mem, 0x1F, 0x55);  // $FF + $20 wraps to $1F
     
     uint8_t instr[] = {0xB6, 0xFF}; // LDX $FF,Y
     write_instruction(cpu, 0x1000, instr, 2);
@@ -1407,9 +1417,9 @@ static void test_indexed_indirect_wrapping(CPU *cpu)
     // i.e. the zero page boundary crossing is not handled.
     // E.g. LDX #$01 : LDA ($FF,X) loads the effective address from $00 and $01
     cpu->X = 0x01;
-    cpu->memory[0x00] = 0x00;  // Low byte of address
-    cpu->memory[0x01] = 0x20;  // High byte of address
-    cpu->memory[0x2000] = 0x77;
+    mem_write_byte(cpu->mem, 0x00, 0x00);  // Low byte of address
+    mem_write_byte(cpu->mem, 0x01, 0x20);  // High byte of address
+    mem_write_byte(cpu->mem, 0x2000, 0x77);
     
     uint8_t instr[] = {0xA1, 0xFF}; // LDA ($FF,X)
     write_instruction(cpu, 0x1000, instr, 2);
@@ -1423,9 +1433,9 @@ static void test_indirect_indexed_zp_wrapping(CPU *cpu)
     // The pointer fetch also wraps within zero page
     // LDA ($FF),Y fetches the base address from $FF and $00
     cpu->Y = 0x10;
-    cpu->memory[0xFF] = 0x00;  // Low byte of base
-    cpu->memory[0x00] = 0x20;  // High byte (from wrap)
-    cpu->memory[0x2010] = 0x88;
+    mem_write_byte(cpu->mem, 0xFF, 0x00);  // Low byte of base
+    mem_write_byte(cpu->mem, 0x00, 0x20);  // High byte (from wrap)
+    mem_write_byte(cpu->mem, 0x2010, 0x88);
     
     uint8_t instr[] = {0xB1, 0xFF}; // LDA ($FF),Y
     write_instruction(cpu, 0x1000, instr, 2);
@@ -1559,7 +1569,7 @@ static void test_STX_zp(CPU *cpu)
     uint8_t instr[] = {0x86, 0x20}; // STX $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x42, cpu->memory[0x20], "STX zero page stores X");
+    TEST_ASSERT_EQ(0x42, mem_read_byte(cpu->mem, 0x20), "STX zero page stores X");
 }
 
 static void test_STY_zp(CPU *cpu)
@@ -1568,7 +1578,7 @@ static void test_STY_zp(CPU *cpu)
     uint8_t instr[] = {0x84, 0x20}; // STY $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x42, cpu->memory[0x20], "STY zero page stores Y");
+    TEST_ASSERT_EQ(0x42, mem_read_byte(cpu->mem, 0x20), "STY zero page stores Y");
 }
 
 // ============================================================================
@@ -1578,7 +1588,7 @@ static void test_STY_zp(CPU *cpu)
 static void test_LAX(CPU *cpu)
 {
     // LAX: Load A and X with the same value
-    cpu->memory[0x20] = 0x42;
+    mem_write_byte(cpu->mem, 0x20, 0x42);
     uint8_t instr[] = {0xA7, 0x20}; // LAX $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
@@ -1594,7 +1604,7 @@ static void test_SAX(CPU *cpu)
     uint8_t instr[] = {0x87, 0x20}; // SAX $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x20], "SAX stores A AND X");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x20), "SAX stores A AND X");
 }
 
 static void test_SAX_nonzero(CPU *cpu)
@@ -1604,18 +1614,18 @@ static void test_SAX_nonzero(CPU *cpu)
     uint8_t instr[] = {0x87, 0x20}; // SAX $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x0F, cpu->memory[0x20], "SAX stores A AND X (0xFF & 0x0F = 0x0F)");
+    TEST_ASSERT_EQ(0x0F, mem_read_byte(cpu->mem, 0x20), "SAX stores A AND X (0xFF & 0x0F = 0x0F)");
 }
 
 static void test_DCP(CPU *cpu)
 {
     // DCP: DEC then CMP
     cpu->A = 0x05;
-    cpu->memory[0x20] = 0x06;
+    mem_write_byte(cpu->mem, 0x20, 0x06);
     uint8_t instr[] = {0xC7, 0x20}; // DCP $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x05, cpu->memory[0x20], "DCP decrements memory");
+    TEST_ASSERT_EQ(0x05, mem_read_byte(cpu->mem, 0x20), "DCP decrements memory");
     TEST_ASSERT_EQ(true, get_flag_zero(cpu), "DCP compares and sets zero when A == result");
 }
 
@@ -1624,11 +1634,11 @@ static void test_ISC(CPU *cpu)
     // ISC (ISB): INC then SBC
     set_flag_carry(cpu, true);
     cpu->A = 0x10;
-    cpu->memory[0x20] = 0x04;
+    mem_write_byte(cpu->mem, 0x20, 0x04);
     uint8_t instr[] = {0xE7, 0x20}; // ISC $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x05, cpu->memory[0x20], "ISC increments memory");
+    TEST_ASSERT_EQ(0x05, mem_read_byte(cpu->mem, 0x20), "ISC increments memory");
     TEST_ASSERT_EQ(0x0B, cpu->A, "ISC subtracts from A (0x10 - 0x05 = 0x0B)");
 }
 
@@ -1636,11 +1646,11 @@ static void test_SLO(CPU *cpu)
 {
     // SLO: ASL then ORA
     cpu->A = 0x0F;
-    cpu->memory[0x20] = 0x40;
+    mem_write_byte(cpu->mem, 0x20, 0x40);
     uint8_t instr[] = {0x07, 0x20}; // SLO $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x80, cpu->memory[0x20], "SLO shifts memory left");
+    TEST_ASSERT_EQ(0x80, mem_read_byte(cpu->mem, 0x20), "SLO shifts memory left");
     TEST_ASSERT_EQ(0x8F, cpu->A, "SLO ORs result with A");
 }
 
@@ -1649,11 +1659,11 @@ static void test_RLA(CPU *cpu)
     // RLA: ROL then AND
     set_flag_carry(cpu, true);
     cpu->A = 0xFF;
-    cpu->memory[0x20] = 0x80;
+    mem_write_byte(cpu->mem, 0x20, 0x80);
     uint8_t instr[] = {0x27, 0x20}; // RLA $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x01, cpu->memory[0x20], "RLA rotates memory left");
+    TEST_ASSERT_EQ(0x01, mem_read_byte(cpu->mem, 0x20), "RLA rotates memory left");
     TEST_ASSERT_EQ(0x01, cpu->A, "RLA ANDs result with A");
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "RLA sets carry from bit 7");
 }
@@ -1662,11 +1672,11 @@ static void test_SRE(CPU *cpu)
 {
     // SRE: LSR then EOR
     cpu->A = 0xFF;
-    cpu->memory[0x20] = 0x02;
+    mem_write_byte(cpu->mem, 0x20, 0x02);
     uint8_t instr[] = {0x47, 0x20}; // SRE $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x01, cpu->memory[0x20], "SRE shifts memory right");
+    TEST_ASSERT_EQ(0x01, mem_read_byte(cpu->mem, 0x20), "SRE shifts memory right");
     TEST_ASSERT_EQ(0xFE, cpu->A, "SRE XORs result with A");
 }
 
@@ -1675,11 +1685,11 @@ static void test_RRA(CPU *cpu)
     // RRA: ROR then ADC
     set_flag_carry(cpu, true);
     cpu->A = 0x10;
-    cpu->memory[0x20] = 0x02;
+    mem_write_byte(cpu->mem, 0x20, 0x02);
     uint8_t instr[] = {0x67, 0x20}; // RRA $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
-    TEST_ASSERT_EQ(0x81, cpu->memory[0x20], "RRA rotates memory right");
+    TEST_ASSERT_EQ(0x81, mem_read_byte(cpu->mem, 0x20), "RRA rotates memory right");
     TEST_ASSERT_EQ(0x91, cpu->A, "RRA adds result to A");
 }
 
@@ -2041,13 +2051,13 @@ static void test_SHA_stores_correct_value(CPU *cpu)
     cpu->A = 0xFF;
     cpu->X = 0xFF;
     cpu->Y = 0x01;
-    cpu->memory[0x20] = 0x00;  // Low byte of base address
-    cpu->memory[0x21] = 0x30;  // High byte of base address
+    mem_write_byte(cpu->mem, 0x20, 0x00);  // Low byte of base address
+    mem_write_byte(cpu->mem, 0x21, 0x30);  // High byte of base address
     uint8_t instr[] = {0x93, 0x20}; // SHA ($20),Y - target = $3001
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     // Value = A & X & ($30 + 1) = 0xFF & 0xFF & 0x31 = 0x31
-    TEST_ASSERT_EQ(0x31, cpu->memory[0x3001], "SHA stores A & X & (ADDR_HI + 1)");
+    TEST_ASSERT_EQ(0x31, mem_read_byte(cpu->mem, 0x3001), "SHA stores A & X & (ADDR_HI + 1)");
 }
 
 static void test_SHA_absy(CPU *cpu)
@@ -2060,7 +2070,7 @@ static void test_SHA_absy(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = A & X & ($40 + 1) = 0xFF & 0x0F & 0x41 = 0x01
-    TEST_ASSERT_EQ(0x01, cpu->memory[0x4010], "SHA absolute,Y stores A & X & (ADDR_HI + 1)");
+    TEST_ASSERT_EQ(0x01, mem_read_byte(cpu->mem, 0x4010), "SHA absolute,Y stores A & X & (ADDR_HI + 1)");
 }
 
 static void test_SHA_absy_page_crossing(CPU *cpu)
@@ -2075,7 +2085,7 @@ static void test_SHA_absy_page_crossing(CPU *cpu)
     cpu_step(cpu);
     // Base high byte = $40 (NOT $41 from effective address)
     // Value = A & X & ($40 + 1) = 0xFF & 0xFF & 0x41 = 0x41
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHA page crossing uses base ADDR_HI");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4140), "SHA page crossing uses base ADDR_HI");
 }
 
 // ============================================================================
@@ -2093,7 +2103,7 @@ static void test_SHX_basic(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = X & ($40 + 1) = 0xFF & 0x41 = 0x41
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHX stores X & (ADDR_HI + 1)");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4010), "SHX stores X & (ADDR_HI + 1)");
 }
 
 static void test_SHX_page_crossing(CPU *cpu)
@@ -2109,7 +2119,7 @@ static void test_SHX_page_crossing(CPU *cpu)
     // Page crossing: effective addr hi = $41
     // Value = X & $41 = 0xFF & 0x41 = 0x41
     // Address becomes $4140 with high byte = value = $41, so still $4140
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHX page crossing stores X & effective_hi");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4140), "SHX page crossing stores X & effective_hi");
 }
 
 static void test_SHX_no_flags_affected(CPU *cpu)
@@ -2124,7 +2134,7 @@ static void test_SHX_no_flags_affected(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = 0x00 & 0x41 = 0x00
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHX stores zero");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x4010), "SHX stores zero");
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "SHX does not set Z flag");
     TEST_ASSERT_EQ(true, get_flag_negative(cpu), "SHX does not clear N flag");
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SHX does not affect C flag");
@@ -2139,7 +2149,7 @@ static void test_SHY_basic(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = Y & ($40 + 1) = 0xFF & 0x41 = 0x41
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHY stores Y & (ADDR_HI + 1)");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4010), "SHY stores Y & (ADDR_HI + 1)");
 }
 
 static void test_SHY_page_crossing(CPU *cpu)
@@ -2155,7 +2165,7 @@ static void test_SHY_page_crossing(CPU *cpu)
     // Page crossing: effective addr hi = $41
     // Value = Y & $41 = 0xFF & 0x41 = 0x41
     // Address becomes $4140 with high byte = value = $41, so still $4140
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4140], "SHY page crossing stores Y & effective_hi");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4140), "SHY page crossing stores Y & effective_hi");
 }
 
 static void test_SHY_no_flags_affected(CPU *cpu)
@@ -2170,7 +2180,7 @@ static void test_SHY_no_flags_affected(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = 0x00 & 0x41 = 0x00
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHY stores zero");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x4010), "SHY stores zero");
     TEST_ASSERT_EQ(false, get_flag_zero(cpu), "SHY does not set Z flag");
     TEST_ASSERT_EQ(true, get_flag_negative(cpu), "SHY does not clear N flag");
     TEST_ASSERT_EQ(true, get_flag_carry(cpu), "SHY does not affect C flag");
@@ -2185,7 +2195,7 @@ static void test_SHY_value_masking(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = Y & ($40 + 1) = 0x55 & 0x41 = 0x41
-    TEST_ASSERT_EQ(0x41, cpu->memory[0x4010], "SHY correctly ANDs Y with ADDR_HI+1");
+    TEST_ASSERT_EQ(0x41, mem_read_byte(cpu->mem, 0x4010), "SHY correctly ANDs Y with ADDR_HI+1");
 }
 
 static void test_SHX_value_masking(CPU *cpu)
@@ -2197,7 +2207,7 @@ static void test_SHX_value_masking(CPU *cpu)
     write_instruction(cpu, 0x1000, instr, 3);
     cpu_step(cpu);
     // Value = X & ($40 + 1) = 0xAA & 0x41 = 0x00
-    TEST_ASSERT_EQ(0x00, cpu->memory[0x4010], "SHX correctly ANDs X with ADDR_HI+1");
+    TEST_ASSERT_EQ(0x00, mem_read_byte(cpu->mem, 0x4010), "SHX correctly ANDs X with ADDR_HI+1");
 }
 
 // ============================================================================
@@ -2211,12 +2221,12 @@ static void test_RRA_decimal_mode(CPU *cpu)
     set_flag_decimal(cpu, true);
     set_flag_carry(cpu, true);
     cpu->A = 0x10;
-    cpu->memory[0x20] = 0x12;  // Will become 0x89 after ROR with carry
+    mem_write_byte(cpu->mem, 0x20, 0x12);  // Will become 0x89 after ROR with carry
     uint8_t instr[] = {0x67, 0x20}; // RRA $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     // ROR: 0x12 with carry=1 becomes 0x89 (carry out = 0)
-    TEST_ASSERT_EQ(0x89, cpu->memory[0x20], "RRA rotates memory right with carry");
+    TEST_ASSERT_EQ(0x89, mem_read_byte(cpu->mem, 0x20), "RRA rotates memory right with carry");
     // ADC in decimal mode: 0x10 + 0x89 + 0 (no carry after ROR)
     // The addition should use BCD
 }
@@ -2227,12 +2237,12 @@ static void test_ISB_decimal_mode(CPU *cpu)
     set_flag_decimal(cpu, true);
     set_flag_carry(cpu, true);
     cpu->A = 0x20;
-    cpu->memory[0x20] = 0x09;
+    mem_write_byte(cpu->mem, 0x20, 0x09);
     uint8_t instr[] = {0xE7, 0x20}; // ISB $20
     write_instruction(cpu, 0x1000, instr, 2);
     cpu_step(cpu);
     // INC: 0x09 becomes 0x0A
-    TEST_ASSERT_EQ(0x0A, cpu->memory[0x20], "ISB increments memory");
+    TEST_ASSERT_EQ(0x0A, mem_read_byte(cpu->mem, 0x20), "ISB increments memory");
     // SBC in decimal mode: 0x20 - 0x0A (with C=1) in BCD
     // 0x20 - 0x0A = 0x10 in BCD
     TEST_ASSERT_EQ(0x10, cpu->A, "ISB subtracts in decimal mode");
@@ -2494,34 +2504,34 @@ static void test_addressing_modes()
     CPU *cpu = setup_cpu();
 
     // Test immediate addressing
-    cpu->memory[0x1000] = 0xA9; // LDA immediate
-    cpu->memory[0x1001] = 0x42;
+    mem_write_byte(cpu->mem, 0x1000, 0xA9); // LDA immediate
+    mem_write_byte(cpu->mem, 0x1001, 0x42);
     cpu_set_pc(cpu, 0x1000);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->A, "Immediate addressing loads correct value");
 
     // Test zero page addressing
-    cpu->memory[0x1010] = 0xA5; // LDA zero page
-    cpu->memory[0x1011] = 0x50;
-    cpu->memory[0x0050] = 0x84;
+    mem_write_byte(cpu->mem, 0x1010, 0xA5); // LDA zero page
+    mem_write_byte(cpu->mem, 0x1011, 0x50);
+    mem_write_byte(cpu->mem, 0x0050, 0x84);
     cpu_set_pc(cpu, 0x1010);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x84, cpu->A, "Zero page addressing loads correct value");
 
     // Test absolute addressing
-    cpu->memory[0x1020] = 0xAD; // LDA absolute
-    cpu->memory[0x1021] = 0x00;
-    cpu->memory[0x1022] = 0x20;
-    cpu->memory[0x2000] = 0x96;
+    mem_write_byte(cpu->mem, 0x1020, 0xAD); // LDA absolute
+    mem_write_byte(cpu->mem, 0x1021, 0x00);
+    mem_write_byte(cpu->mem, 0x1022, 0x20);
+    mem_write_byte(cpu->mem, 0x2000, 0x96);
     cpu_set_pc(cpu, 0x1020);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x96, cpu->A, "Absolute addressing loads correct value");
 
     // Test indexed addressing
     cpu->X = 0x10;
-    cpu->memory[0x1030] = 0xB5; // LDA zero page, X
-    cpu->memory[0x1031] = 0x40;
-    cpu->memory[0x0050] = 0x31;
+    mem_write_byte(cpu->mem, 0x1030, 0xB5); // LDA zero page, X
+    mem_write_byte(cpu->mem, 0x1031, 0x40);
+    mem_write_byte(cpu->mem, 0x0050, 0x31);
     cpu_set_pc(cpu, 0x1030);
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x31, cpu->A, "Zero page X addressing loads correct value");
@@ -2539,7 +2549,7 @@ static void test_stack_operations()
     for (int i = 0; i < 10; i++)
     {
         cpu->A = i + 0x30;
-        cpu->memory[cpu_get_pc(cpu)] = 0x48; // PHA
+        mem_write_byte(cpu->mem, cpu_get_pc(cpu), 0x48); // PHA
         cpu_step(cpu);
     }
 
@@ -2547,7 +2557,7 @@ static void test_stack_operations()
 
     for (int i = 9; i >= 0; i--)
     {
-        cpu->memory[cpu_get_pc(cpu)] = 0x68; // PLA
+        mem_write_byte(cpu->mem, cpu_get_pc(cpu), 0x68); // PLA
         cpu_step(cpu);
         TEST_ASSERT_EQ(i + 0x30, cpu->A, "Stack pull returns correct value");
     }
@@ -2564,8 +2574,8 @@ static void test_stack_wrap()
     
     // Test stack wrapping from 0x00 to 0xFF on pull
     cpu->SP = 0x00;
-    cpu->memory[0x0101] = 0x42;
-    cpu->memory[cpu_get_pc(cpu)] = 0x68; // PLA
+    mem_write_byte(cpu->mem, 0x0101, 0x42);
+    mem_write_byte(cpu->mem, cpu_get_pc(cpu), 0x68); // PLA
     cpu_step(cpu);
     TEST_ASSERT_EQ(0x42, cpu->A, "PLA wraps stack from 0x00 to read from 0x0101");
     TEST_ASSERT_EQ(0x01, cpu->SP, "Stack pointer wraps correctly");
@@ -2643,7 +2653,7 @@ int main()
     CPU *cpu = setup_cpu();
     for (int opcode = 0; opcode < 256; opcode++)
     {
-        cpu->memory[0x1000] = opcode;
+        mem_write_byte(cpu->mem, 0x1000, opcode);
         cpu_set_pc(cpu, 0x1000);
 
         // Just make sure it doesn't crash
