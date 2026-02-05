@@ -151,7 +151,7 @@ The Lorenz `nmi` test validates precise Non-Maskable Interrupt timing, including
 Unlike IRQ (which is level-triggered), NMI is edge-triggered. The CPU detects a high-to-low transition on the NMI line. We track this with an `nmi_edge` flag:
 
 ```c
-void cpu_trigger_nmi(C64Cpu *cpu) {
+void cpu_trigger_nmi(CPU *cpu) {
     if (!cpu->nmi_edge) {
         cpu->nmi_pending = true;
         cpu->nmi_pending_age = 0;
@@ -199,8 +199,8 @@ If an NMI becomes pending during the execution of a BRK instruction (or during a
 
 ```c
 // In do_interrupt(), after push P:
-if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != 0xFFFA) {
-    vector = 0xFFFA;  // Redirect to NMI vector
+if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != NMI_VECTOR) {
+    vector = NMI_VECTOR;  // Redirect to NMI vector
     cpu->nmi_pending = false;
     // Keep nmi_edge set - prevents spurious second NMI
 }
@@ -602,7 +602,7 @@ The `icr_ack` flag was being cleared at the **end** of `cia_clock()`, but this c
 **Fix:** Move `icr_ack` clearing to the **start** of `cia_clock()`:
 
 ```c
-void cia_clock(C64Cia *cia)
+void cia_clock(CIA *cia)
 {
     // Clear icr_ack from previous cycle's read at the START of this cycle
     // This way, a read sets icr_ack to prevent interrupts from that same cycle,

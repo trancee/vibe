@@ -175,7 +175,7 @@ typedef struct {
     uint32_t sample_rate;
     
     /* Cycle counter for sample generation */
-    uint32_t cycle_count;
+    uint32_t cycles;
     uint32_t cycles_per_sample;
     
     /* Audio buffer (for test compatibility) */

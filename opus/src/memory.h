@@ -8,7 +8,7 @@
 #include "types.h"
 
 // Forward declaration
-typedef struct C64System C64System;
+typedef struct C64 C64;
 
 // Memory configuration bits (from $01)
 #define MEM_LORAM   0x01  // BASIC ROM visible
@@ -30,28 +30,28 @@ typedef struct {
     bool has_charom;
 
     // Reference to system
-    C64System *sys;
-} C64Memory;
+    C64 *sys;
+} MEM;
 
 // Memory functions
-void mem_init(C64Memory *mem, C64System *sys);
-void mem_reset(C64Memory *mem);
+void mem_init(MEM *mem, C64 *sys);
+void mem_reset(MEM *mem);
 
 // Memory access (calls c64_tick internally)
-u8   mem_read(C64Memory *mem, u16 addr);
-void mem_write(C64Memory *mem, u16 addr, u8 value);
+u8   mem_read(MEM *mem, u16 addr);
+void mem_write(MEM *mem, u16 addr, u8 value);
 
 // Direct memory access (no tick, for VIC/DMA)
-u8   mem_read_raw(C64Memory *mem, u16 addr);
-void mem_write_raw(C64Memory *mem, u16 addr, u8 value);
+u8   mem_read_raw(MEM *mem, u16 addr);
+void mem_write_raw(MEM *mem, u16 addr, u8 value);
 
 // ROM loading
-bool mem_load_rom(C64Memory *mem, const char *filename, u8 *dest, size_t size);
-bool mem_load_roms(C64Memory *mem, const char *rom_path);
+bool mem_load_rom(MEM *mem, const char *filename, u8 *dest, size_t size);
+bool mem_load_roms(MEM *mem, const char *rom_path);
 
 // VIC memory access (uses VIC bank from CIA2)
-u8   mem_vic_read(C64Memory *mem, u16 vic_addr);
+u8   mem_vic_read(MEM *mem, u16 vic_addr);
 
-void mem_dump(C64Memory *mem, u16 addr);
+void mem_dump(MEM *mem, u16 addr);
 
 #endif // C64_MEMORY_H

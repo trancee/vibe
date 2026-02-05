@@ -79,8 +79,8 @@ void c64_test_init(C64* sys);
 void c64_test_cleanup(C64* sys);
 void cpu_set_registers(C64CPU* cpu, u16 pc, u8 a, u8 x, u8 y, u8 sp, u8 status);
 bool cpu_verify_registers(C64CPU* cpu, u16 pc, u8 a, u8 x, u8 y, u8 sp, u8 status);
-void memory_write_test_pattern(C64Memory* mem, u16 start, u16 size);
-bool memory_verify_test_pattern(C64Memory* mem, u16 start, u16 size);
+void memory_write_test_pattern(MEM* mem, u16 start, u16 size);
+bool memory_verify_test_pattern(MEM* mem, u16 start, u16 size);
 
 // Timing test helpers
 typedef struct {

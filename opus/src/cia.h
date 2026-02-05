@@ -8,7 +8,7 @@
 #include "types.h"
 
 // Forward declaration
-typedef struct C64System C64System;
+typedef struct C64 C64;
 
 // CIA register offsets
 #define CIA_PRA 0x00    // Port A data
@@ -161,20 +161,20 @@ typedef struct
     int cia_num; // 1 or 2
 
     // Reference to system
-    C64System *sys;
-} C64Cia;
+    C64 *sys;
+} CIA;
 
 // CIA functions
-void cia_init(C64Cia *cia, int cia_num, C64System *sys);
-void cia_reset(C64Cia *cia);
-void cia_clock(C64Cia *cia); // Advance one phi2 cycle
+void cia_init(CIA *cia, int cia_num, C64 *sys);
+void cia_reset(CIA *cia);
+void cia_clock(CIA *cia); // Advance one phi2 cycle
 
 // Register access
-u8 cia_read(C64Cia *cia, u8 reg);
-void cia_write(C64Cia *cia, u8 reg, u8 value);
+u8 cia_read(CIA *cia, u8 reg);
+void cia_write(CIA *cia, u8 reg, u8 value);
 
 // Keyboard matrix (CIA1 specific)
-void cia_set_key(C64Cia *cia, int row, int col, bool pressed);
-u8 cia_read_keyboard(C64Cia *cia);
+void cia_set_key(CIA *cia, int row, int col, bool pressed);
+u8 cia_read_keyboard(CIA *cia);
 
 #endif // C64_CIA_H

@@ -25,14 +25,14 @@
 // Keyboard matrix state (global for simplicity)
 static u8 keyboard_matrix[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-void cia_init(C64Cia *cia, int cia_num, C64System *sys)
+void cia_init(CIA *cia, int cia_num, C64 *sys)
 {
-    memset(cia, 0, sizeof(C64Cia));
+    memset(cia, 0, sizeof(CIA));
     cia->cia_num = cia_num;
     cia->sys = sys;
 }
 
-void cia_reset(C64Cia *cia)
+void cia_reset(CIA *cia)
 {
     cia->pra = 0;
     cia->prb = 0;
@@ -106,7 +106,7 @@ void cia_reset(C64Cia *cia)
 }
 
 // Check and set ICR bit 7 with proper delay
-static void check_irq(C64Cia *cia)
+static void check_irq(CIA *cia)
 {
     // Check if any enabled interrupt occurred
     // Only trigger if:
@@ -125,7 +125,7 @@ static void check_irq(C64Cia *cia)
     }
 }
 
-void cia_clock(C64Cia *cia)
+void cia_clock(CIA *cia)
 {
     // Clear icr_ack from previous cycle's read at the START of this cycle
     // This way, a read sets icr_ack to prevent interrupts from that same cycle,
@@ -511,7 +511,7 @@ void cia_clock(C64Cia *cia)
     }
 }
 
-u8 cia_read(C64Cia *cia, u8 reg)
+u8 cia_read(CIA *cia, u8 reg)
 {
     switch (reg)
     {
@@ -710,7 +710,7 @@ u8 cia_read(C64Cia *cia, u8 reg)
     }
 }
 
-void cia_write(C64Cia *cia, u8 reg, u8 value)
+void cia_write(CIA *cia, u8 reg, u8 value)
 {
     switch (reg)
     {
@@ -955,7 +955,7 @@ void cia_write(C64Cia *cia, u8 reg, u8 value)
     }
 }
 
-void cia_set_key(C64Cia *cia, int row, int col, bool pressed)
+void cia_set_key(CIA *cia, int row, int col, bool pressed)
 {
     (void)cia; // Uses global keyboard matrix
     if (row < 0 || row > 7 || col < 0 || col > 7)
@@ -971,7 +971,7 @@ void cia_set_key(C64Cia *cia, int row, int col, bool pressed)
     }
 }
 
-u8 cia_read_keyboard(C64Cia *cia)
+u8 cia_read_keyboard(CIA *cia)
 {
     // Port A is keyboard columns (directly from matrix when scanning)
     // Port B selects which row to read

@@ -65,7 +65,7 @@ void load_test(MEM *mem, uint16_t address, const char *test_name)
         exit(1);
     }
 
-    uint8_t buffer[65536];
+    uint8_t buffer[MEM_SIZE];
     size_t read = fread(buffer, 1, sizeof(buffer), stream);
 
     mem_write_data(mem, address, buffer, read);

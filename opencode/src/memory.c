@@ -12,7 +12,7 @@ void mem_init(C64* sys) {
     sys->mem.cpu_port_dir = 0;
     sys->mem.cpu_port_data = 0;
     sys->mem.cpu_port_floating = true;
-    sys->mem.cycle_count = 0;
+    sys->mem.cycles = 0;
 }
 
 int mem_load_rom(C64* sys, const char* filename, u8* buffer, size_t size) {

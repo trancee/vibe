@@ -8,7 +8,7 @@
 #include "types.h"
 
 // Forward declaration
-typedef struct C64System C64System;
+typedef struct C64 C64;
 
 // VIC-II register offsets (from $D000)
 #define VIC_M0X     0x00  // Sprite 0 X position
@@ -78,19 +78,19 @@ typedef struct {
     u32 frame_count;
 
     // Reference to system
-    C64System *sys;
-} C64Vic;
+    C64 *sys;
+} VIC;
 
 // VIC functions
-void vic_init(C64Vic *vic, C64System *sys);
-void vic_reset(C64Vic *vic);
-void vic_step(C64Vic *vic);  // Advance one cycle
+void vic_init(VIC *vic, C64 *sys);
+void vic_reset(VIC *vic);
+void vic_step(VIC *vic);  // Advance one cycle
 
 // Register access
-u8   vic_read(C64Vic *vic, u8 reg);
-void vic_write(C64Vic *vic, u8 reg, u8 value);
+u8   vic_read(VIC *vic, u8 reg);
+void vic_write(VIC *vic, u8 reg, u8 value);
 
 // Rendering
-void vic_render_frame_ansi(C64Vic *vic);
+void vic_render_frame_ansi(VIC *vic);
 
 #endif // C64_VIC_H

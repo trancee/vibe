@@ -47,7 +47,7 @@ void cpu_reset(CPU *cpu)
     cpu->nmi_pending = false;
     cpu->irq_pending = false;
     cpu->nmi_edge = false;
-    cpu->cycle_count = 0;
+    cpu->cycles = 0;
     cpu->extra_cycles = 0;
 }
 
@@ -63,7 +63,7 @@ void cpu_reset_at(CPU *cpu, uint16_t addr)
     cpu->nmi_pending = false;
     cpu->irq_pending = false;
     cpu->nmi_edge = false;
-    cpu->cycle_count = 0;
+    cpu->cycles = 0;
     cpu->extra_cycles = 0;
 }
 
@@ -155,9 +155,9 @@ void cpu_nmi(CPU *cpu)
     cpu_push_word(cpu, cpu->PC);
     cpu_push(cpu, (cpu->P | FLAG_RESERVED) & ~FLAG_BREAK);
     set_flag_interrupt(cpu, true);
-    cpu->PC = cpu_read_word(cpu, NMI_VECTOR);
+    cpu->PC = cpu_read_word(cpu, NMI);
     cpu->nmi_pending = false;
-    cpu->cycle_count += 7;
+    cpu->cycles += 7;
 }
 
 void cpu_irq(CPU *cpu)
@@ -168,9 +168,9 @@ void cpu_irq(CPU *cpu)
     cpu_push_word(cpu, cpu->PC);
     cpu_push(cpu, (cpu->P | FLAG_RESERVED) & ~FLAG_BREAK);
     set_flag_interrupt(cpu, true);
-    cpu->PC = cpu_read_word(cpu, IRQ_VECTOR);
+    cpu->PC = cpu_read_word(cpu, IRQ);
     cpu->irq_pending = false;
-    cpu->cycle_count += 7;
+    cpu->cycles += 7;
 }
 
 /* Configuration */
@@ -505,6 +505,6 @@ uint8_t cpu_step(CPU *cpu)
     }
 
     uint8_t cycles = inst->cycles + cpu->extra_cycles;
-    cpu->cycle_count += cycles;
+    cpu->cycles += cycles;
     return cycles;
 }

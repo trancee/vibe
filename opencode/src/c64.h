@@ -14,8 +14,8 @@ typedef struct {
     u8 cpu_port_data;
     bool cpu_port_floating;
     
-    u64 cycle_count;
-} C64Memory;
+    u64 cycles;
+} MEM;
 
 typedef struct {
     u16 pc;
@@ -123,7 +123,7 @@ typedef struct {
 } C64SID;
 
 typedef struct {
-    C64Memory mem;
+    MEM mem;
     C64CPU cpu;
     C64CIA cia1;
     C64CIA cia2;

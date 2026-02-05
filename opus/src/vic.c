@@ -10,12 +10,12 @@
 #include <stdio.h>
 #include <string.h>
 
-void vic_init(C64Vic *vic, C64System *sys) {
-    memset(vic, 0, sizeof(C64Vic));
+void vic_init(VIC *vic, C64 *sys) {
+    memset(vic, 0, sizeof(VIC));
     vic->sys = sys;
 }
 
-void vic_reset(C64Vic *vic) {
+void vic_reset(VIC *vic) {
     memset(vic->regs, 0, sizeof(vic->regs));
     
     // Default register values
@@ -52,7 +52,7 @@ void vic_reset(C64Vic *vic) {
 }
 
 // Update internal state from registers
-static void update_from_regs(C64Vic *vic) {
+static void update_from_regs(VIC *vic) {
     u8 cr1 = vic->regs[VIC_CR1];
     u8 cr2 = vic->regs[VIC_CR2];
     u8 memptr = vic->regs[VIC_MEMPTR];
@@ -69,7 +69,7 @@ static void update_from_regs(C64Vic *vic) {
 }
 
 // Check for raster IRQ
-static void check_raster_irq(C64Vic *vic) {
+static void check_raster_irq(VIC *vic) {
     // Compare current raster with target
     if (vic->raster_line == vic->raster_irq_line) {
         // Set raster IRQ flag
@@ -84,7 +84,7 @@ static void check_raster_irq(C64Vic *vic) {
 }
 
 // Fetch screen data for current line
-static void fetch_screen_line(C64Vic *vic, int screen_row) {
+static void fetch_screen_line(VIC *vic, int screen_row) {
     if (screen_row < 0 || screen_row >= SCREEN_ROWS) return;
     
     C64Memory *mem = &vic->sys->mem;
@@ -100,7 +100,7 @@ static void fetch_screen_line(C64Vic *vic, int screen_row) {
     }
 }
 
-void vic_step(C64Vic *vic) {
+void vic_step(VIC *vic) {
     update_from_regs(vic);
     
     // Check for bad line condition
@@ -168,7 +168,7 @@ void vic_step(C64Vic *vic) {
     }
 }
 
-u8 vic_read(C64Vic *vic, u8 reg) {
+u8 vic_read(VIC *vic, u8 reg) {
     switch (reg) {
         case VIC_CR1:
             // Return register with current raster bit 8
@@ -202,7 +202,7 @@ u8 vic_read(C64Vic *vic, u8 reg) {
     }
 }
 
-void vic_write(C64Vic *vic, u8 reg, u8 value) {
+void vic_write(VIC *vic, u8 reg, u8 value) {
     switch (reg) {
         case VIC_CR1:
             vic->regs[VIC_CR1] = value;

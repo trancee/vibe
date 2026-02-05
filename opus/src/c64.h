@@ -12,20 +12,20 @@
 #include "cia.h"
 #include "sid.h"
 
-typedef void (*render_frame_t)(C64Vic *);
+typedef void (*render_frame_t)(VIC *);
 
 // C64 System structure - contains all components
-struct C64System
+struct C64
 {
-    C64Cpu cpu;
-    C64Memory mem;
-    C64Vic vic;
-    C64Cia cia1; // CIA1: Keyboard, joysticks
-    C64Cia cia2; // CIA2: Serial, VIC bank
-    C64Sid sid;
+    CPU cpu;
+    MEM mem;
+    VIC vic;
+    CIA cia1; // CIA1: Keyboard, joysticks
+    CIA cia2; // CIA2: Serial, VIC bank
+    SID sid;
 
     // Global cycle counter
-    u64 cycle_count;
+    u64 cycles;
 
     // System state
     bool running;
@@ -38,23 +38,23 @@ struct C64System
 };
 
 // System functions
-void c64_init(C64System *sys);
-void c64_reset(C64System *sys);
-void c64_destroy(C64System *sys);
+void c64_init(C64 *sys);
+void c64_reset(C64 *sys);
+void c64_destroy(C64 *sys);
 
 // Central tick - advances all peripherals by one cycle
-void c64_tick(C64System *sys);
+void c64_tick(C64 *sys);
 
 // Run one frame
-void c64_run_frame(C64System *sys);
+void c64_run_frame(C64 *sys);
 
 // Load ROMs
-bool c64_load_roms(C64System *sys, const char *rom_path);
+bool c64_load_roms(C64 *sys, const char *rom_path);
 
 // Interrupt routing
-void c64_check_interrupts(C64System *sys);
+void c64_check_interrupts(C64 *sys);
 
 // VIC bank selection (from CIA2 port A)
-u16 c64_get_vic_bank(C64System *sys);
+u16 c64_get_vic_bank(C64 *sys);
 
 #endif // C64_H

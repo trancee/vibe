@@ -42,7 +42,7 @@ bool test_cpu_branch_timing(void) {
     c64_test_init(&sys);
     
     // Test BNE taken (no page cross)
-    u64 start_cycles = sys.mem.cycle_count;
+    u64 start_cycles = sys.mem.cycles;
     
     sys.mem.ram[0x1000] = 0xD0; // BNE
     sys.mem.ram[0x1001] = 0x04; // +4
@@ -52,20 +52,20 @@ bool test_cpu_branch_timing(void) {
     
     cpu_step(&sys);
     
-    u64 end_cycles = sys.mem.cycle_count;
+    u64 end_cycles = sys.mem.cycles;
     u64 elapsed = end_cycles - start_cycles;
     
     TEST_ASSERT_EQ(0x1006, sys.cpu.pc, "PC should be $1006 after taken branch");
     TEST_ASSERT_EQ(3, elapsed, "Taken branch should take 3 cycles");
     
     // Test BNE not taken
-    start_cycles = sys.mem.cycle_count;
+    start_cycles = sys.mem.cycles;
     sys.cpu.pc = 0x1000;
     sys.cpu.status |= FLAG_Z; // Set zero flag so branch is not taken
     
     cpu_step(&sys);
     
-    end_cycles = sys.mem.cycle_count;
+    end_cycles = sys.mem.cycles;
     elapsed = end_cycles - start_cycles;
     
     TEST_ASSERT_EQ(0x1002, sys.cpu.pc, "PC should be $1002 after not taken branch");
@@ -85,21 +85,21 @@ bool test_cpu_page_cross_timing(void) {
     sys.mem.ram[0x1101] = 0x10;
     sys.mem.ram[0x1001] = 0x42; // Target value at correct page crossed address
     
-    u64 start_cycles = sys.mem.cycle_count;
+    u64 start_cycles = sys.mem.cycles;
     
     sys.cpu.pc = 0x10FF;
     sys.cpu.x = 0x01; // Will cause page cross from $1001 to $2000
     
     cpu_step(&sys);
     
-    u64 end_cycles = sys.mem.cycle_count;
+    u64 end_cycles = sys.mem.cycles;
     u64 elapsed = end_cycles - start_cycles;
     
     TEST_ASSERT_EQ(0x42, sys.cpu.a, "A should load value from page crossed address");
     TEST_ASSERT_EQ(5, elapsed, "LDA abs,X with page cross should take 5 cycles");
     
     // Test LDA absolute X without page cross
-    start_cycles = sys.mem.cycle_count;
+    start_cycles = sys.mem.cycles;
     
     sys.mem.ram[0x1200] = 0xBD; // LDA $1000,X
     sys.mem.ram[0x1201] = 0x00;
@@ -111,7 +111,7 @@ bool test_cpu_page_cross_timing(void) {
     
     cpu_step(&sys);
     
-    end_cycles = sys.mem.cycle_count;
+    end_cycles = sys.mem.cycles;
     elapsed = end_cycles - start_cycles;
     
     TEST_ASSERT_EQ(0x24, sys.cpu.a, "A should load value from non-page crossed address");
@@ -153,14 +153,14 @@ bool test_cpu_stack_operations(void) {
     sys.mem.ram[0x2000] = 0x60; // RTS
     
     sys.cpu.pc = 0x1000;
-    u64 start_cycles = sys.mem.cycle_count;
+    u64 start_cycles = sys.mem.cycles;
     
     cpu_step(&sys); // JSR
     TEST_ASSERT_EQ(0x2000, sys.cpu.pc, "PC should jump to subroutine");
     TEST_ASSERT_EQ(0xFD, sys.cpu.sp, "SP should decrement by 2 after JSR");
     
     cpu_step(&sys); // RTS
-    u64 end_cycles = sys.mem.cycle_count;
+    u64 end_cycles = sys.mem.cycles;
     
     TEST_ASSERT_EQ(0x1004, sys.cpu.pc, "PC should return after RTS (return address + 1)");
     TEST_ASSERT_EQ(0xFF, sys.cpu.sp, "SP should be restored after RTS");

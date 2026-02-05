@@ -8,7 +8,7 @@
 #include "test_framework.h"
 #include "../src/c64.h"
 
-static C64System sys;
+static C64 sys;
 
 static void setup(void) {
     c64_init(&sys);
@@ -19,7 +19,7 @@ static void setup(void) {
 }
 
 // Clock CIA N times
-static void cia_cycles(C64Cia *cia, int n) {
+static void cia_cycles(CIA *cia, int n) {
     for (int i = 0; i < n; i++) {
         cia_clock(cia);
     }

@@ -29,13 +29,16 @@
         }                               \
     } while (0)
 
+MEM *mem;
+CPU *cpu;
+
 // Helper functions
 static CPU *setup_cpu(FILE *stream)
 {
-    MEM *mem = malloc(sizeof(MEM));
+    mem = malloc(sizeof(MEM));
     mem_init(mem);
 
-    CPU *cpu = malloc(sizeof(CPU));
+    cpu = malloc(sizeof(CPU));
     cpu_init(cpu, mem);
 
     cpu_set_decimal_mode(cpu, false);
@@ -44,13 +47,13 @@ static CPU *setup_cpu(FILE *stream)
     return cpu;
 }
 
-static void teardown_cpu(CPU *cpu)
+static void teardown()
 {
-    free(cpu->mem);
+    free(mem);
     free(cpu);
 }
 
-void load_test(uint8_t *memory)
+void load_test()
 {
     FILE *stream = fopen("tests/nestest/nestest.nes", "rb");
     if (stream == NULL)
@@ -59,12 +62,12 @@ void load_test(uint8_t *memory)
         exit(1);
     }
 
-    uint8_t buffer[65536];
-    fread(buffer, 1, sizeof(buffer), stream);
+    uint8_t buffer[MEM_SIZE];
+    size_t read = fread(buffer, 1, sizeof(buffer), stream);
 
     for (size_t i = 0; i < PAYLOAD_LENGTH; i++)
     {
-        memory[START_ADDRESS + i] = buffer[i + iNES_HEADER_SIZE];
+        mem->ram[START_ADDRESS + i] = buffer[i + iNES_HEADER_SIZE];
     }
 
     fclose(stream);
@@ -88,7 +91,7 @@ int main()
 
     CPU *cpu = setup_cpu(stream);
 
-    load_test(cpu->mem);
+    load_test();
 
     for (size_t i = 0; i < 0x20; i++)
     {
@@ -114,7 +117,7 @@ int main()
         {
             char *line = NULL;
             size_t length = 0;
-            ssize_t read;
+            size_t read;
 
             if ((read = getline(&line, &length, log)) != -1)
             {
@@ -150,7 +153,7 @@ int main()
     printf("$02 #$%02X %s\n", mem_read_byte(cpu->mem, 0x02), mem_read_byte(cpu->mem, 0x02) == 0x00 ? "OK" : "FAIL");
     printf("$03 #$%02X %s\n", mem_read_byte(cpu->mem, 0x03), mem_read_byte(cpu->mem, 0x03) == 0x00 ? "OK" : "FAIL");
 
-    teardown_cpu(cpu);
+    teardown();
 
     fclose(log);
 

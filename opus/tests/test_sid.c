@@ -7,7 +7,7 @@
 #include "test_framework.h"
 #include "../src/sid.h"
 
-static C64Sid sid;
+static SID sid;
 
 static void setup(void) {
     sid_reset(&sid);

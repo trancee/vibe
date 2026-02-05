@@ -8,7 +8,14 @@
 #include "types.h"
 
 // Forward declaration
-typedef struct C64System C64System;
+typedef struct C64 C64;
+
+#define PCL 0x01FE
+#define PCH 0x01FF
+
+#define NMI 0xFFFA   // WORD
+#define RESET 0xFFFC // WORD
+#define IRQ 0xFFFE   // WORD
 
 // Status flag bits
 #define FLAG_C 0x01 // Carry
@@ -47,7 +54,7 @@ typedef struct
 
     // Interrupt state
     bool nmi_pending;
-    bool nmi_sampled; // NMI was sampled during previous instruction
+    bool nmi_sampled;             // NMI was sampled during previous instruction
     bool nmi_triggered_this_insn; // NMI was triggered during current instruction
     bool irq_pending;
     bool irq_pending_new; // IRQ was set during current instruction, don't take yet
@@ -60,20 +67,20 @@ typedef struct
     bool page_crossed; // Flag for page crossing detection
 
     // Reference to system
-    C64System *sys;
-} C64Cpu;
+    C64 *sys;
+} CPU;
 
 // CPU functions
-void cpu_init(C64Cpu *cpu, C64System *sys);
-void cpu_reset(C64Cpu *cpu);
-int cpu_step(C64Cpu *cpu); // Execute one instruction, returns cycles used
+void cpu_init(CPU *cpu, C64 *sys);
+void cpu_reset(CPU *cpu);
+int cpu_step(CPU *cpu); // Execute one instruction, returns cycles used
 
 // Interrupt handling
-void cpu_trigger_nmi(C64Cpu *cpu);
-void cpu_trigger_irq(C64Cpu *cpu);
+void cpu_trigger_nmi(CPU *cpu);
+void cpu_trigger_irq(CPU *cpu);
 
 // Status flag helpers
-static inline void cpu_set_flag(C64Cpu *cpu, u8 flag, bool value)
+static inline void cpu_set_flag(CPU *cpu, u8 flag, bool value)
 {
     if (value)
         cpu->P |= flag;
@@ -81,12 +88,12 @@ static inline void cpu_set_flag(C64Cpu *cpu, u8 flag, bool value)
         cpu->P &= ~flag;
 }
 
-static inline bool cpu_get_flag(C64Cpu *cpu, u8 flag)
+static inline bool cpu_get_flag(CPU *cpu, u8 flag)
 {
     return (cpu->P & flag) != 0;
 }
 
-static inline void cpu_update_nz(C64Cpu *cpu, u8 value)
+static inline void cpu_update_nz(CPU *cpu, u8 value)
 {
     cpu_set_flag(cpu, FLAG_Z, value == 0);
     cpu_set_flag(cpu, FLAG_N, value & 0x80);

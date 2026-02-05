@@ -111,8 +111,6 @@ test-cia2: $(TEST_CIA2_BIN)
 	./$(TEST_CIA2_BIN)
 test-sid: $(TEST_SID_BIN)
 	./$(TEST_SID_BIN)
-test-sid-file: $(TEST_SID_FILE_BIN)
-	./$(TEST_SID_FILE_BIN)
 
 run-test: test
 

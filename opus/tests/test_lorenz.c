@@ -24,7 +24,7 @@
 
 #define TESTCASE "start"
 
-static C64System sys;
+static C64 sys;
 
 const char *rom_path = "roms";
 
@@ -50,11 +50,11 @@ static void lorenz_init_memory(void)
     mem_write_raw(&sys.mem, 0x0001, 0x37); // Default banking
 
     // Set up important vectors
-    mem_write_raw(&sys.mem, 0xFFFA, 0x00);
-    mem_write_raw(&sys.mem, 0xFFFB, 0x80); // NMI -> $8000
+    mem_write_raw(&sys.mem, NMI + 0, 0x00);
+    mem_write_raw(&sys.mem, NMI + 1, 0x80); // NMI -> $8000
     mem_write_raw(&sys.mem, 0xFFFC, 0x00);
     mem_write_raw(&sys.mem, 0xFFFD, 0x08); // RESET -> $0800
-    mem_write_raw(&sys.mem, 0xFFFE, 0x48);
+    mem_write_raw(&sys.mem, IRQ, 0x48);
     mem_write_raw(&sys.mem, 0xFFFF, 0xFF); // IRQ -> $FF48
 
     // Initialize screen pointer table at $D1/$D2 and line link table

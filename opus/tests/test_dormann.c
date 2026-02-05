@@ -18,7 +18,7 @@
 
 #define DEBUG false
 
-static C64System sys;
+static C64 sys;
 
 // Load a test binary into memory
 static bool load_dormann_test(const char *test_name, u16 load_address)
@@ -45,7 +45,7 @@ static bool load_dormann_test(const char *test_name, u16 load_address)
     }
 
     // Reset system
-    sys.cycle_count = 0;
+    sys.cycles = 0;
 
     // Reset all components
     mem_reset(&sys.mem);
@@ -317,7 +317,7 @@ TEST(dormann_interrupt)
             mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, sys.cpu.PC & 0xFF);
             mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.P | FLAG_U) & ~FLAG_B);
             cpu_set_flag(&sys.cpu, FLAG_I, true);
-            sys.cpu.PC = mem_read_raw(&sys.mem, 0xFFFA) | (mem_read_raw(&sys.mem, 0xFFFB) << 8);
+            sys.cpu.PC = mem_read_raw(&sys.mem, NMI + 0) | (mem_read_raw(&sys.mem, NMI + 1) << 8);
             cycles += 7;
             continue;
         }
@@ -330,7 +330,7 @@ TEST(dormann_interrupt)
             mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, sys.cpu.PC & 0xFF);
             mem_write_raw(&sys.mem, 0x100 + sys.cpu.SP--, (sys.cpu.P | FLAG_U) & ~FLAG_B);
             cpu_set_flag(&sys.cpu, FLAG_I, true);
-            sys.cpu.PC = mem_read_raw(&sys.mem, 0xFFFE) | (mem_read_raw(&sys.mem, 0xFFFF) << 8);
+            sys.cpu.PC = mem_read_raw(&sys.mem, IRQ) | (mem_read_raw(&sys.mem, 0xFFFF) << 8);
             cycles += 7;
             continue;
         }
@@ -363,7 +363,7 @@ TEST(dormann_interrupt)
 
 void run_dormann_tests(void)
 {
-    memset(&sys, 0, sizeof(C64System));
+    memset(&sys, 0, sizeof(C64));
     sys.debug = DEBUG;
 
     TEST_SUITE("Dormann 6502 Test Suite");

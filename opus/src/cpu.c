@@ -12,48 +12,48 @@
 #include <string.h>
 
 // Opcode handler function type
-typedef int (*OpcodeHandler)(C64Cpu *cpu);
+typedef int (*OpcodeHandler)(CPU *cpu);
 
 // Forward declarations for internal functions
-static u8 cpu_read(C64Cpu *cpu, u16 addr);
-static void cpu_write(C64Cpu *cpu, u16 addr, u8 value);
-static void cpu_push(C64Cpu *cpu, u8 value);
-static u8 cpu_pop(C64Cpu *cpu);
-static void cpu_push16(C64Cpu *cpu, u16 value);
-static u16 cpu_pop16(C64Cpu *cpu);
+static u8 cpu_read(CPU *cpu, u16 addr);
+static void cpu_write(CPU *cpu, u16 addr, u8 value);
+static void cpu_push(CPU *cpu, u8 value);
+static u8 cpu_pop(CPU *cpu);
+static void cpu_push16(CPU *cpu, u16 value);
+static u16 cpu_pop16(CPU *cpu);
 
 // Addressing mode helpers
-static u16 addr_immediate(C64Cpu *cpu);
-static u16 addr_zeropage(C64Cpu *cpu);
-static u16 addr_zeropage_x(C64Cpu *cpu);
-static u16 addr_zeropage_y(C64Cpu *cpu);
-static u16 addr_absolute(C64Cpu *cpu);
-static u16 addr_absolute_x(C64Cpu *cpu, bool check_page);
-static u16 addr_absolute_y(C64Cpu *cpu, bool check_page);
-static u16 addr_indirect(C64Cpu *cpu);
-static u16 addr_indirect_x(C64Cpu *cpu);
-static u16 addr_indirect_y(C64Cpu *cpu, bool check_page);
+static u16 addr_immediate(CPU *cpu);
+static u16 addr_zeropage(CPU *cpu);
+static u16 addr_zeropage_x(CPU *cpu);
+static u16 addr_zeropage_y(CPU *cpu);
+static u16 addr_absolute(CPU *cpu);
+static u16 addr_absolute_x(CPU *cpu, bool check_page);
+static u16 addr_absolute_y(CPU *cpu, bool check_page);
+static u16 addr_indirect(CPU *cpu);
+static u16 addr_indirect_x(CPU *cpu);
+static u16 addr_indirect_y(CPU *cpu, bool check_page);
 
 // ALU operations
-static void op_adc(C64Cpu *cpu, u8 value);
-static void op_sbc(C64Cpu *cpu, u8 value);
-static void op_cmp(C64Cpu *cpu, u8 reg, u8 value);
-static u8 op_asl(C64Cpu *cpu, u8 value);
-static u8 op_lsr(C64Cpu *cpu, u8 value);
-static u8 op_rol(C64Cpu *cpu, u8 value);
-static u8 op_ror(C64Cpu *cpu, u8 value);
+static void op_adc(CPU *cpu, u8 value);
+static void op_sbc(CPU *cpu, u8 value);
+static void op_cmp(CPU *cpu, u8 reg, u8 value);
+static u8 op_asl(CPU *cpu, u8 value);
+static u8 op_lsr(CPU *cpu, u8 value);
+static u8 op_rol(CPU *cpu, u8 value);
+static u8 op_ror(CPU *cpu, u8 value);
 
 // Helpers
-static void do_branch(C64Cpu *cpu, bool condition);
-static void do_interrupt(C64Cpu *cpu, u16 vector, bool brk);
+static void do_branch(CPU *cpu, bool condition);
+static void do_interrupt(CPU *cpu, u16 vector, bool brk);
 
 // ============================================================================
 // CPU Initialization and Reset
 // ============================================================================
 
-void cpu_init(C64Cpu *cpu, C64System *sys)
+void cpu_init(CPU *cpu, C64 *sys)
 {
-    memset(cpu, 0, sizeof(C64Cpu));
+    memset(cpu, 0, sizeof(CPU));
     cpu->sys = sys;
     cpu->P = FLAG_U | FLAG_I;
     cpu->SP = 0xFD;
@@ -63,7 +63,7 @@ void cpu_init(C64Cpu *cpu, C64System *sys)
     cpu->mode = CPU_MODE_6510; // Default: enable 6510 I/O port
 }
 
-void cpu_reset(C64Cpu *cpu)
+void cpu_reset(CPU *cpu)
 {
     cpu->A = 0;
     cpu->X = 0;
@@ -92,7 +92,7 @@ void cpu_reset(C64Cpu *cpu)
 // Memory Access
 // ============================================================================
 
-static u8 cpu_read(C64Cpu *cpu, u16 addr)
+static u8 cpu_read(CPU *cpu, u16 addr)
 {
     // 6510 I/O port handling (only when enabled)
     if (cpu->mode == CPU_MODE_6510)
@@ -137,7 +137,7 @@ static u8 cpu_read(C64Cpu *cpu, u16 addr)
     return mem_read(&cpu->sys->mem, addr);
 }
 
-static void cpu_write(C64Cpu *cpu, u16 addr, u8 value)
+static void cpu_write(CPU *cpu, u16 addr, u8 value)
 {
     // 6510 I/O port handling (only when enabled)
     if (cpu->mode == CPU_MODE_6510)
@@ -174,25 +174,25 @@ static void cpu_write(C64Cpu *cpu, u16 addr, u8 value)
 // Stack Operations
 // ============================================================================
 
-static void cpu_push(C64Cpu *cpu, u8 value)
+static void cpu_push(CPU *cpu, u8 value)
 {
     cpu_write(cpu, 0x0100 | cpu->SP, value);
     cpu->SP--;
 }
 
-static u8 cpu_pop(C64Cpu *cpu)
+static u8 cpu_pop(CPU *cpu)
 {
     cpu->SP++;
     return cpu_read(cpu, 0x0100 | cpu->SP);
 }
 
-static void cpu_push16(C64Cpu *cpu, u16 value)
+static void cpu_push16(CPU *cpu, u16 value)
 {
     cpu_push(cpu, (value >> 8) & 0xFF);
     cpu_push(cpu, value & 0xFF);
 }
 
-static u16 cpu_pop16(C64Cpu *cpu)
+static u16 cpu_pop16(CPU *cpu)
 {
     u16 lo = cpu_pop(cpu);
     u16 hi = cpu_pop(cpu);
@@ -203,32 +203,32 @@ static u16 cpu_pop16(C64Cpu *cpu)
 // Addressing Modes
 // ============================================================================
 
-static u16 addr_immediate(C64Cpu *cpu) { return cpu->PC++; }
+static u16 addr_immediate(CPU *cpu) { return cpu->PC++; }
 
-static u16 addr_zeropage(C64Cpu *cpu) { return cpu_read(cpu, cpu->PC++); }
+static u16 addr_zeropage(CPU *cpu) { return cpu_read(cpu, cpu->PC++); }
 
-static u16 addr_zeropage_x(C64Cpu *cpu)
+static u16 addr_zeropage_x(CPU *cpu)
 {
     u8 base = cpu_read(cpu, cpu->PC++);
     cpu_read(cpu, base);
     return (base + cpu->X) & 0xFF;
 }
 
-static u16 addr_zeropage_y(C64Cpu *cpu)
+static u16 addr_zeropage_y(CPU *cpu)
 {
     u8 base = cpu_read(cpu, cpu->PC++);
     cpu_read(cpu, base);
     return (base + cpu->Y) & 0xFF;
 }
 
-static u16 addr_absolute(C64Cpu *cpu)
+static u16 addr_absolute(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
     return lo | (hi << 8);
 }
 
-static u16 addr_absolute_x(C64Cpu *cpu, bool check_page)
+static u16 addr_absolute_x(CPU *cpu, bool check_page)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -243,7 +243,7 @@ static u16 addr_absolute_x(C64Cpu *cpu, bool check_page)
     return result;
 }
 
-static u16 addr_absolute_y(C64Cpu *cpu, bool check_page)
+static u16 addr_absolute_y(CPU *cpu, bool check_page)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -259,7 +259,7 @@ static u16 addr_absolute_y(C64Cpu *cpu, bool check_page)
 }
 
 // RMW version of absolute,X - always does dummy read at possibly-wrong address
-static u16 addr_absolute_x_rmw(C64Cpu *cpu)
+static u16 addr_absolute_x_rmw(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -271,7 +271,7 @@ static u16 addr_absolute_x_rmw(C64Cpu *cpu)
 }
 
 // RMW version of absolute,Y - always does dummy read at possibly-wrong address
-static u16 addr_absolute_y_rmw(C64Cpu *cpu)
+static u16 addr_absolute_y_rmw(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -282,7 +282,7 @@ static u16 addr_absolute_y_rmw(C64Cpu *cpu)
     return result;
 }
 
-static u16 addr_indirect(C64Cpu *cpu)
+static u16 addr_indirect(CPU *cpu)
 {
     u16 ptr_lo = cpu_read(cpu, cpu->PC++);
     u16 ptr_hi = cpu_read(cpu, cpu->PC++);
@@ -292,7 +292,7 @@ static u16 addr_indirect(C64Cpu *cpu)
     return lo | (hi << 8);
 }
 
-static u16 addr_indirect_x(C64Cpu *cpu)
+static u16 addr_indirect_x(CPU *cpu)
 {
     u8 base = cpu_read(cpu, cpu->PC++);
     cpu_read(cpu, base);
@@ -302,7 +302,7 @@ static u16 addr_indirect_x(C64Cpu *cpu)
     return lo | (hi << 8);
 }
 
-static u16 addr_indirect_y(C64Cpu *cpu, bool check_page)
+static u16 addr_indirect_y(CPU *cpu, bool check_page)
 {
     u8 ptr = cpu_read(cpu, cpu->PC++);
     u16 lo = cpu_read(cpu, ptr);
@@ -320,7 +320,7 @@ static u16 addr_indirect_y(C64Cpu *cpu, bool check_page)
 }
 
 // RMW version always does the dummy read cycle
-static u16 addr_indirect_y_rmw(C64Cpu *cpu)
+static u16 addr_indirect_y_rmw(CPU *cpu)
 {
     u8 ptr = cpu_read(cpu, cpu->PC++);
     u16 lo = cpu_read(cpu, ptr);
@@ -336,7 +336,7 @@ static u16 addr_indirect_y_rmw(C64Cpu *cpu)
 // ALU Operations
 // ============================================================================
 
-static void op_adc(C64Cpu *cpu, u8 value)
+static void op_adc(CPU *cpu, u8 value)
 {
     if (cpu->P & FLAG_D)
     {
@@ -363,7 +363,7 @@ static void op_adc(C64Cpu *cpu, u8 value)
     }
 }
 
-static void op_sbc(C64Cpu *cpu, u8 value)
+static void op_sbc(CPU *cpu, u8 value)
 {
     if (cpu->P & FLAG_D)
     {
@@ -394,14 +394,14 @@ static void op_sbc(C64Cpu *cpu, u8 value)
     }
 }
 
-static void op_cmp(C64Cpu *cpu, u8 reg, u8 value)
+static void op_cmp(CPU *cpu, u8 reg, u8 value)
 {
     u16 result = reg - value;
     cpu_set_flag(cpu, FLAG_C, reg >= value);
     cpu_update_nz(cpu, result & 0xFF);
 }
 
-static u8 op_asl(C64Cpu *cpu, u8 value)
+static u8 op_asl(CPU *cpu, u8 value)
 {
     cpu_set_flag(cpu, FLAG_C, value & 0x80);
     value <<= 1;
@@ -409,7 +409,7 @@ static u8 op_asl(C64Cpu *cpu, u8 value)
     return value;
 }
 
-static u8 op_lsr(C64Cpu *cpu, u8 value)
+static u8 op_lsr(CPU *cpu, u8 value)
 {
     cpu_set_flag(cpu, FLAG_C, value & 0x01);
     value >>= 1;
@@ -417,7 +417,7 @@ static u8 op_lsr(C64Cpu *cpu, u8 value)
     return value;
 }
 
-static u8 op_rol(C64Cpu *cpu, u8 value)
+static u8 op_rol(CPU *cpu, u8 value)
 {
     bool old_carry = cpu->P & FLAG_C;
     cpu_set_flag(cpu, FLAG_C, value & 0x80);
@@ -426,7 +426,7 @@ static u8 op_rol(C64Cpu *cpu, u8 value)
     return value;
 }
 
-static u8 op_ror(C64Cpu *cpu, u8 value)
+static u8 op_ror(CPU *cpu, u8 value)
 {
     bool old_carry = cpu->P & FLAG_C;
     cpu_set_flag(cpu, FLAG_C, value & 0x01);
@@ -439,7 +439,7 @@ static u8 op_ror(C64Cpu *cpu, u8 value)
 // Helpers
 // ============================================================================
 
-static void do_branch(C64Cpu *cpu, bool condition)
+static void do_branch(CPU *cpu, bool condition)
 {
     i8 offset = (i8)cpu_read(cpu, cpu->PC++);
     if (condition)
@@ -456,7 +456,7 @@ static void do_branch(C64Cpu *cpu, bool condition)
     }
 }
 
-static void do_interrupt(C64Cpu *cpu, u16 vector, bool brk)
+static void do_interrupt(CPU *cpu, u16 vector, bool brk)
 {
     // Cycle 2: Read operand (discarded, but we read it)
     cpu_read(cpu, cpu->PC);
@@ -476,9 +476,9 @@ static void do_interrupt(C64Cpu *cpu, u16 vector, bool brk)
     // This is the only point where hijacking is checked according to 6502 behavior
     // Require age >= 1 to ensure NMI was pending BEFORE this cycle started
     // (NMI triggered during push P has age=0 and shouldn't hijack yet)
-    if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != 0xFFFA)
+    if (cpu->nmi_pending && cpu->nmi_pending_age >= 1 && vector != NMI)
     {
-        vector = 0xFFFA;
+        vector = NMI;
         cpu->nmi_pending = false;
         // Note: keep nmi_edge set - it's only cleared when ICR is read
         // This prevents spurious second NMI triggers
@@ -494,7 +494,7 @@ static void do_interrupt(C64Cpu *cpu, u16 vector, bool brk)
     }
 }
 
-void cpu_trigger_nmi(C64Cpu *cpu)
+void cpu_trigger_nmi(CPU *cpu)
 {
     if (!cpu->nmi_edge)
     {
@@ -504,7 +504,7 @@ void cpu_trigger_nmi(C64Cpu *cpu)
     }
 }
 
-void cpu_trigger_irq(C64Cpu *cpu)
+void cpu_trigger_irq(CPU *cpu)
 {
     cpu->irq_pending = true;
 }
@@ -514,56 +514,56 @@ void cpu_trigger_irq(C64Cpu *cpu)
 // ============================================================================
 
 // BRK
-static int op_00(C64Cpu *cpu)
+static int op_00(CPU *cpu)
 {
-    do_interrupt(cpu, 0xFFFE, true);
+    do_interrupt(cpu, IRQ, true);
     return 7;
 }
 
 // ORA
-static int op_01(C64Cpu *cpu)
+static int op_01(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_indirect_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_05(C64Cpu *cpu)
+static int op_05(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 3;
 }
-static int op_09(C64Cpu *cpu)
+static int op_09(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_0D(C64Cpu *cpu)
+static int op_0D(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_11(C64Cpu *cpu)
+static int op_11(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_indirect_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_15(C64Cpu *cpu)
+static int op_15(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_zeropage_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_19(C64Cpu *cpu)
+static int op_19(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_1D(C64Cpu *cpu)
+static int op_1D(CPU *cpu)
 {
     cpu->A |= cpu_read(cpu, addr_absolute_x(cpu, true));
     cpu_update_nz(cpu, cpu->A);
@@ -571,7 +571,7 @@ static int op_1D(C64Cpu *cpu)
 }
 
 // ASL
-static int op_06(C64Cpu *cpu)
+static int op_06(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -579,13 +579,13 @@ static int op_06(C64Cpu *cpu)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 5;
 }
-static int op_0A(C64Cpu *cpu)
+static int op_0A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = op_asl(cpu, cpu->A);
     return 2;
 }
-static int op_0E(C64Cpu *cpu)
+static int op_0E(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -593,7 +593,7 @@ static int op_0E(C64Cpu *cpu)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 6;
 }
-static int op_16(C64Cpu *cpu)
+static int op_16(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -601,7 +601,7 @@ static int op_16(C64Cpu *cpu)
     cpu_write(cpu, a, op_asl(cpu, v));
     return 6;
 }
-static int op_1E(C64Cpu *cpu)
+static int op_1E(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -611,26 +611,26 @@ static int op_1E(C64Cpu *cpu)
 }
 
 // PHP, PLP, PHA, PLA
-static int op_08(C64Cpu *cpu)
+static int op_08(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_push(cpu, cpu->P | FLAG_B | FLAG_U);
     return 3;
 }
-static int op_28(C64Cpu *cpu)
+static int op_28(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_read(cpu, 0x0100 | cpu->SP);
     cpu->P = (cpu_pop(cpu) & ~FLAG_B) | FLAG_U;
     return 4;
 }
-static int op_48(C64Cpu *cpu)
+static int op_48(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_push(cpu, cpu->A);
     return 3;
 }
-static int op_68(C64Cpu *cpu)
+static int op_68(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_read(cpu, 0x0100 | cpu->SP);
@@ -640,85 +640,85 @@ static int op_68(C64Cpu *cpu)
 }
 
 // Branches
-static int op_10(C64Cpu *cpu)
+static int op_10(CPU *cpu)
 {
     do_branch(cpu, !(cpu->P & FLAG_N));
     return 2;
 }
-static int op_30(C64Cpu *cpu)
+static int op_30(CPU *cpu)
 {
     do_branch(cpu, cpu->P & FLAG_N);
     return 2;
 }
-static int op_50(C64Cpu *cpu)
+static int op_50(CPU *cpu)
 {
     do_branch(cpu, !(cpu->P & FLAG_V));
     return 2;
 }
-static int op_70(C64Cpu *cpu)
+static int op_70(CPU *cpu)
 {
     do_branch(cpu, cpu->P & FLAG_V);
     return 2;
 }
-static int op_90(C64Cpu *cpu)
+static int op_90(CPU *cpu)
 {
     do_branch(cpu, !(cpu->P & FLAG_C));
     return 2;
 }
-static int op_B0(C64Cpu *cpu)
+static int op_B0(CPU *cpu)
 {
     do_branch(cpu, cpu->P & FLAG_C);
     return 2;
 }
-static int op_D0(C64Cpu *cpu)
+static int op_D0(CPU *cpu)
 {
     do_branch(cpu, !(cpu->P & FLAG_Z));
     return 2;
 }
-static int op_F0(C64Cpu *cpu)
+static int op_F0(CPU *cpu)
 {
     do_branch(cpu, cpu->P & FLAG_Z);
     return 2;
 }
 
 // Flags
-static int op_18(C64Cpu *cpu)
+static int op_18(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P &= ~FLAG_C;
     return 2;
 }
-static int op_38(C64Cpu *cpu)
+static int op_38(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P |= FLAG_C;
     return 2;
 }
-static int op_58(C64Cpu *cpu)
+static int op_58(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P &= ~FLAG_I;
     return 2;
 }
-static int op_78(C64Cpu *cpu)
+static int op_78(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P |= FLAG_I;
     return 2;
 }
-static int op_B8(C64Cpu *cpu)
+static int op_B8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P &= ~FLAG_V;
     return 2;
 }
-static int op_D8(C64Cpu *cpu)
+static int op_D8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P &= ~FLAG_D;
     return 2;
 }
-static int op_F8(C64Cpu *cpu)
+static int op_F8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->P |= FLAG_D;
@@ -726,49 +726,49 @@ static int op_F8(C64Cpu *cpu)
 }
 
 // AND
-static int op_21(C64Cpu *cpu)
+static int op_21(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_indirect_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_25(C64Cpu *cpu)
+static int op_25(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 3;
 }
-static int op_29(C64Cpu *cpu)
+static int op_29(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_2D(C64Cpu *cpu)
+static int op_2D(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_31(C64Cpu *cpu)
+static int op_31(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_indirect_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_35(C64Cpu *cpu)
+static int op_35(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_zeropage_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_39(C64Cpu *cpu)
+static int op_39(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_3D(C64Cpu *cpu)
+static int op_3D(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_absolute_x(cpu, true));
     cpu_update_nz(cpu, cpu->A);
@@ -776,7 +776,7 @@ static int op_3D(C64Cpu *cpu)
 }
 
 // BIT
-static int op_24(C64Cpu *cpu)
+static int op_24(CPU *cpu)
 {
     u8 v = cpu_read(cpu, addr_zeropage(cpu));
     cpu_set_flag(cpu, FLAG_Z, (cpu->A & v) == 0);
@@ -784,7 +784,7 @@ static int op_24(C64Cpu *cpu)
     cpu_set_flag(cpu, FLAG_V, v & 0x40);
     return 3;
 }
-static int op_2C(C64Cpu *cpu)
+static int op_2C(CPU *cpu)
 {
     u8 v = cpu_read(cpu, addr_absolute(cpu));
     cpu_set_flag(cpu, FLAG_Z, (cpu->A & v) == 0);
@@ -794,7 +794,7 @@ static int op_2C(C64Cpu *cpu)
 }
 
 // ROL
-static int op_26(C64Cpu *cpu)
+static int op_26(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -802,13 +802,13 @@ static int op_26(C64Cpu *cpu)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 5;
 }
-static int op_2A(C64Cpu *cpu)
+static int op_2A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = op_rol(cpu, cpu->A);
     return 2;
 }
-static int op_2E(C64Cpu *cpu)
+static int op_2E(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -816,7 +816,7 @@ static int op_2E(C64Cpu *cpu)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 6;
 }
-static int op_36(C64Cpu *cpu)
+static int op_36(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -824,7 +824,7 @@ static int op_36(C64Cpu *cpu)
     cpu_write(cpu, a, op_rol(cpu, v));
     return 6;
 }
-static int op_3E(C64Cpu *cpu)
+static int op_3E(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -834,7 +834,7 @@ static int op_3E(C64Cpu *cpu)
 }
 
 // RTI
-static int op_40(C64Cpu *cpu)
+static int op_40(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_read(cpu, 0x0100 | cpu->SP);
@@ -844,49 +844,49 @@ static int op_40(C64Cpu *cpu)
 }
 
 // EOR
-static int op_41(C64Cpu *cpu)
+static int op_41(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_indirect_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_45(C64Cpu *cpu)
+static int op_45(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 3;
 }
-static int op_49(C64Cpu *cpu)
+static int op_49(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_4D(C64Cpu *cpu)
+static int op_4D(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_51(C64Cpu *cpu)
+static int op_51(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_indirect_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_55(C64Cpu *cpu)
+static int op_55(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_zeropage_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_59(C64Cpu *cpu)
+static int op_59(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_5D(C64Cpu *cpu)
+static int op_5D(CPU *cpu)
 {
     cpu->A ^= cpu_read(cpu, addr_absolute_x(cpu, true));
     cpu_update_nz(cpu, cpu->A);
@@ -894,7 +894,7 @@ static int op_5D(C64Cpu *cpu)
 }
 
 // LSR
-static int op_46(C64Cpu *cpu)
+static int op_46(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -902,13 +902,13 @@ static int op_46(C64Cpu *cpu)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 5;
 }
-static int op_4A(C64Cpu *cpu)
+static int op_4A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = op_lsr(cpu, cpu->A);
     return 2;
 }
-static int op_4E(C64Cpu *cpu)
+static int op_4E(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -916,7 +916,7 @@ static int op_4E(C64Cpu *cpu)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 6;
 }
-static int op_56(C64Cpu *cpu)
+static int op_56(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -924,7 +924,7 @@ static int op_56(C64Cpu *cpu)
     cpu_write(cpu, a, op_lsr(cpu, v));
     return 6;
 }
-static int op_5E(C64Cpu *cpu)
+static int op_5E(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -934,19 +934,19 @@ static int op_5E(C64Cpu *cpu)
 }
 
 // JMP
-static int op_4C(C64Cpu *cpu)
+static int op_4C(CPU *cpu)
 {
     cpu->PC = addr_absolute(cpu);
     return 3;
 }
-static int op_6C(C64Cpu *cpu)
+static int op_6C(CPU *cpu)
 {
     cpu->PC = addr_indirect(cpu);
     return 5;
 }
 
 // RTS
-static int op_60(C64Cpu *cpu)
+static int op_60(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu_read(cpu, 0x0100 | cpu->SP);
@@ -956,49 +956,49 @@ static int op_60(C64Cpu *cpu)
 }
 
 // ADC
-static int op_61(C64Cpu *cpu)
+static int op_61(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_indirect_x(cpu)));
     return 6;
 }
-static int op_65(C64Cpu *cpu)
+static int op_65(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_zeropage(cpu)));
     return 3;
 }
-static int op_69(C64Cpu *cpu)
+static int op_69(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
-static int op_6D(C64Cpu *cpu)
+static int op_6D(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_absolute(cpu)));
     return 4;
 }
-static int op_71(C64Cpu *cpu)
+static int op_71(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_indirect_y(cpu, true)));
     return 5;
 }
-static int op_75(C64Cpu *cpu)
+static int op_75(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_zeropage_x(cpu)));
     return 4;
 }
-static int op_79(C64Cpu *cpu)
+static int op_79(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_absolute_y(cpu, true)));
     return 4;
 }
-static int op_7D(C64Cpu *cpu)
+static int op_7D(CPU *cpu)
 {
     op_adc(cpu, cpu_read(cpu, addr_absolute_x(cpu, true)));
     return 4;
 }
 
 // ROR
-static int op_66(C64Cpu *cpu)
+static int op_66(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1006,13 +1006,13 @@ static int op_66(C64Cpu *cpu)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 5;
 }
-static int op_6A(C64Cpu *cpu)
+static int op_6A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = op_ror(cpu, cpu->A);
     return 2;
 }
-static int op_6E(C64Cpu *cpu)
+static int op_6E(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1020,7 +1020,7 @@ static int op_6E(C64Cpu *cpu)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 6;
 }
-static int op_76(C64Cpu *cpu)
+static int op_76(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1028,7 +1028,7 @@ static int op_76(C64Cpu *cpu)
     cpu_write(cpu, a, op_ror(cpu, v));
     return 6;
 }
-static int op_7E(C64Cpu *cpu)
+static int op_7E(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1038,39 +1038,39 @@ static int op_7E(C64Cpu *cpu)
 }
 
 // STA
-static int op_81(C64Cpu *cpu)
+static int op_81(CPU *cpu)
 {
     cpu_write(cpu, addr_indirect_x(cpu), cpu->A);
     return 6;
 }
-static int op_85(C64Cpu *cpu)
+static int op_85(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage(cpu), cpu->A);
     return 3;
 }
-static int op_8D(C64Cpu *cpu)
+static int op_8D(CPU *cpu)
 {
     cpu_write(cpu, addr_absolute(cpu), cpu->A);
     return 4;
 }
-static int op_91(C64Cpu *cpu)
+static int op_91(CPU *cpu)
 {
     // STA (ind),Y always takes 6 cycles with dummy read
     cpu_write(cpu, addr_indirect_y_rmw(cpu), cpu->A);
     return 6;
 }
-static int op_95(C64Cpu *cpu)
+static int op_95(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage_x(cpu), cpu->A);
     return 4;
 }
-static int op_99(C64Cpu *cpu)
+static int op_99(CPU *cpu)
 {
     // STA abs,Y always takes 5 cycles, needs dummy read at possibly-wrong address
     cpu_write(cpu, addr_absolute_y_rmw(cpu), cpu->A);
     return 5;
 }
-static int op_9D(C64Cpu *cpu)
+static int op_9D(CPU *cpu)
 {
     // STA abs,X always takes 5 cycles, needs dummy read at possibly-wrong address
     cpu_write(cpu, addr_absolute_x_rmw(cpu), cpu->A);
@@ -1078,75 +1078,75 @@ static int op_9D(C64Cpu *cpu)
 }
 
 // STX
-static int op_86(C64Cpu *cpu)
+static int op_86(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage(cpu), cpu->X);
     return 3;
 }
-static int op_8E(C64Cpu *cpu)
+static int op_8E(CPU *cpu)
 {
     cpu_write(cpu, addr_absolute(cpu), cpu->X);
     return 4;
 }
-static int op_96(C64Cpu *cpu)
+static int op_96(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage_y(cpu), cpu->X);
     return 4;
 }
 
 // STY
-static int op_84(C64Cpu *cpu)
+static int op_84(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage(cpu), cpu->Y);
     return 3;
 }
-static int op_8C(C64Cpu *cpu)
+static int op_8C(CPU *cpu)
 {
     cpu_write(cpu, addr_absolute(cpu), cpu->Y);
     return 4;
 }
-static int op_94(C64Cpu *cpu)
+static int op_94(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage_x(cpu), cpu->Y);
     return 4;
 }
 
 // Transfers
-static int op_8A(C64Cpu *cpu)
+static int op_8A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = cpu->X;
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_98(C64Cpu *cpu)
+static int op_98(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->A = cpu->Y;
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_9A(C64Cpu *cpu)
+static int op_9A(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->SP = cpu->X;
     return 2;
 }
-static int op_AA(C64Cpu *cpu)
+static int op_AA(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->X = cpu->A;
     cpu_update_nz(cpu, cpu->X);
     return 2;
 }
-static int op_BA(C64Cpu *cpu)
+static int op_BA(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->X = cpu->SP;
     cpu_update_nz(cpu, cpu->X);
     return 2;
 }
-static int op_A8(C64Cpu *cpu)
+static int op_A8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->Y = cpu->A;
@@ -1155,28 +1155,28 @@ static int op_A8(C64Cpu *cpu)
 }
 
 // DEY, DEX, INY, INX
-static int op_88(C64Cpu *cpu)
+static int op_88(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->Y--;
     cpu_update_nz(cpu, cpu->Y);
     return 2;
 }
-static int op_CA(C64Cpu *cpu)
+static int op_CA(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->X--;
     cpu_update_nz(cpu, cpu->X);
     return 2;
 }
-static int op_C8(C64Cpu *cpu)
+static int op_C8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->Y++;
     cpu_update_nz(cpu, cpu->Y);
     return 2;
 }
-static int op_E8(C64Cpu *cpu)
+static int op_E8(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     cpu->X++;
@@ -1185,49 +1185,49 @@ static int op_E8(C64Cpu *cpu)
 }
 
 // LDA
-static int op_A1(C64Cpu *cpu)
+static int op_A1(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_indirect_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_A5(C64Cpu *cpu)
+static int op_A5(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 3;
 }
-static int op_A9(C64Cpu *cpu)
+static int op_A9(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 2;
 }
-static int op_AD(C64Cpu *cpu)
+static int op_AD(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_B1(C64Cpu *cpu)
+static int op_B1(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_indirect_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_B5(C64Cpu *cpu)
+static int op_B5(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_zeropage_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_B9(C64Cpu *cpu)
+static int op_B9(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_BD(C64Cpu *cpu)
+static int op_BD(CPU *cpu)
 {
     cpu->A = cpu_read(cpu, addr_absolute_x(cpu, true));
     cpu_update_nz(cpu, cpu->A);
@@ -1235,31 +1235,31 @@ static int op_BD(C64Cpu *cpu)
 }
 
 // LDX
-static int op_A2(C64Cpu *cpu)
+static int op_A2(CPU *cpu)
 {
     cpu->X = cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->X);
     return 2;
 }
-static int op_A6(C64Cpu *cpu)
+static int op_A6(CPU *cpu)
 {
     cpu->X = cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->X);
     return 3;
 }
-static int op_AE(C64Cpu *cpu)
+static int op_AE(CPU *cpu)
 {
     cpu->X = cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->X);
     return 4;
 }
-static int op_B6(C64Cpu *cpu)
+static int op_B6(CPU *cpu)
 {
     cpu->X = cpu_read(cpu, addr_zeropage_y(cpu));
     cpu_update_nz(cpu, cpu->X);
     return 4;
 }
-static int op_BE(C64Cpu *cpu)
+static int op_BE(CPU *cpu)
 {
     cpu->X = cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->X);
@@ -1267,31 +1267,31 @@ static int op_BE(C64Cpu *cpu)
 }
 
 // LDY
-static int op_A0(C64Cpu *cpu)
+static int op_A0(CPU *cpu)
 {
     cpu->Y = cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->Y);
     return 2;
 }
-static int op_A4(C64Cpu *cpu)
+static int op_A4(CPU *cpu)
 {
     cpu->Y = cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->Y);
     return 3;
 }
-static int op_AC(C64Cpu *cpu)
+static int op_AC(CPU *cpu)
 {
     cpu->Y = cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->Y);
     return 4;
 }
-static int op_B4(C64Cpu *cpu)
+static int op_B4(CPU *cpu)
 {
     cpu->Y = cpu_read(cpu, addr_zeropage_x(cpu));
     cpu_update_nz(cpu, cpu->Y);
     return 4;
 }
-static int op_BC(C64Cpu *cpu)
+static int op_BC(CPU *cpu)
 {
     cpu->Y = cpu_read(cpu, addr_absolute_x(cpu, true));
     cpu_update_nz(cpu, cpu->Y);
@@ -1299,83 +1299,83 @@ static int op_BC(C64Cpu *cpu)
 }
 
 // CMP
-static int op_C1(C64Cpu *cpu)
+static int op_C1(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_indirect_x(cpu)));
     return 6;
 }
-static int op_C5(C64Cpu *cpu)
+static int op_C5(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_zeropage(cpu)));
     return 3;
 }
-static int op_C9(C64Cpu *cpu)
+static int op_C9(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
-static int op_CD(C64Cpu *cpu)
+static int op_CD(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_absolute(cpu)));
     return 4;
 }
-static int op_D1(C64Cpu *cpu)
+static int op_D1(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_indirect_y(cpu, true)));
     return 5;
 }
-static int op_D5(C64Cpu *cpu)
+static int op_D5(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_zeropage_x(cpu)));
     return 4;
 }
-static int op_D9(C64Cpu *cpu)
+static int op_D9(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_absolute_y(cpu, true)));
     return 4;
 }
-static int op_DD(C64Cpu *cpu)
+static int op_DD(CPU *cpu)
 {
     op_cmp(cpu, cpu->A, cpu_read(cpu, addr_absolute_x(cpu, true)));
     return 4;
 }
 
 // CPX
-static int op_E0(C64Cpu *cpu)
+static int op_E0(CPU *cpu)
 {
     op_cmp(cpu, cpu->X, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
-static int op_E4(C64Cpu *cpu)
+static int op_E4(CPU *cpu)
 {
     op_cmp(cpu, cpu->X, cpu_read(cpu, addr_zeropage(cpu)));
     return 3;
 }
-static int op_EC(C64Cpu *cpu)
+static int op_EC(CPU *cpu)
 {
     op_cmp(cpu, cpu->X, cpu_read(cpu, addr_absolute(cpu)));
     return 4;
 }
 
 // CPY
-static int op_C0(C64Cpu *cpu)
+static int op_C0(CPU *cpu)
 {
     op_cmp(cpu, cpu->Y, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
-static int op_C4(C64Cpu *cpu)
+static int op_C4(CPU *cpu)
 {
     op_cmp(cpu, cpu->Y, cpu_read(cpu, addr_zeropage(cpu)));
     return 3;
 }
-static int op_CC(C64Cpu *cpu)
+static int op_CC(CPU *cpu)
 {
     op_cmp(cpu, cpu->Y, cpu_read(cpu, addr_absolute(cpu)));
     return 4;
 }
 
 // DEC
-static int op_C6(C64Cpu *cpu)
+static int op_C6(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1385,7 +1385,7 @@ static int op_C6(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 5;
 }
-static int op_CE(C64Cpu *cpu)
+static int op_CE(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1395,7 +1395,7 @@ static int op_CE(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 6;
 }
-static int op_D6(C64Cpu *cpu)
+static int op_D6(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1405,7 +1405,7 @@ static int op_D6(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 6;
 }
-static int op_DE(C64Cpu *cpu)
+static int op_DE(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1417,7 +1417,7 @@ static int op_DE(C64Cpu *cpu)
 }
 
 // INC
-static int op_E6(C64Cpu *cpu)
+static int op_E6(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1427,7 +1427,7 @@ static int op_E6(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 5;
 }
-static int op_EE(C64Cpu *cpu)
+static int op_EE(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1437,7 +1437,7 @@ static int op_EE(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 6;
 }
-static int op_F6(C64Cpu *cpu)
+static int op_F6(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1447,7 +1447,7 @@ static int op_F6(C64Cpu *cpu)
     cpu_update_nz(cpu, v);
     return 6;
 }
-static int op_FE(C64Cpu *cpu)
+static int op_FE(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1459,49 +1459,49 @@ static int op_FE(C64Cpu *cpu)
 }
 
 // SBC
-static int op_E1(C64Cpu *cpu)
+static int op_E1(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_indirect_x(cpu)));
     return 6;
 }
-static int op_E5(C64Cpu *cpu)
+static int op_E5(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_zeropage(cpu)));
     return 3;
 }
-static int op_E9(C64Cpu *cpu)
+static int op_E9(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
-static int op_ED(C64Cpu *cpu)
+static int op_ED(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_absolute(cpu)));
     return 4;
 }
-static int op_F1(C64Cpu *cpu)
+static int op_F1(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_indirect_y(cpu, true)));
     return 5;
 }
-static int op_F5(C64Cpu *cpu)
+static int op_F5(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_zeropage_x(cpu)));
     return 4;
 }
-static int op_F9(C64Cpu *cpu)
+static int op_F9(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_absolute_y(cpu, true)));
     return 4;
 }
-static int op_FD(C64Cpu *cpu)
+static int op_FD(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_absolute_x(cpu, true)));
     return 4;
 }
 
 // JSR
-static int op_20(C64Cpu *cpu)
+static int op_20(CPU *cpu)
 {
     u16 target = cpu_read(cpu, cpu->PC++);
     cpu_read(cpu, 0x0100 | cpu->SP);
@@ -1512,7 +1512,7 @@ static int op_20(C64Cpu *cpu)
 }
 
 // NOP
-static int op_EA(C64Cpu *cpu)
+static int op_EA(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     return 2;
@@ -1523,28 +1523,28 @@ static int op_EA(C64Cpu *cpu)
 // ============================================================================
 
 // JAM/HLT - Halt the CPU (requires reset to recover)
-static int op_JAM(C64Cpu *cpu)
+static int op_JAM(CPU *cpu)
 {
     cpu->PC--; // Stay at this instruction forever
     return 2;
 }
 
 // NOP variants - implied (1 byte, 2 cycles)
-static int op_NOP_impl(C64Cpu *cpu)
+static int op_NOP_impl(CPU *cpu)
 {
     cpu_read(cpu, cpu->PC);
     return 2;
 }
 
 // NOP variants - immediate (2 bytes, 2 cycles) - also known as SKB/DOP
-static int op_NOP_imm(C64Cpu *cpu)
+static int op_NOP_imm(CPU *cpu)
 {
     cpu_read(cpu, addr_immediate(cpu)); // read and discard operand
     return 2;
 }
 
 // NOP variants - zeropage (2 bytes, 3 cycles)
-static int op_NOP_zp(C64Cpu *cpu)
+static int op_NOP_zp(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     cpu_read(cpu, a); // dummy read
@@ -1552,7 +1552,7 @@ static int op_NOP_zp(C64Cpu *cpu)
 }
 
 // NOP variants - zeropage,x (2 bytes, 4 cycles)
-static int op_NOP_zpx(C64Cpu *cpu)
+static int op_NOP_zpx(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     cpu_read(cpu, a); // dummy read
@@ -1560,7 +1560,7 @@ static int op_NOP_zpx(C64Cpu *cpu)
 }
 
 // NOP variants - absolute (3 bytes, 4 cycles) - also known as SKW/TOP
-static int op_NOP_abs(C64Cpu *cpu)
+static int op_NOP_abs(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     cpu_read(cpu, a); // dummy read
@@ -1568,7 +1568,7 @@ static int op_NOP_abs(C64Cpu *cpu)
 }
 
 // NOP variants - absolute,x (3 bytes, 4+ cycles)
-static int op_NOP_abx(C64Cpu *cpu)
+static int op_NOP_abx(CPU *cpu)
 {
     u16 a = addr_absolute_x(cpu, true);
     cpu_read(cpu, a); // dummy read
@@ -1576,7 +1576,7 @@ static int op_NOP_abx(C64Cpu *cpu)
 }
 
 // SLO (ASO) - ASL memory then ORA with A
-static int op_03(C64Cpu *cpu)
+static int op_03(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1587,7 +1587,7 @@ static int op_03(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_07(C64Cpu *cpu)
+static int op_07(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1598,7 +1598,7 @@ static int op_07(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_0F(C64Cpu *cpu)
+static int op_0F(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1609,7 +1609,7 @@ static int op_0F(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_13(C64Cpu *cpu)
+static int op_13(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1620,7 +1620,7 @@ static int op_13(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_17(C64Cpu *cpu)
+static int op_17(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1631,7 +1631,7 @@ static int op_17(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_1B(C64Cpu *cpu)
+static int op_1B(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1642,7 +1642,7 @@ static int op_1B(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 7;
 }
-static int op_1F(C64Cpu *cpu)
+static int op_1F(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1655,7 +1655,7 @@ static int op_1F(C64Cpu *cpu)
 }
 
 // RLA - ROL memory then AND with A
-static int op_23(C64Cpu *cpu)
+static int op_23(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1666,7 +1666,7 @@ static int op_23(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_27(C64Cpu *cpu)
+static int op_27(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1677,7 +1677,7 @@ static int op_27(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_2F(C64Cpu *cpu)
+static int op_2F(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1688,7 +1688,7 @@ static int op_2F(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_33(C64Cpu *cpu)
+static int op_33(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1699,7 +1699,7 @@ static int op_33(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_37(C64Cpu *cpu)
+static int op_37(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1710,7 +1710,7 @@ static int op_37(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_3B(C64Cpu *cpu)
+static int op_3B(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1721,7 +1721,7 @@ static int op_3B(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 7;
 }
-static int op_3F(C64Cpu *cpu)
+static int op_3F(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1734,7 +1734,7 @@ static int op_3F(C64Cpu *cpu)
 }
 
 // SRE (LSE) - LSR memory then EOR with A
-static int op_43(C64Cpu *cpu)
+static int op_43(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1745,7 +1745,7 @@ static int op_43(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_47(C64Cpu *cpu)
+static int op_47(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1756,7 +1756,7 @@ static int op_47(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_4F(C64Cpu *cpu)
+static int op_4F(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1767,7 +1767,7 @@ static int op_4F(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_53(C64Cpu *cpu)
+static int op_53(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1778,7 +1778,7 @@ static int op_53(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 8;
 }
-static int op_57(C64Cpu *cpu)
+static int op_57(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1789,7 +1789,7 @@ static int op_57(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_5B(C64Cpu *cpu)
+static int op_5B(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1800,7 +1800,7 @@ static int op_5B(C64Cpu *cpu)
     cpu_update_nz(cpu, cpu->A);
     return 7;
 }
-static int op_5F(C64Cpu *cpu)
+static int op_5F(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1813,7 +1813,7 @@ static int op_5F(C64Cpu *cpu)
 }
 
 // RRA - ROR memory then ADC with A
-static int op_63(C64Cpu *cpu)
+static int op_63(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1823,7 +1823,7 @@ static int op_63(C64Cpu *cpu)
     op_adc(cpu, v);
     return 8;
 }
-static int op_67(C64Cpu *cpu)
+static int op_67(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1833,7 +1833,7 @@ static int op_67(C64Cpu *cpu)
     op_adc(cpu, v);
     return 5;
 }
-static int op_6F(C64Cpu *cpu)
+static int op_6F(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1843,7 +1843,7 @@ static int op_6F(C64Cpu *cpu)
     op_adc(cpu, v);
     return 6;
 }
-static int op_73(C64Cpu *cpu)
+static int op_73(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1853,7 +1853,7 @@ static int op_73(C64Cpu *cpu)
     op_adc(cpu, v);
     return 8;
 }
-static int op_77(C64Cpu *cpu)
+static int op_77(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1863,7 +1863,7 @@ static int op_77(C64Cpu *cpu)
     op_adc(cpu, v);
     return 6;
 }
-static int op_7B(C64Cpu *cpu)
+static int op_7B(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1873,7 +1873,7 @@ static int op_7B(C64Cpu *cpu)
     op_adc(cpu, v);
     return 7;
 }
-static int op_7F(C64Cpu *cpu)
+static int op_7F(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1885,59 +1885,59 @@ static int op_7F(C64Cpu *cpu)
 }
 
 // SAX (AXS) - Store A & X to memory (no flags affected)
-static int op_83(C64Cpu *cpu)
+static int op_83(CPU *cpu)
 {
     cpu_write(cpu, addr_indirect_x(cpu), cpu->A & cpu->X);
     return 6;
 }
-static int op_87(C64Cpu *cpu)
+static int op_87(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage(cpu), cpu->A & cpu->X);
     return 3;
 }
-static int op_8F(C64Cpu *cpu)
+static int op_8F(CPU *cpu)
 {
     cpu_write(cpu, addr_absolute(cpu), cpu->A & cpu->X);
     return 4;
 }
-static int op_97(C64Cpu *cpu)
+static int op_97(CPU *cpu)
 {
     cpu_write(cpu, addr_zeropage_y(cpu), cpu->A & cpu->X);
     return 4;
 }
 
 // LAX - Load A and X with memory
-static int op_A3(C64Cpu *cpu)
+static int op_A3(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_indirect_x(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 6;
 }
-static int op_A7(C64Cpu *cpu)
+static int op_A7(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_zeropage(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 3;
 }
-static int op_AF(C64Cpu *cpu)
+static int op_AF(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_absolute(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_B3(C64Cpu *cpu)
+static int op_B3(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_indirect_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
     return 5;
 }
-static int op_B7(C64Cpu *cpu)
+static int op_B7(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_zeropage_y(cpu));
     cpu_update_nz(cpu, cpu->A);
     return 4;
 }
-static int op_BF(C64Cpu *cpu)
+static int op_BF(CPU *cpu)
 {
     cpu->A = cpu->X = cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu_update_nz(cpu, cpu->A);
@@ -1945,7 +1945,7 @@ static int op_BF(C64Cpu *cpu)
 }
 
 // DCP (DCM) - DEC memory then CMP with A
-static int op_C3(C64Cpu *cpu)
+static int op_C3(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1955,7 +1955,7 @@ static int op_C3(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 8;
 }
-static int op_C7(C64Cpu *cpu)
+static int op_C7(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1965,7 +1965,7 @@ static int op_C7(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 5;
 }
-static int op_CF(C64Cpu *cpu)
+static int op_CF(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1975,7 +1975,7 @@ static int op_CF(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 6;
 }
-static int op_D3(C64Cpu *cpu)
+static int op_D3(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1985,7 +1985,7 @@ static int op_D3(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 8;
 }
-static int op_D7(C64Cpu *cpu)
+static int op_D7(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -1995,7 +1995,7 @@ static int op_D7(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 6;
 }
-static int op_DB(C64Cpu *cpu)
+static int op_DB(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2005,7 +2005,7 @@ static int op_DB(C64Cpu *cpu)
     op_cmp(cpu, cpu->A, v);
     return 7;
 }
-static int op_DF(C64Cpu *cpu)
+static int op_DF(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2017,7 +2017,7 @@ static int op_DF(C64Cpu *cpu)
 }
 
 // ISC (ISB/INS) - INC memory then SBC with A
-static int op_E3(C64Cpu *cpu)
+static int op_E3(CPU *cpu)
 {
     u16 a = addr_indirect_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2027,7 +2027,7 @@ static int op_E3(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 8;
 }
-static int op_E7(C64Cpu *cpu)
+static int op_E7(CPU *cpu)
 {
     u16 a = addr_zeropage(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2037,7 +2037,7 @@ static int op_E7(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 5;
 }
-static int op_EF(C64Cpu *cpu)
+static int op_EF(CPU *cpu)
 {
     u16 a = addr_absolute(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2047,7 +2047,7 @@ static int op_EF(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 6;
 }
-static int op_F3(C64Cpu *cpu)
+static int op_F3(CPU *cpu)
 {
     u16 a = addr_indirect_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2057,7 +2057,7 @@ static int op_F3(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 8;
 }
-static int op_F7(C64Cpu *cpu)
+static int op_F7(CPU *cpu)
 {
     u16 a = addr_zeropage_x(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2067,7 +2067,7 @@ static int op_F7(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 6;
 }
-static int op_FB(C64Cpu *cpu)
+static int op_FB(CPU *cpu)
 {
     u16 a = addr_absolute_y_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2077,7 +2077,7 @@ static int op_FB(C64Cpu *cpu)
     op_sbc(cpu, v);
     return 7;
 }
-static int op_FF(C64Cpu *cpu)
+static int op_FF(CPU *cpu)
 {
     u16 a = addr_absolute_x_rmw(cpu);
     u8 v = cpu_read(cpu, a);
@@ -2089,14 +2089,14 @@ static int op_FF(C64Cpu *cpu)
 }
 
 // ANC (AAC) - AND immediate, then copy N to C
-static int op_0B(C64Cpu *cpu)
+static int op_0B(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
     cpu_set_flag(cpu, FLAG_C, cpu->P & FLAG_N);
     return 2;
 }
-static int op_2B(C64Cpu *cpu)
+static int op_2B(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_immediate(cpu));
     cpu_update_nz(cpu, cpu->A);
@@ -2105,7 +2105,7 @@ static int op_2B(C64Cpu *cpu)
 }
 
 // ALR (ASR) - AND immediate then LSR A
-static int op_4B(C64Cpu *cpu)
+static int op_4B(CPU *cpu)
 {
     cpu->A &= cpu_read(cpu, addr_immediate(cpu));
     cpu->A = op_lsr(cpu, cpu->A);
@@ -2113,7 +2113,7 @@ static int op_4B(C64Cpu *cpu)
 }
 
 // ARR - AND immediate then ROR A with special flag handling
-static int op_6B(C64Cpu *cpu)
+static int op_6B(CPU *cpu)
 {
     u8 imm = cpu_read(cpu, addr_immediate(cpu));
     cpu->A &= imm;
@@ -2165,7 +2165,7 @@ static int op_6B(C64Cpu *cpu)
 }
 
 // XAA (ANE) - TXA then AND immediate (unstable - uses magic constant)
-static int op_8B(C64Cpu *cpu)
+static int op_8B(CPU *cpu)
 {
     // Most common behavior: A = (A | $EE) & X & imm
     // We use $EE as the magic constant for compatibility
@@ -2175,7 +2175,7 @@ static int op_8B(C64Cpu *cpu)
 }
 
 // LAX immediate (LXA/OAL/ATX) - unstable
-static int op_AB(C64Cpu *cpu)
+static int op_AB(CPU *cpu)
 {
     // Most common: A = X = (A | $EE) & imm
     cpu->A = (cpu->A | 0xEE) & cpu_read(cpu, addr_immediate(cpu));
@@ -2185,7 +2185,7 @@ static int op_AB(C64Cpu *cpu)
 }
 
 // SBX (AXS/SAX) - (A & X) - immediate -> X, sets flags like CMP
-static int op_CB(C64Cpu *cpu)
+static int op_CB(CPU *cpu)
 {
     u8 imm = cpu_read(cpu, addr_immediate(cpu));
     u8 ax = cpu->A & cpu->X;
@@ -2197,14 +2197,14 @@ static int op_CB(C64Cpu *cpu)
 }
 
 // SBC immediate (USBC) - identical to regular SBC #imm
-static int op_EB(C64Cpu *cpu)
+static int op_EB(CPU *cpu)
 {
     op_sbc(cpu, cpu_read(cpu, addr_immediate(cpu)));
     return 2;
 }
 
 // SHA (AXA/AHX) - Store A & X & (addr_hi + 1)
-static int op_93(C64Cpu *cpu)
+static int op_93(CPU *cpu)
 {
     u8 ptr = cpu_read(cpu, cpu->PC++);
     u16 lo = cpu_read(cpu, ptr);
@@ -2223,7 +2223,7 @@ static int op_93(C64Cpu *cpu)
     return 6;
 }
 
-static int op_9F(C64Cpu *cpu)
+static int op_9F(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -2241,7 +2241,7 @@ static int op_9F(C64Cpu *cpu)
 }
 
 // TAS (SHS/XAS) - S = A & X, then store S & (addr_hi + 1)
-static int op_9B(C64Cpu *cpu)
+static int op_9B(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -2260,7 +2260,7 @@ static int op_9B(C64Cpu *cpu)
 }
 
 // SHY (SAY/SYA) - Store Y & (addr_hi + 1)
-static int op_9C(C64Cpu *cpu)
+static int op_9C(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -2278,7 +2278,7 @@ static int op_9C(C64Cpu *cpu)
 }
 
 // SHX (SXA/XAS) - Store X & (addr_hi + 1)
-static int op_9E(C64Cpu *cpu)
+static int op_9E(CPU *cpu)
 {
     u16 lo = cpu_read(cpu, cpu->PC++);
     u16 hi = cpu_read(cpu, cpu->PC++);
@@ -2296,7 +2296,7 @@ static int op_9E(C64Cpu *cpu)
 }
 
 // LAS (LAR) - AND memory with SP, store to A, X, and SP
-static int op_BB(C64Cpu *cpu)
+static int op_BB(CPU *cpu)
 {
     u8 v = cpu_read(cpu, addr_absolute_y(cpu, true));
     cpu->A = cpu->X = cpu->SP = v & cpu->SP;
@@ -2587,7 +2587,7 @@ static const OpcodeHandler opcode_table[256] = {
 // CPU Step - Execute one instruction using LUT
 // ============================================================================
 
-int cpu_step(C64Cpu *cpu)
+int cpu_step(CPU *cpu)
 {
     cpu->extra_cycles = 0;
     cpu->page_crossed = false;
@@ -2634,7 +2634,7 @@ int cpu_step(C64Cpu *cpu)
         cpu->nmi_pending = false;
         cpu->nmi_triggered_this_insn = false;  // Clear this too - NMI is being taken
         // Note: nmi_edge stays set - it's cleared when ICR is read
-        do_interrupt(cpu, 0xFFFA, false);
+        do_interrupt(cpu, NMI, false);
         return cycles + cpu->extra_cycles + 7;
     }
 
@@ -2651,7 +2651,7 @@ int cpu_step(C64Cpu *cpu)
     if (take_irq && !i_flag_at_start)
     {
         cpu->irq_pending = false;
-        do_interrupt(cpu, 0xFFFE, false);
+        do_interrupt(cpu, IRQ, false);
         return cycles + cpu->extra_cycles + 7;
     }
 

@@ -3,10 +3,17 @@
 
 #include "c64.h"
 
-void cpu_init(C64CPU* cpu);
-void cpu_interrupt(C64* sys, bool nmi);
-void cpu_step(C64* sys);
-bool cpu_get_flag(C64CPU* cpu, u8 flag);
+void cpu_init(C64CPU *cpu);
+void cpu_interrupt(C64 *sys, bool nmi);
+void cpu_step(C64 *sys);
+bool cpu_get_flag(C64CPU *cpu, u8 flag);
+
+#define PCL 0x01FE
+#define PCH 0x01FF
+
+#define NMI 0xFFFA   // WORD
+#define RESET 0xFFFC // WORD
+#define IRQ 0xFFFE   // WORD
 
 // Flag constants
 #define FLAG_C 0x01

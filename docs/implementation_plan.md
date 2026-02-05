@@ -8,7 +8,7 @@ The emulator uses a centralized "heartbeat" mechanism to ensure all components r
 
 ### [c64_tick](file:///home/phil/Projects/Gemini/src/c64.c)
 - Central function that advances **VIC-II**, **CIA 1/2**, and **SID** by one cycle.
-- Increments the global `sys->cycle_count`.
+- Increments the global `sys->cycles`.
 - Implicitly called by every CPU instruction through memory access.
 
 ### [Memory Access Ticking](file:///home/phil/Projects/Gemini/src/memory.c)
@@ -17,7 +17,7 @@ The emulator uses a centralized "heartbeat" mechanism to ensure all components r
 
 ### [IRQ Loop Diagnosis]
 - Resolved VIC-II clobbering raster target ($D011/$D012) in `vic_step`, causing interrupts every line.
-- Implementing separate `raster_irq_line` latch in `C64Vic`.
+- Implementing separate `raster_irq_line` latch in `VIC`.
 - Refining CIA ICR bit 7 persistence: it should stay set until READ, reflecting enabled interrupts.
 - Improving diagnostic logging in `c64_tick` to use reliable thresholds.
 

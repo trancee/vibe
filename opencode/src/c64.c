@@ -32,7 +32,7 @@ void c64_tick(C64* sys) {
     cia_clock(&sys->cia2);
     vic_clock(&sys->vic);
     
-    sys->mem.cycle_count++;
+    sys->mem.cycles++;
     
     // Check for IRQs from CIA1
     if (sys->cia1.irq_pending && !cpu_get_flag(&sys->cpu, FLAG_I)) {

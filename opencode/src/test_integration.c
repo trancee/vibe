@@ -170,12 +170,12 @@ bool test_system_integration(void) {
     
     // Test CPU memory accesses trigger automatic clocking
     // This is a key integration point - CPU reads/writes should advance system clock
-    u64 initial_cycles = sys.mem.cycle_count;
+    u64 initial_cycles = sys.mem.cycles;
     
     // Simulate CPU memory write (would normally call c64_write())
     sys.mem.ram[0x1000] = 0x42;
     
-    // In proper implementation, this should increment cycle_count
+    // In proper implementation, this should increment cycles
     // For now, we just test the concept
     TEST_ASSERT(initial_cycles >= 0, "Cycle count should be tracked");
     
@@ -225,9 +225,9 @@ bool test_lorenz_suite_compliance(void) {
     sys.cpu.pc = 0x1000;
     sys.cpu.status &= ~FLAG_Z; // Take branch
     
-    u64 start_cycles = sys.mem.cycle_count;
+    u64 start_cycles = sys.mem.cycles;
     cpu_step(&sys);
-    u64 end_cycles = sys.mem.cycle_count;
+    u64 end_cycles = sys.mem.cycles;
     u64 branch_cycles = end_cycles - start_cycles;
     
     printf("Taken branch cycles: %llu\n", branch_cycles);
@@ -240,9 +240,9 @@ bool test_lorenz_suite_compliance(void) {
     sys.cpu.pc = 0x1000;
     sys.cpu.x = 0xFF; // Cause page cross
     
-    start_cycles = sys.mem.cycle_count;
+    start_cycles = sys.mem.cycles;
     cpu_step(&sys);
-    end_cycles = sys.mem.cycle_count;
+    end_cycles = sys.mem.cycles;
     u64 page_cross_cycles = end_cycles - start_cycles;
     
     printf("Page cross cycles: %llu\n", page_cross_cycles);
@@ -278,13 +278,13 @@ bool test_lorenz_suite_compliance(void) {
     
     // Test that different memory regions have different access patterns
     // RAM access should be fast, I/O access may insert wait states
-    u64 ram_start = sys.mem.cycle_count;
+    u64 ram_start = sys.mem.cycles;
     u8 ram_val = sys.mem.ram[0x1000]; // RAM access
-    u64 ram_end = sys.mem.cycle_count;
+    u64 ram_end = sys.mem.cycles;
     
-    u64 io_start = sys.mem.cycle_count;
+    u64 io_start = sys.mem.cycles;
     u8 vic_val = cia_read_reg(&sys.cia1, 0x00); // I/O access
-    u64 io_end = sys.mem.cycle_count;
+    u64 io_end = sys.mem.cycles;
     
     printf("RAM access cycles: %llu\n", ram_end - ram_start);
     printf("I/O access cycles: %llu\n", io_end - io_start);

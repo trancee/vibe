@@ -3,10 +3,11 @@
  * @brief SID file format parser implementation
  */
 
-#include "sid_file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "sid_file.h"
 
 /* Read a big-endian 16-bit value from buffer */
 static uint16_t read_be16(const uint8_t *buf) {

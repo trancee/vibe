@@ -6,13 +6,13 @@
 
 uint8_t c64_read(void *c64, uint16_t addr)
 {
-    printf("C64 #$%04X → $??\n", addr);
+    // printf("C64 #$%04X → $??\n", addr);
 
     return c64_read_byte((C64 *)c64, addr);
 }
 void c64_write(void *c64, uint16_t addr, uint8_t data)
 {
-    printf("C64 WRITE #$%04X ← $%02X\n", addr, data);
+    // printf("C64 #$%04X ← $%02X\n", addr, data);
 
     c64_write_byte((C64 *)c64, addr, data);
 }
@@ -53,15 +53,6 @@ void c64_init(C64 *c64)
 void c64_reset(C64 *c64)
 {
     mem_reset(&c64->mem);
-
-    cpu_reset(&c64->cpu);
-
-    cia_reset(&c64->cia1);
-    cia_reset(&c64->cia2);
-
-    vic_reset(&c64->vic);
-
-    sid_reset(&c64->sid);
 
     // https://sta.c64.org/cbm64mem.html
 
@@ -159,6 +150,15 @@ void c64_reset(C64 *c64)
     c64_write_word(c64, RESET, 0xFCE2);
     /// Execution address of interrupt service routine.
     c64_write_word(c64, IRQ, 0xFF48);
+
+    cpu_reset(&c64->cpu);
+
+    cia_reset(&c64->cia1);
+    cia_reset(&c64->cia2);
+
+    vic_reset(&c64->vic);
+
+    sid_reset(&c64->sid);
 }
 void c64_reset_pc(C64 *c64, uint16_t addr)
 {
@@ -286,7 +286,7 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
     data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
 
-    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr)) // %x00
+    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr) || ddr.v == 0x00 && dr.v == 0x00) // %x00
     {
         // RAM visible in all three areas.
     }
@@ -347,24 +347,24 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
         }
     }
 
-    if (addr == R6510)
-    {
-        /*
-            0=ff 1=ff 0=00 1=ff 1=ff 1=ff
-            after  00 ff
-            right  00 df
-        */
-        if (ddr.v == 0x00 && dr.v == 0xFF)
-            return 0xDF; // bit 5 is drawn low if input
-                         /*
-                              0=ff 1=ff 1=00 0=00 1=ff 1=ff
-                              after  00 df
-                              right  00 17
-                         */
-    }
+    // if (addr == R6510)
+    // {
+    //     /*
+    //         0=ff 1=ff 0=00 1=ff 1=ff 1=ff
+    //         after  00 ff
+    //         right  00 df
+    //     */
+    //     if (ddr.v == 0x00 && dr.v == 0xFF)
+    //         return 0xDF; // bit 5 is drawn low if input
+    //                      /*
+    //                           0=ff 1=ff 1=00 0=00 1=ff 1=ff
+    //                           after  00 df
+    //                           right  00 17
+    //                      */
+    // }
 
-    // printf("C64 #$%04X → $%02X\n", addr, cpu_read(&c64->cpu, addr));
-    return mem_read(&c64->mem, addr);
+    // printf("C64 #$%04X → $%02X\n", addr, mem_read_raw(&c64->mem, addr));
+    return mem_read_raw(&c64->mem, addr);
 }
 uint16_t c64_read_word(C64 *c64, uint16_t addr)
 {
@@ -373,15 +373,15 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    data_direction_register_t ddr = (data_direction_register_t)mem_read(&c64->mem, D6510);
-    data_register_t dr = (data_register_t)mem_read(&c64->mem, R6510);
+    data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
+    data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
 
     // if (addr == D6510)
     //     printf("\n----  #$%02X\n", data);
     // if (addr == R6510)
     //     printf("\n----  #$%02X [%d%d%d]\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
 
-    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr)) // %x00
+    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr) || ddr.v == 0x00 && dr.v == 0x00) // %x00
     {
         // RAM visible in all three areas.
     }
@@ -415,15 +415,15 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
         }
     }
 
-    if (addr == D6510)
-    {
-    }
-    else if (addr == R6510)
-    {
-    }
+    // if (addr == D6510)
+    // {
+    // }
+    // else if (addr == R6510)
+    // {
+    // }
 
     // printf("C64 #$%04X ← $%02X\n", addr, data);
-    mem_write(&c64->mem, addr, data);
+    mem_write_raw(&c64->mem, addr, data);
 }
 void c64_write_word(C64 *c64, uint16_t addr, uint16_t data)
 {

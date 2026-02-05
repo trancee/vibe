@@ -37,15 +37,15 @@ void mem_set_read_write(MEM *mem, mem_read_fn read_fn, mem_write_fn write_fn, vo
 size_t read_counter = 0;
 uint8_t mem_read_raw(void *mem, uint16_t addr)
 {
-    printf("MEM #$%04X → $%02X\n", addr, ((MEM *)mem)->ram[addr]);
-    if (read_counter++ > 10)
-        abort();
+    // printf("MEM #$%04X → $%02X\n", addr, ((MEM *)mem)->ram[addr]);
+    // if (read_counter++ > 1000)
+    //     abort();
     return ((MEM *)mem)->ram[addr];
 }
 
 uint8_t mem_read(MEM *mem, uint16_t addr)
 {
-    printf("MEM #$%04X → $%02X %p\n", addr, mem->ram[addr], mem->read_fn);
+    // printf("MEM #$%04X → $%02X %p\n", addr, mem->ram[addr], mem->read_fn);
 
     return mem->read_fn(mem->ctx, addr);
 }
@@ -69,15 +69,15 @@ uint16_t mem_read_word_zp(MEM *mem, uint16_t addr)
 size_t write_counter = 0;
 void mem_write_raw(void *mem, uint16_t addr, uint8_t data)
 {
-    printf("MEM #$%04X ← $%02X\n", addr, data);
-    if (write_counter++ > 10)
-        abort();
+    // printf("MEM #$%04X ← $%02X\n", addr, data);
+    // if (write_counter++ > 1000)
+    //     abort();
     ((MEM *)mem)->ram[addr] = data;
 }
 
 void mem_write(MEM *mem, uint16_t addr, uint8_t data)
 {
-    printf("MEM #$%04X ← $%02X %p\n", addr, data, mem->write_fn);
+    // printf("MEM #$%04X ← $%02X %p\n", addr, data, mem->write_fn);
 
     mem->write_fn(mem->ctx, addr, data);
 }

@@ -49,7 +49,7 @@ static char petscii_to_ascii(u8 c)
     return '?'; // Unknown
 }
 
-void vic_render_frame_ansi(C64Vic *vic)
+void vic_render_frame_ansi(VIC *vic)
 {
     // Only render every few frames to avoid flooding terminal
     if (vic->frame_count % 10 != 0)

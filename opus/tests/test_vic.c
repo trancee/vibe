@@ -7,7 +7,7 @@
 #include "test_framework.h"
 #include "../src/c64.h"
 
-static C64System sys;
+static C64 sys;
 
 static void setup(void) {
     c64_init(&sys);

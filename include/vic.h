@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "mem.h"
+
 #define VIC_MEM_START 0xD000
 #define VIC_MEM_END (VIC_MEM_START + VIC_MEM_SIZE - 1)
 #define VIC_MEM_SIZE 0x0400
@@ -146,7 +148,7 @@ typedef struct
     bool display_state;
     bool idle_state;
 
-    uint8_t *memory;
+    MEM *mem;
 
     // Color memory (at $D800-$DBFF)
     uint8_t color_ram[1024];
@@ -156,7 +158,7 @@ typedef struct
 } VIC;
 
 // VIC-II Functions
-void vic_init(VIC *vic, uint8_t *memory);
+void vic_init(VIC *vic, MEM *mem);
 void vic_reset(VIC *vic);
 
 uint8_t vic_read(VIC *vic, uint16_t addr);

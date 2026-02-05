@@ -122,7 +122,7 @@ bool cpu_verify_registers(C64CPU* cpu, u16 pc, u8 a, u8 x, u8 y, u8 sp, u8 statu
     return true;
 }
 
-void memory_write_test_pattern(C64Memory* mem, u16 start, u16 size) {
+void memory_write_test_pattern(MEM* mem, u16 start, u16 size) {
     for (u16 i = 0; i < size; i++) {
         u16 addr = start + i;
         if (addr < sizeof(mem->ram)) {
@@ -131,7 +131,7 @@ void memory_write_test_pattern(C64Memory* mem, u16 start, u16 size) {
     }
 }
 
-bool memory_verify_test_pattern(C64Memory* mem, u16 start, u16 size) {
+bool memory_verify_test_pattern(MEM* mem, u16 start, u16 size) {
     for (u16 i = 0; i < size; i++) {
         u16 addr = start + i;
         if (addr < sizeof(mem->ram)) {

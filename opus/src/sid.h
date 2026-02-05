@@ -8,7 +8,7 @@
 #include "types.h"
 
 // Forward declaration
-typedef struct C64System C64System;
+typedef struct C64 C64;
 
 // SID register offsets (from $D400)
 // Voice 1
@@ -128,19 +128,19 @@ typedef struct {
     u16 last_write_addr;
 
     // Reference to system
-    C64System *sys;
-} C64Sid;
+    C64 *sys;
+} SID;
 
 // SID functions
-void sid_init(C64Sid *sid, C64System *sys);
-void sid_reset(C64Sid *sid);
-void sid_clock(C64Sid *sid);  // Advance one phi2 cycle
+void sid_init(SID *sid, C64 *sys);
+void sid_reset(SID *sid);
+void sid_clock(SID *sid);  // Advance one phi2 cycle
 
 // Register access
-u8   sid_read(C64Sid *sid, u8 reg);
-void sid_write(C64Sid *sid, u8 reg, u8 value);
+u8   sid_read(SID *sid, u8 reg);
+void sid_write(SID *sid, u8 reg, u8 value);
 
 // Audio output (for future audio implementation)
-i16  sid_output(C64Sid *sid);
+i16  sid_output(SID *sid);
 
 #endif // C64_SID_H

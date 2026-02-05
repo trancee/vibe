@@ -7,8 +7,8 @@
 
 #define DEBUG false
 
-#define TESTCASE "branchwrap"
-#define MAX_STEPS 10//1300000000
+#define TESTCASE "mmu"
+#define MAX_STEPS 1000000//1300000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 

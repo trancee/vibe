@@ -133,8 +133,8 @@ int main(int argc, char **argv)
 
     if (argc < 2)
     {
-        filename = "roms/Ikari_Union.sid";
-        // filename = "roms/Wizball.sid";
+        // filename = "roms/Ikari_Union.sid";
+        filename = "roms/Wizball.sid";
         // filename = "roms/Hawkeye.sid";
         // filename = "roms/RoboCop.sid";
         // filename = "roms/Cybernoid.sid";

@@ -1,6 +1,7 @@
-#include "sid6581.h"
 #include <string.h>
 #include <stdlib.h>
+
+#include "sid6581.h"
 
 /**
  * @file sid6581.c

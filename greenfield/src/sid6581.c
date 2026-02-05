@@ -97,7 +97,7 @@ void sid_reset(SID *sid)
     sid->pot_y = 0xFF;
     
     memset(sid->registers, 0, sizeof(sid->registers));
-    sid->cycle_count = 0;
+    sid->cycles = 0;
 }
 
 uint8_t sid_read(SID *sid, uint16_t addr)
@@ -372,11 +372,11 @@ void sid_clock(SID *sid, uint32_t cycles)
             clock_oscillator(&sid->voice[v], sync_src);
         }
         
-        sid->cycle_count++;
+        sid->cycles++;
         
         /* Generate sample if we have enough cycles */
-        if (sid->cycle_count >= sid->cycles_per_sample) {
-            sid->cycle_count -= sid->cycles_per_sample;
+        if (sid->cycles >= sid->cycles_per_sample) {
+            sid->cycles -= sid->cycles_per_sample;
             
             /* Write to audio buffer if available */
             if (sid->audio_buffer && sid->buffer_pos < sid->buffer_size) {

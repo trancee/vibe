@@ -233,7 +233,7 @@ void vic_calculate_bases(C64VIC* vic) {
 **Issue**: Color RAM should mask high nibble
 
 ```c
-u8 mem_read_color_ram(C64Memory* mem, u16 addr) {
+u8 mem_read_color_ram(MEM* mem, u16 addr) {
     u16 color_addr = addr & 0x03FF;  // Color RAM is only 1KB
     u8 color_data = mem->color_ram[color_addr];
     return color_data & 0x0F;  // CRITICAL: Mask high nibble

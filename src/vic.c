@@ -4,12 +4,12 @@
 
 #include "vic.h"
 
-void vic_init(VIC *vic, uint8_t *memory)
+void vic_init(VIC *vic, MEM *mem)
 {
     if (vic == NULL)
         return;
 
-    vic->memory = memory;
+    vic->mem = mem;
 
     vic_reset(vic);
 }
@@ -49,16 +49,16 @@ void vic_reset(VIC *vic)
 
 uint8_t vic_read_byte(VIC *vic, uint16_t addr)
 {
-    printf("VIC #$%04X → $%02X\n", addr, vic->memory[addr]);
+    printf("VIC #$%04X → $%02X\n", addr, mem_read_raw(vic->mem, addr));
 
-    return vic->memory[addr];
+    return mem_read_raw(vic->mem, addr);
 }
 
 void vic_write_byte(VIC *vic, uint16_t addr, uint8_t data)
 {
     printf("VIC #$%04X ← $%02X\n", addr, data);
 
-    vic->memory[addr] = data;
+    mem_write_raw(vic->mem, addr, data);
 }
 
 uint8_t vic_read(VIC *vic, uint16_t addr)

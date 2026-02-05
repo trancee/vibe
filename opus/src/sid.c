@@ -22,8 +22,8 @@ static const u8 sustain_table[16] = {
     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
 };
 
-void sid_init(C64Sid *sid, C64System *sys) {
-    memset(sid, 0, sizeof(C64Sid));
+void sid_init(SID *sid, C64 *sys) {
+    memset(sid, 0, sizeof(SID));
     sid->sys = sys;
     
     // Initialize noise LFSR
@@ -32,7 +32,7 @@ void sid_init(C64Sid *sid, C64System *sys) {
     }
 }
 
-void sid_reset(C64Sid *sid) {
+void sid_reset(SID *sid) {
     memset(sid->regs, 0, sizeof(sid->regs));
     
     for (int i = 0; i < 3; i++) {
@@ -51,7 +51,7 @@ void sid_reset(C64Sid *sid) {
 }
 
 // Update filter coefficients
-static void update_filter(C64Sid *sid) {
+static void update_filter(SID *sid) {
     // Get 11-bit cutoff value
     u16 fc = (sid->regs[SID_FC_LO] & 0x07) | (sid->regs[SID_FC_HI] << 3);
     
@@ -152,7 +152,7 @@ static void clock_envelope(SidVoice *v) {
     }
 }
 
-void sid_clock(C64Sid *sid) {
+void sid_clock(SID *sid) {
     // Clock all three voices
     for (int i = 0; i < 3; i++) {
         clock_oscillator(&sid->voice[i]);
@@ -160,7 +160,7 @@ void sid_clock(C64Sid *sid) {
     }
 }
 
-u8 sid_read(C64Sid *sid, u8 reg) {
+u8 sid_read(SID *sid, u8 reg) {
     switch (reg) {
         case SID_POTX:
             return sid->potx;
@@ -182,7 +182,7 @@ u8 sid_read(C64Sid *sid, u8 reg) {
     }
 }
 
-void sid_write(C64Sid *sid, u8 reg, u8 value) {
+void sid_write(SID *sid, u8 reg, u8 value) {
     sid->regs[reg] = value;
     sid->last_write_addr = 0xD400 + reg;
     
@@ -257,7 +257,7 @@ void sid_write(C64Sid *sid, u8 reg, u8 value) {
 }
 
 // Generate audio output (returns signed 16-bit sample)
-i16 sid_output(C64Sid *sid) {
+i16 sid_output(SID *sid) {
     // Simplified audio output - just return 0 for now
     // Full implementation would mix all three voices through the filter
     

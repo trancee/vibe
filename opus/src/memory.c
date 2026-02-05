@@ -10,13 +10,13 @@
 #include <stdio.h>
 #include <string.h>
 
-void mem_init(C64Memory *mem, C64System *sys)
+void mem_init(MEM *mem, C64 *sys)
 {
-    memset(mem, 0, sizeof(C64Memory));
+    memset(mem, 0, sizeof(MEM));
     mem->sys = sys;
 }
 
-void mem_reset(C64Memory *mem)
+void mem_reset(MEM *mem)
 {
     // Clear RAM (in reality it would have random values)
     memset(mem->ram, 0, sizeof(mem->ram));
@@ -26,7 +26,7 @@ void mem_reset(C64Memory *mem)
 }
 
 // Get current memory configuration from CPU port $01
-static u8 get_mem_config(C64Memory *mem)
+static u8 get_mem_config(MEM *mem)
 {
     // Bits 0-2 of $01 control memory mapping
     // We need the effective value, combining output bits from port_data
@@ -73,7 +73,7 @@ static bool char_visible(u8 config)
 }
 
 // Standard memory read (with tick)
-u8 mem_read(C64Memory *mem, u16 addr)
+u8 mem_read(MEM *mem, u16 addr)
 {
     // Tick the system for this memory access
     c64_tick(mem->sys);
@@ -91,7 +91,7 @@ u8 mem_read(C64Memory *mem, u16 addr)
 }
 
 // Standard memory write (with tick)
-void mem_write(C64Memory *mem, u16 addr, u8 value)
+void mem_write(MEM *mem, u16 addr, u8 value)
 {
     // Tick the system
     c64_tick(mem->sys);
@@ -107,7 +107,7 @@ void mem_write(C64Memory *mem, u16 addr, u8 value)
 }
 
 // Raw read without tick (for VIC-II access, initial setup)
-u8 mem_read_raw(C64Memory *mem, u16 addr)
+u8 mem_read_raw(MEM *mem, u16 addr)
 {
     u8 config = get_mem_config(mem);
 
@@ -164,7 +164,7 @@ u8 mem_read_raw(C64Memory *mem, u16 addr)
 }
 
 // Raw write without tick
-void mem_write_raw(C64Memory *mem, u16 addr, u8 value)
+void mem_write_raw(MEM *mem, u16 addr, u8 value)
 {
     u8 config = get_mem_config(mem);
 
@@ -202,7 +202,7 @@ void mem_write_raw(C64Memory *mem, u16 addr, u8 value)
 }
 
 // VIC memory read (uses VIC bank from CIA2)
-u8 mem_vic_read(C64Memory *mem, u16 vic_addr)
+u8 mem_vic_read(MEM *mem, u16 vic_addr)
 {
     // VIC sees a 16KB window based on CIA2 port A bits 0-1
     u16 bank = c64_get_vic_bank(mem->sys);
@@ -227,7 +227,7 @@ u8 mem_vic_read(C64Memory *mem, u16 vic_addr)
 }
 
 // Load a ROM file
-bool mem_load_rom(C64Memory *mem, const char *filename, u8 *dest, size_t size)
+bool mem_load_rom(MEM *mem, const char *filename, u8 *dest, size_t size)
 {
     (void)mem; // Unused but kept for API consistency
 
@@ -252,7 +252,7 @@ bool mem_load_rom(C64Memory *mem, const char *filename, u8 *dest, size_t size)
 }
 
 // Load all ROMs from a directory
-bool mem_load_roms(C64Memory *mem, const char *rom_path)
+bool mem_load_roms(MEM *mem, const char *rom_path)
 {
     char filename[512];
 
@@ -278,7 +278,7 @@ bool mem_load_roms(C64Memory *mem, const char *rom_path)
     return mem->has_basic && mem->has_kernal && mem->has_charom;
 }
 
-void mem_dump(C64Memory *mem, u16 addr)
+void mem_dump(MEM *mem, u16 addr)
 {
     printf("\n      ");
     for (size_t i = 0; i < 16; i++)

@@ -288,6 +288,6 @@ void vic_render_frame(C64VIC* vic, C64* sys) {
             printf("\n");
         }
         
-        printf("\e[0mRaster: %d, Cycle: %llu\n", vic->raster_line, sys->mem.cycle_count);
+        printf("\e[0mRaster: %d, Cycle: %llu\n", vic->raster_line, sys->mem.cycles);
     }
 }

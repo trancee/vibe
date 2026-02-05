@@ -15,7 +15,7 @@
 #include <termios.h>
 #include <sys/time.h>
 
-static C64System sys;
+static C64 sys;
 static bool running = true;
 static struct termios orig_termios;
 
@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
     c64_destroy(&sys);
 
     printf("\nEmulation ended after %u frames (%llu cycles)\n",
-           frame_count, sys.cycle_count);
+           frame_count, sys.cycles);
 
     return 0;
 }
