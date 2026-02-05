@@ -1,4 +1,4 @@
-// #include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
@@ -6,25 +6,22 @@
 
 uint8_t c64_read(void *c64, uint16_t addr)
 {
+    printf("C64 #$%04X → $??\n", addr);
+
     return c64_read_byte((C64 *)c64, addr);
 }
 void c64_write(void *c64, uint16_t addr, uint8_t data)
 {
-    c64_write_byte((C64 *)c64, addr, data);
-}
+    printf("C64 WRITE #$%04X ← $%02X\n", addr, data);
 
-uint8_t c64_read_mem(uint8_t *mem, uint16_t addr)
-{
-    return mem[addr];
-}
-void c64_write_mem(uint8_t *mem, uint16_t addr, uint8_t data)
-{
-    mem[addr] = data;
+    c64_write_byte((C64 *)c64, addr, data);
 }
 
 void c64_init(C64 *c64)
 {
     mem_init(&c64->mem);
+
+    mem_set_read_write(&c64->mem, c64_read, c64_write, c64);
 
     // Initialize Color RAM to light blue (default C64 color)
     memset(c64->color_ram, 0x0E, sizeof(c64->color_ram));
@@ -233,52 +230,52 @@ void c64_set_debug(C64 *c64, bool debug, FILE *debug_file)
       /HiRam
 */
 
-// Get current memory configuration from CPU port $01
-static uint8_t get_mem_config(MEM *mem)
-{
-    // Bits 0-2 of $01 control memory mapping
-    // We need the effective value, combining output bits from dr
-    // and input bits from external hardware (pullups on bits 0-2)
-    uint8_t ddr = mem->ram[0x0000]; // Data Direction Register at $00
-    uint8_t dr = mem->ram[0x0001];  // Data Register at $01
+// // Get current memory configuration from CPU port $01
+// static uint8_t get_mem_config(MEM *mem)
+// {
+//     // Bits 0-2 of $01 control memory mapping
+//     // We need the effective value, combining output bits from dr
+//     // and input bits from external hardware (pullups on bits 0-2)
+//     uint8_t ddr = mem->ram[0x0000]; // Data Direction Register at $00
+//     uint8_t dr = mem->ram[0x0001];  // Data Register at $01
 
-    // For output bits (DDR=1), use port_data
-    // For input bits (DDR=0), use external state (bits 0-2 pulled high)
-    uint8_t output_bits = ddr;
-    uint8_t input_bits = ~ddr;
-    uint8_t external = 0x07; // Bits 0-2 pulled high by external resistors
+//     // For output bits (DDR=1), use port_data
+//     // For input bits (DDR=0), use external state (bits 0-2 pulled high)
+//     uint8_t output_bits = ddr;
+//     uint8_t input_bits = ~ddr;
+//     uint8_t external = 0x07; // Bits 0-2 pulled high by external resistors
 
-    uint8_t effective = (dr & output_bits) | (external & input_bits);
-    return effective & 0x07;
-}
+//     uint8_t effective = (dr & output_bits) | (external & input_bits);
+//     return effective & 0x07;
+// }
 
-// Check if BASIC ROM is visible
-static bool basic_visible(uint8_t config)
-{
-    // BASIC visible when LORAM=1 and HIRAM=1
-    return (config & MEM_LORAM) && (config & MEM_HIRAM);
-}
+// // Check if BASIC ROM is visible
+// static bool basic_visible(uint8_t config)
+// {
+//     // BASIC visible when LORAM=1 and HIRAM=1
+//     return (config & MEM_LORAM) && (config & MEM_HIRAM);
+// }
 
-// Check if KERNAL ROM is visible
-static bool kernal_visible(uint8_t config)
-{
-    // KERNAL visible when HIRAM=1
-    return (config & MEM_HIRAM);
-}
+// // Check if KERNAL ROM is visible
+// static bool kernal_visible(uint8_t config)
+// {
+//     // KERNAL visible when HIRAM=1
+//     return (config & MEM_HIRAM);
+// }
 
-// Check if I/O area is visible (vs Char ROM)
-static bool io_visible(uint8_t config)
-{
-    // I/O visible when CHAREN=1 and (LORAM=1 or HIRAM=1)
-    return (config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
-}
+// // Check if I/O area is visible (vs Char ROM)
+// static bool io_visible(uint8_t config)
+// {
+//     // I/O visible when CHAREN=1 and (LORAM=1 or HIRAM=1)
+//     return (config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
+// }
 
-// Check if Char ROM is visible
-static bool char_visible(uint8_t config)
-{
-    // Char ROM visible when CHAREN=0 and (LORAM=1 or HIRAM=1)
-    return !(config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
-}
+// // Check if Char ROM is visible
+// static bool char_visible(uint8_t config)
+// {
+//     // Char ROM visible when CHAREN=0 and (LORAM=1 or HIRAM=1)
+//     return !(config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
+// }
 
 #define LORAM(ddr, dr) ((ddr.loram && dr.loram) || !ddr.loram)
 #define HIRAM(ddr, dr) ((ddr.hiram && dr.hiram) || !ddr.hiram)
@@ -286,8 +283,8 @@ static bool char_visible(uint8_t config)
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
-    data_direction_register_t ddr = (data_direction_register_t)mem_read(&c64->mem, D6510);
-    data_register_t dr = (data_register_t)mem_read(&c64->mem, R6510);
+    data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
+    data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
 
     if (!HIRAM(ddr, dr) && !LORAM(ddr, dr)) // %x00
     {

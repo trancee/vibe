@@ -7,8 +7,8 @@
 
 #define DEBUG false
 
-#define TESTCASE "start"
-#define MAX_STEPS 1300000000
+#define TESTCASE "branchwrap"
+#define MAX_STEPS 10//1300000000
 
 uint16_t load_testcase(CPU *cpu, const char *testcase);
 
@@ -150,8 +150,9 @@ uint8_t irq_handler[] = {
 
 void reset(CPU *cpu, uint16_t addr, uint8_t data[], size_t size)
 {
-    mem_write_byte(cpu->mem, D6510, 0x2F);
-    mem_write_byte(cpu->mem, R6510, 0x37);
+    // Set up CPU port
+    mem_write_byte(cpu->mem, D6510, 0x2F); // Data Direction Register
+    mem_write_byte(cpu->mem, R6510, 0x37); // Data Register
 
     mem_write_byte(cpu->mem, UNUSED, 0x00);
 

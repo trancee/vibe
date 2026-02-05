@@ -334,8 +334,12 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
 
         fprintf(stream, " ($%02X,X)", read8());
         fprintf(stream, " @ %02X", (read8() + cpu->X) & 0xFF);
-        fprintf(stream, " = %04X", cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF));
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, cpu_read_word_zp(cpu, (read8() + cpu->X) & 0xFF)));
+        {
+            uint8_t zp_addr = (read8() + cpu->X) & 0xFF;
+            uint16_t eff_addr = cpu_read_word_zp(cpu, zp_addr);
+            fprintf(stream, " = %04X", eff_addr);
+            fprintf(stream, " = %02X", cpu_read_byte(cpu, eff_addr));
+        }
         fprintf(stream, "%3s", ""); // 28 - 1 - 7 - 3 - 2 - 3 - 4 - 3 - 2 = 3
         break;
     case IndirectIndexed:
@@ -347,9 +351,14 @@ void dump_step(CPU *cpu, const instruction_t *instruction)
         // ADC, AND, CMP, EOR, LDA, ORA, SBC, and STA.
 
         fprintf(stream, " ($%02X),Y", read8());
-        fprintf(stream, " = %04X", cpu_read_word_zp(cpu, read8()));
-        fprintf(stream, " @ %04X", (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF);
-        fprintf(stream, " = %02X", cpu_read_byte(cpu, (cpu_read_word_zp(cpu, read8()) + cpu->Y) & 0xFFFF));
+        {
+            uint8_t zp_addr = read8();
+            uint16_t base_addr = cpu_read_word_zp(cpu, zp_addr);
+            uint16_t eff_addr = (base_addr + cpu->Y) & 0xFFFF;
+            fprintf(stream, " = %04X", base_addr);
+            fprintf(stream, " @ %04X", eff_addr);
+            fprintf(stream, " = %02X", cpu_read_byte(cpu, eff_addr));
+        }
         fprintf(stream, "%1s", ""); // 28 - 1 - 7 - 3 - 4 - 3 - 4 - 3 - 2 = 1
         break;
     case Absolute:

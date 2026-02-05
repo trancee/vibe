@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "mem.h"
@@ -6,6 +7,10 @@
 void mem_init(MEM *mem)
 {
     memset(mem, 0x00, sizeof(MEM));
+
+    mem->read_fn = mem_read_raw;
+    mem->write_fn = mem_write_raw;
+    mem->ctx = mem;
 }
 
 void mem_reset(MEM *mem)
@@ -15,14 +20,34 @@ void mem_reset(MEM *mem)
 }
 
 /* ============================================================
+   Memory Handler
+   ============================================================ */
+
+void mem_set_read_write(MEM *mem, mem_read_fn read_fn, mem_write_fn write_fn, void *ctx)
+{
+    mem->read_fn = read_fn;
+    mem->write_fn = write_fn;
+    mem->ctx = ctx;
+}
+
+/* ============================================================
    Memory Read
    ============================================================ */
 
+size_t read_counter = 0;
+uint8_t mem_read_raw(void *mem, uint16_t addr)
+{
+    printf("MEM #$%04X → $%02X\n", addr, ((MEM *)mem)->ram[addr]);
+    if (read_counter++ > 10)
+        abort();
+    return ((MEM *)mem)->ram[addr];
+}
+
 uint8_t mem_read(MEM *mem, uint16_t addr)
 {
-    // printf("MEM #$%04X → $%02X\n", addr, mem->memory[addr]);
+    printf("MEM #$%04X → $%02X %p\n", addr, mem->ram[addr], mem->read_fn);
 
-    return mem->ram[addr];
+    return mem->read_fn(mem->ctx, addr);
 }
 uint8_t mem_read_byte(MEM *mem, uint16_t addr)
 {
@@ -41,11 +66,20 @@ uint16_t mem_read_word_zp(MEM *mem, uint16_t addr)
    Memory Write
    ============================================================ */
 
+size_t write_counter = 0;
+void mem_write_raw(void *mem, uint16_t addr, uint8_t data)
+{
+    printf("MEM #$%04X ← $%02X\n", addr, data);
+    if (write_counter++ > 10)
+        abort();
+    ((MEM *)mem)->ram[addr] = data;
+}
+
 void mem_write(MEM *mem, uint16_t addr, uint8_t data)
 {
-    // printf("MEM #$%04X ← $%02X\n", addr, data);
+    printf("MEM #$%04X ← $%02X %p\n", addr, data, mem->write_fn);
 
-    mem->ram[addr] = data;
+    mem->write_fn(mem->ctx, addr, data);
 }
 void mem_write_byte(MEM *mem, uint16_t addr, uint8_t data)
 {
