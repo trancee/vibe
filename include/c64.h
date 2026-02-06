@@ -22,72 +22,14 @@
 #define KERNAL_ROM_START 0xE000
 #define KERNAL_ROM_END KERNAL_ROM_START + (KERNAL_ROM_SIZE - 1)
 #define KERNAL_ROM_SIZE 0x2000
-
+#define COLOR_RAM_START 0xD800
+#define COLOR_RAM_END COLOR_RAM_START + (COLOR_RAM_SIZE - 1)
 #define COLOR_RAM_SIZE 0x0400
 
 // Memory configuration bits (from $01)
 #define MEM_LORAM   0x01  // BASIC ROM visible
 #define MEM_HIRAM   0x02  // KERNAL ROM visible
 #define MEM_CHAREN  0x04  // CHAR ROM visible (when I/O not mapped)
-
-typedef union
-{
-    uint8_t v;
-    struct
-    {
-        uint8_t loram : 1;  // Bit 0: Direction of Bit 0 I O on port at next address. Default = 1(output)
-        uint8_t hiram : 1;  // Bit 1: Direction of Bit 1 I/O on port at next address. Default = 1 (output)
-        uint8_t charen : 1; // Bit 2: Direction of Bit 2 I/O on port at next address. Default = 1 (output)
-
-        uint8_t cass_wrt : 1;   // Bit 3: Direction of Bit 3 I/O on port at next address. Default = 1 (output)
-        uint8_t cass_sense : 1; // Bit 4: Direction of Bit 4 I/O on port at next address. Default = 0 (input)
-        uint8_t cass_motor : 1; // Bit 5: Direction of Bit 5 I/O on port at next address. Default = 1 (output)
-
-        uint8_t undefined : 2; // Bit 6-7: Direction of Bit 6-7 I/O on port at next address. Not used.
-    };
-} data_direction_register_t;
-
-typedef union
-{
-    uint8_t v;
-    struct
-    {
-        uint8_t loram : 1;  // Bit 0 (LORAM): Controls if BASIC ROM is visible (1 = Visible, 0 = RAM).
-        uint8_t hiram : 1;  // Bit 1 (HIRAM): Controls if KERNAL ROM is visible (1 = Visible, 0 = RAM).
-        uint8_t charen : 1; // Bit 2 (CHAREN): Controls if Character ROM or I/O is visible (1 = Character ROM/IO, 0 = RAM).
-
-        uint8_t cass_wrt : 1;   // Bit 3: Cassette Data Output Line.
-        uint8_t cass_sense : 1; // Bit 4: Cassette Switch Sense: 1 = Switch Closed
-        uint8_t cass_motor : 1; // Bit 5: Cassette Motor Control 0 = ON, 1 = OFF
-
-        uint8_t undefined : 2; // Bits 6-7: Undefined.
-    };
-} data_register_t;
-
-// $01 bits 6 and 7 fall-off cycles (1->0), average is about 350 msec
-#define CPU_DATA_PORT_FALL_OFF_CYCLES 350000
-
-typedef struct
-{
-    // value read from processor port
-    uint8_t dataRead;
-
-	// State of processor port pins.
-	uint8_t dataOut;
-
-    // cycle that should invalidate the unused bits of the data port.
-    int64_t dataSetClkBit6;
-    int64_t dataSetClkBit7;
-
-    // indicates if the unused bits of the data port are still valid or should be
-    // read as 0, 1 = unused bits valid, 0 = unused bits should be 0
-    bool dataSetBit6;
-    bool dataSetBit7;
-
-    // indicates if the unused bits are in the process of falling off. 
-    bool dataFalloffBit6;
-    bool dataFalloffBit7;
-} zero_ram_t;
 
 typedef struct
 {
@@ -107,52 +49,29 @@ typedef struct
     bool has_basic_rom;
     bool has_kernal_rom;
     bool has_char_rom;
-
-    zero_ram_t zero_ram;
 } C64;
 
 void c64_init(C64 *c64);
 void c64_reset(C64 *c64);
+
+void c64_set_debug(C64 *c64, bool debug, FILE *debug_file);
+
 void c64_reset_pc(C64 *c64, uint16_t addr);
 uint16_t c64_get_pc(C64 *c64);
 void c64_set_pc(C64 *c64, uint16_t addr);
+
 uint8_t c64_read_byte(C64 *c64, uint16_t addr);
+
 uint16_t c64_read_word(C64 *c64, uint16_t addr);
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data);
 void c64_write_word(C64 *c64, uint16_t addr, uint16_t data);
 void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size);
-bool c64_trap(C64 *c64, uint16_t addr, handler_t handler);
+
 uint8_t c64_step(C64 *c64);
 
-void c64_set_debug(C64 *c64, bool debug, FILE *debug_file);
+uint8_t c64_mem_config(C64 *c64);
 
 void load_rom(const char *path, uint8_t *memory, size_t size);
-
-/*
-         MOS 6510 Micro-Processor
-           On-Chip I/O Port
-  0      /LORAM Signal (0=Switch BASIC ROM Out)
-  1      /HIRAM Signal (0=Switch Kernal ROM Out)
-  2      /CHAREN Signal (0=Switch Char. ROM In)
-  3      Cassette Data Output Line
-  4      Cassette Switch Sense: 1 = Switch Closed
-  5      Cassette Motor Control 0 = ON, 1 = OFF
-  6-7    Undefined
-*/
-#define IO_PORT_LORAM 0x01
-#define IO_PORT_HIRAM 0x02
-#define IO_PORT_CHAREN 0x04
-
-// typedef struct R6510
-// {
-//     uint8_t loram : 1;  // BASIC ROM enable
-//     uint8_t hiram : 1;  // KERNAL ROM enable
-//     uint8_t charen : 1; // Character ROM enable
-//     uint8_t cas_out : 1; // Cassette data output
-//     uint8_t cas_sense : 1; // Cassette switch sense
-//     uint8_t cas_motor : 1; // Cassette motor control
-//     uint8_t unused : 2; // Undefined bits
-// } io_port_t;
 
 /// Page 0
 

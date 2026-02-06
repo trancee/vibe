@@ -163,7 +163,7 @@ void PHP(CPU *cpu)
 
 void PLA(CPU *cpu)
 {
-    cpu->A = cpu_pull(cpu);
+    cpu->A = cpu_pop(cpu);
     set_flag_negative(cpu, cpu->A & 0x80);
     set_flag_zero(cpu, cpu->A == 0);
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
@@ -172,7 +172,7 @@ void PLA(CPU *cpu)
 void PLP(CPU *cpu)
 {
     // nestest requires that BREAK flag is cleared when pulling P
-    cpu->P = (cpu_pull(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
+    cpu->P = (cpu_pop(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
     cpu_set_pc(cpu, cpu_get_pc(cpu) + 1);
 }
 
@@ -558,8 +558,9 @@ void JMP(CPU *cpu)
 void JSR(CPU *cpu)
 {
     uint16_t return_addr = cpu_get_pc(cpu) + 2;
-    cpu_push(cpu, (return_addr >> 8) & 0xFF);
-    cpu_push(cpu, return_addr & 0xFF);
+    cpu_push16(cpu, return_addr);
+    // cpu_push(cpu, (return_addr >> 8) & 0xFF);
+    // cpu_push(cpu, return_addr & 0xFF);
 
     uint16_t addr = fetch_address(cpu, Absolute);
     cpu_set_pc(cpu, addr);
@@ -567,8 +568,8 @@ void JSR(CPU *cpu)
 
 void RTS(CPU *cpu)
 {
-    uint8_t low_byte = cpu_pull(cpu);
-    uint8_t high_byte = cpu_pull(cpu);
+    uint8_t low_byte = cpu_pop(cpu);
+    uint8_t high_byte = cpu_pop(cpu);
     uint16_t addr = (high_byte << 8) | low_byte;
     cpu_set_pc(cpu, addr + 1);
 }
@@ -751,9 +752,9 @@ void BRK(CPU *cpu)
 
 void RTI(CPU *cpu)
 {
-    cpu->P = (cpu_pull(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
+    cpu->P = (cpu_pop(cpu) & ~FLAG_BREAK) | FLAG_RESERVED;
 
-    uint16_t addr = cpu_pull16(cpu);
+    uint16_t addr = cpu_pop16(cpu);
     cpu_set_pc(cpu, addr);
 }
 

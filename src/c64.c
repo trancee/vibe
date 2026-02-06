@@ -230,71 +230,51 @@ void c64_set_debug(C64 *c64, bool debug, FILE *debug_file)
       /HiRam
 */
 
-// // Get current memory configuration from CPU port $01
-// static uint8_t get_mem_config(MEM *mem)
-// {
-//     // Bits 0-2 of $01 control memory mapping
-//     // We need the effective value, combining output bits from dr
-//     // and input bits from external hardware (pullups on bits 0-2)
-//     uint8_t ddr = mem->ram[0x0000]; // Data Direction Register at $00
-//     uint8_t dr = mem->ram[0x0001];  // Data Register at $01
+// Get current memory configuration from CPU port $01
+uint8_t c64_mem_config(C64 *c64)
+{
+    // Bits 0-2 of $01 control memory mapping
+    // We need the effective value, combining output bits from dr
+    // and input bits from external hardware (pullups on bits 0-2)
+    uint8_t ddr = mem_read_raw(&c64->mem, D6510); // Data Direction Register at $00
+    uint8_t dr = mem_read_raw(&c64->mem, R6510);  // Data Register at $01
 
-//     // For output bits (DDR=1), use port_data
-//     // For input bits (DDR=0), use external state (bits 0-2 pulled high)
-//     uint8_t output_bits = ddr;
-//     uint8_t input_bits = ~ddr;
-//     uint8_t external = 0x07; // Bits 0-2 pulled high by external resistors
+    // For output bits (DDR=1), use port_data
+    // For input bits (DDR=0), use external state (bits 0-2 pulled high)
+    uint8_t output_bits = ddr;
+    uint8_t input_bits = ~ddr;
+    uint8_t external = 0x07; // Bits 0-2 pulled high by external resistors
 
-//     uint8_t effective = (dr & output_bits) | (external & input_bits);
-//     return effective & 0x07;
-// }
+    uint8_t effective = (dr & output_bits) | (external & input_bits);
+    return effective & 0x07;
+}
 
-// // Check if BASIC ROM is visible
-// static bool basic_visible(uint8_t config)
-// {
-//     // BASIC visible when LORAM=1 and HIRAM=1
-//     return (config & MEM_LORAM) && (config & MEM_HIRAM);
-// }
+#define BASIC_ROM(config) ((config & MEM_LORAM) && (config & MEM_HIRAM))
+#define KERNAL_ROM(config) (config & MEM_HIRAM)
+#define IO_AREA(config) ((config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM)))
+#define CHAR_ROM(config) (!(config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM)))
 
-// // Check if KERNAL ROM is visible
-// static bool kernal_visible(uint8_t config)
-// {
-//     // KERNAL visible when HIRAM=1
-//     return (config & MEM_HIRAM);
-// }
-
-// // Check if I/O area is visible (vs Char ROM)
-// static bool io_visible(uint8_t config)
-// {
-//     // I/O visible when CHAREN=1 and (LORAM=1 or HIRAM=1)
-//     return (config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
-// }
-
-// // Check if Char ROM is visible
-// static bool char_visible(uint8_t config)
-// {
-//     // Char ROM visible when CHAREN=0 and (LORAM=1 or HIRAM=1)
-//     return !(config & MEM_CHAREN) && ((config & MEM_LORAM) || (config & MEM_HIRAM));
-// }
-
-#define LORAM(ddr, dr) ((ddr.loram && dr.loram) || !ddr.loram)
-#define HIRAM(ddr, dr) ((ddr.hiram && dr.hiram) || !ddr.hiram)
-#define CHAREN(ddr, dr) ((ddr.charen && dr.charen) || !ddr.charen)
+// #define LORAM(ddr, dr) ((ddr.loram && dr.loram) || NOT(ddr.loram))
+// #define HIRAM(ddr, dr) ((ddr.hiram && dr.hiram) || NOT(ddr.hiram))
+// #define CHAREN(ddr, dr) ((ddr.charen && dr.charen) || NOT(ddr.charen))
 
 uint8_t c64_read_byte(C64 *c64, uint16_t addr)
 {
-    data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
-    data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
+    // data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
+    // data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
 
-    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr) || ddr.v == 0x00 && dr.v == 0x00) // %x00
+    uint8_t mem_config = c64_mem_config(c64);
+
+    // if ((NOT(HIRAM(ddr, dr)) && NOT(LORAM(ddr, dr))) || (NO(ddr) && NO(dr))) // %x00
+    if (mem_config == 0x00) // %x00
     {
         // RAM visible in all three areas.
     }
 
     else if (addr >= BASIC_ROM_START && addr <= BASIC_ROM_END)
     {
-        // Basic ROM  = (/LoRam AND /HiRam)
-        if (HIRAM(ddr, dr) && LORAM(ddr, dr)) // %x11
+        // if (HIRAM(ddr, dr) && LORAM(ddr, dr)) // %x11
+        if (BASIC_ROM(mem_config)) // %x11
         {
             // printf("BASIC #$%04X → $%02X\n", addr, c64->basic[addr - BASIC_ROM_START]);
             return c64->basic_rom[addr - BASIC_ROM_START];
@@ -304,14 +284,16 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     else if (addr >= CHAR_ROM_START && addr <= CHAR_ROM_END)
     {
         // Char. ROM  = ((NOT (/CharEn)) AND (/LoRam OR /HiRam))
-        if (!CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %0xx
+        // if (NOT(CHAREN(ddr, dr)) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %0xx
+        if (CHAR_ROM(mem_config)) // %0xx
         {
             // printf("CHARROM #$%04X → $%02X\n", addr, c64->char_rom[addr - CHAR_ROM_START]);
             return c64->char_rom[addr - CHAR_ROM_START];
         }
 
         // I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
-        else if (CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %1xx
+        // else if (CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %1xx
+        else if (IO_AREA(mem_config)) // %1xx
         {
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
             {
@@ -340,28 +322,13 @@ uint8_t c64_read_byte(C64 *c64, uint16_t addr)
     else if (addr >= KERNAL_ROM_START && addr <= KERNAL_ROM_END)
     {
         // Kernal ROM = (/HiRam)
-        if (HIRAM(ddr, dr)) // %x1x
+        // if (HIRAM(ddr, dr)) // %x1x
+        if (KERNAL_ROM(mem_config)) // %x1x
         {
             // printf("KERNAL #$%04X → $%02X\n", addr, c64->kernal_rom[addr - KERNAL_ROM_START]);
             return c64->kernal_rom[addr - KERNAL_ROM_START];
         }
     }
-
-    // if (addr == R6510)
-    // {
-    //     /*
-    //         0=ff 1=ff 0=00 1=ff 1=ff 1=ff
-    //         after  00 ff
-    //         right  00 df
-    //     */
-    //     if (ddr.v == 0x00 && dr.v == 0xFF)
-    //         return 0xDF; // bit 5 is drawn low if input
-    //                      /*
-    //                           0=ff 1=ff 1=00 0=00 1=ff 1=ff
-    //                           after  00 df
-    //                           right  00 17
-    //                      */
-    // }
 
     // printf("C64 #$%04X → $%02X\n", addr, mem_read_raw(&c64->mem, addr));
     return mem_read_raw(&c64->mem, addr);
@@ -373,15 +340,13 @@ uint16_t c64_read_word(C64 *c64, uint16_t addr)
 
 void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
 {
-    data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
-    data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
+    // data_direction_register_t ddr = (data_direction_register_t)mem_read_raw(&c64->mem, D6510);
+    // data_register_t dr = (data_register_t)mem_read_raw(&c64->mem, R6510);
 
-    // if (addr == D6510)
-    //     printf("\n----  #$%02X\n", data);
-    // if (addr == R6510)
-    //     printf("\n----  #$%02X [%d%d%d]\n", data, ((data_register_t)data).charen, ((data_register_t)data).hiram, ((data_register_t)data).loram);
+    uint8_t mem_config = c64_mem_config(c64);
 
-    if (!HIRAM(ddr, dr) && !LORAM(ddr, dr) || ddr.v == 0x00 && dr.v == 0x00) // %x00
+    // if ((NOT(HIRAM(ddr, dr)) && NOT(LORAM(ddr, dr))) || (NO(ddr) && NO(dr))) // %x00
+    if (mem_config == 0x00) // %x00
     {
         // RAM visible in all three areas.
     }
@@ -389,38 +354,45 @@ void c64_write_byte(C64 *c64, uint16_t addr, uint8_t data)
     else if (addr >= CHAR_ROM_START && addr < CHAR_ROM_END)
     {
         // I/O-Area   = (/CharEn AND (/LoRam OR /HiRam))
-        if (CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %1xx
+        // if (CHAREN(ddr, dr) && (HIRAM(ddr, dr) || LORAM(ddr, dr))) // %1xx
+        if (IO_AREA(mem_config)) // %1xx
         {
+            // VIC-II
             if (addr >= VIC_MEM_START && addr <= VIC_MEM_END)
             {
                 // printf("VIC #$%04X ← $%02X\n", addr, data);
                 return vic_write(&c64->vic, addr, data);
             }
 
+            // SID
             else if (addr >= SID_MEM_START && addr <= SID_MEM_END)
             {
                 return sid_write(&c64->sid, addr, data);
             }
 
+                        // $D800-$DBFF: Color RAM
+            else if (addr >= COLOR_RAM_START && addr <= COLOR_RAM_END)
+            {
+                c64->color_ram[addr - COLOR_RAM_START] = data;
+                return;
+            }
+
+            // CIA1
             else if (addr >= CIA1_MEM_START && addr <= CIA1_MEM_END)
             {
                 // printf("CIA1 #$%04X ← $%02X\n", addr, data);
                 return cia_write(&c64->cia1, addr, data);
             }
+            // CIA2
             else if (addr >= CIA2_MEM_START && addr <= CIA2_MEM_END)
             {
                 // printf("CIA2 #$%04X ← $%02X\n", addr, data);
                 return cia_write(&c64->cia2, addr, data);
             }
+
+            // I/O expansion - ignore writes
         }
     }
-
-    // if (addr == D6510)
-    // {
-    // }
-    // else if (addr == R6510)
-    // {
-    // }
 
     // printf("C64 #$%04X ← $%02X\n", addr, data);
     mem_write_raw(&c64->mem, addr, data);
@@ -433,15 +405,6 @@ void c64_write_word(C64 *c64, uint16_t addr, uint16_t data)
 void c64_write_data(C64 *c64, uint16_t addr, uint8_t data[], size_t size)
 {
     mem_write_data(&c64->mem, addr, data, size);
-}
-
-/* ============================================================
-   CPU Trap
-   ============================================================ */
-
-bool c64_trap(C64 *c64, uint16_t addr, handler_t handler)
-{
-    return cpu_trap(&c64->cpu, addr, handler);
 }
 
 /* ============================================================

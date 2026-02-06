@@ -5,33 +5,6 @@
 #include "cpu.h"
 #include "mos6510.h"
 
-trap_t traps[] = {{}, {}, {}, {}, {}};
-
-bool add_trap(trap_t *trap)
-{
-    for (size_t i = 0; i < sizeof(traps) / sizeof(*traps); i++)
-    {
-        if (traps[i].handler == NULL || traps[i].address == trap->address)
-        {
-            traps[i].address = trap->address;
-            traps[i].handler = trap->handler;
-            return true;
-        }
-    }
-    return false;
-}
-handler_t find_trap(const uint16_t address)
-{
-    for (size_t i = 0; i < sizeof(traps) / sizeof(*traps); i++)
-    {
-        if (traps[i].address == address)
-        {
-            return traps[i].handler;
-        }
-    }
-    return NULL;
-}
-
 void cpu_init(CPU *cpu, MEM *mem)
 {
     memset(cpu, 0, sizeof(CPU));
@@ -74,24 +47,31 @@ void cpu_set_pc(CPU *cpu, uint16_t addr)
     cpu->PC = addr;
 }
 
-void cpu_push(CPU *cpu, uint8_t data)
+// ============================================================================
+// Stack Operations
+// ============================================================================
+
+void cpu_push(CPU *cpu, uint8_t value)
 {
-    cpu_write_byte(cpu, 0x0100 | cpu->SP, data);
+    cpu_write(cpu, 0x0100 | cpu->SP, value);
     cpu->SP--;
 }
-void cpu_push16(CPU *cpu, uint16_t data)
+void cpu_push16(CPU *cpu, uint16_t value)
 {
-    cpu_push(cpu, (data >> 8) & 0xFF);
-    cpu_push(cpu, data & 0xFF);
+    cpu_push(cpu, (value >> 8) & 0xFF);
+    cpu_push(cpu, value & 0xFF);
 }
-uint8_t cpu_pull(CPU *cpu)
+
+uint8_t cpu_pop(CPU *cpu)
 {
     cpu->SP++;
-    return cpu_read_byte(cpu, 0x0100 | cpu->SP);
+    return cpu_read(cpu, 0x0100 | cpu->SP);
 }
-uint16_t cpu_pull16(CPU *cpu)
+uint16_t cpu_pop16(CPU *cpu)
 {
-    return cpu_pull(cpu) | (cpu_pull(cpu) << 8);
+    uint16_t lo = cpu_pop(cpu);
+    uint16_t hi = cpu_pop(cpu);
+    return lo | (hi << 8);
 }
 
 bool cpu_get_debug(CPU *cpu)
@@ -115,15 +95,6 @@ bool cpu_get_decimal_mode(CPU *cpu)
 void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode)
 {
     cpu->decimal_mode = decimal_mode;
-}
-
-bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler)
-{
-    if (cpu == NULL || handler == NULL)
-        return false;
-
-    trap_t trap = {addr, handler};
-    return add_trap(&trap);
 }
 
 uint16_t fetch_address(CPU *cpu, addr_mode_t mode)
@@ -486,16 +457,6 @@ uint8_t cpu_step(CPU *cpu)
     }
 
     uint16_t pc = cpu_get_pc(cpu);
-
-    handler_t handler = find_trap(pc);
-    if (handler != NULL)
-    {
-        handler(cpu);
-
-        // If trap handler changed PC, don't execute the instruction at old PC
-        if (cpu_get_pc(cpu) != pc)
-            return 0;
-    }
 
     uint8_t opcode = cpu_read_byte(cpu, pc);
     const instruction_t *instruction = &instructions[opcode];

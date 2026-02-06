@@ -37,14 +37,6 @@ typedef struct
     FILE *debug_file;
 } CPU;
 
-typedef void (*handler_t)(CPU *);
-
-typedef struct
-{
-    uint16_t address;
-    handler_t handler;
-} trap_t;
-
 typedef enum
 {
     /// Absolute $nnnn
@@ -143,13 +135,13 @@ FILE *cpu_get_debug_file(CPU *cpu);
 bool cpu_get_decimal_mode(CPU *cpu);
 void cpu_set_decimal_mode(CPU *cpu, bool decimal_mode);
 
-bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
+// bool cpu_trap(CPU *cpu, uint16_t addr, handler_t handler);
 
 // Stack operations
 void cpu_push(CPU *cpu, uint8_t data);
 void cpu_push16(CPU *cpu, uint16_t data);
-uint8_t cpu_pull(CPU *cpu);
-uint16_t cpu_pull16(CPU *cpu);
+uint8_t cpu_pop(CPU *cpu);
+uint16_t cpu_pop16(CPU *cpu);
 
 // Addressing mode helpers
 uint16_t fetch_address(CPU *cpu, addr_mode_t mode);
