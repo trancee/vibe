@@ -19,6 +19,7 @@ TEST_CIA1_SRC = $(TEST_DIR)/test_cia1.c
 TEST_CIA2_SRC = $(TEST_DIR)/test_cia2.c
 TEST_SID_SRC = $(TEST_DIR)/test_sid.c
 TEST_SID_FILE_SRC = $(TEST_DIR)/test_sid_file.c
+TEST_SID_AUDIO_SRC = $(TEST_DIR)/test_sid_audio.c
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -43,12 +44,13 @@ TEST_CIA1_BIN = $(BUILD_DIR)/test_cia1
 TEST_CIA2_BIN = $(BUILD_DIR)/test_cia2
 TEST_SID_BIN = $(BUILD_DIR)/test_sid
 TEST_SID_FILE_BIN = $(BUILD_DIR)/test_sid_file
+TEST_SID_AUDIO_BIN = $(BUILD_DIR)/test_sid_audio
 EXAMPLE_BIN = $(BUILD_DIR)/example
 MAIN_BIN = $(BUILD_DIR)/main
 
 .PHONY: all clean test run-test example run-example main run-main docs
 
-all: $(LIB_NAME) $(MAIN_BIN) $(TEST_OPCODES_BIN) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(TEST_SID_BIN) $(TEST_SID_FILE_BIN) $(EXAMPLE_BIN)
+all: $(LIB_NAME) $(MAIN_BIN) $(TEST_OPCODES_BIN) $(TEST_DORMANN_BIN) $(TEST_LORENZ_BIN) $(TEST_NESTEST_BIN) $(TEST_VIC_BIN) $(TEST_CIA1_BIN) $(TEST_CIA2_BIN) $(TEST_SID_BIN) $(TEST_SID_FILE_BIN) $(TEST_SID_AUDIO_BIN) $(EXAMPLE_BIN)
 
 # Create build directory
 $(BUILD_DIR):
@@ -91,6 +93,9 @@ $(TEST_SID_BIN): $(OBJECTS) $(TEST_SID_OBJ) | $(BUILD_DIR)
 # Build SID file test executable
 $(TEST_SID_FILE_BIN): $(OBJECTS) $(TEST_SID_FILE_OBJ) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
+# Build SID audio test executable
+$(TEST_SID_AUDIO_BIN): $(OBJECTS) $(TEST_SID_AUDIO_OBJ) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $(LDFLAGS) $(CXXFLAGS) $(TEST_SID_AUDIO_SRC) $^ -o $@
 
 # Build example executable
 $(EXAMPLE_BIN): $(OBJECTS) | $(BUILD_DIR)
@@ -137,6 +142,12 @@ test-sid-file: $(TEST_SID_FILE_BIN)
 	./$(TEST_SID_FILE_BIN)
 
 run-test-sid-file: test-sid-file
+
+# Run SID audio tests
+test-sid-audio: $(TEST_SID_AUDIO_BIN)
+	./$(TEST_SID_AUDIO_BIN)
+
+run-test-sid-audio: test-sid-audio
 
 # Run example
 example: $(EXAMPLE_BIN)

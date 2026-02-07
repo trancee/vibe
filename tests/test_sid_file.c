@@ -3,10 +3,11 @@
  * @brief Unit tests for SID file parser
  */
 
-#include "sid_file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "sid_file.h"
 
 /* Test framework */
 static int tests_run = 0;

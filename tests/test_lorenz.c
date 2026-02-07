@@ -7,8 +7,8 @@
 
 #define DEBUG false
 
-#define TESTCASE "start" // "cpuport"
-#define MAX_STEPS 1300000000
+#define TESTCASE "cpuport"
+#define MAX_STEPS 500000 // 1300000000
 
 uint16_t load_testcase(C64 *c64, const char *testcase);
 
@@ -198,17 +198,17 @@ int main()
                     printf("\033[33m");
                     break;
                 case 17:
-                    // printf("↓");
+                    printf("↓");
                     printf("\033[1B"); // cursor down
                     printf("\033[1m");
                     break;
                 case 29:
-                    // printf("→");
+                    printf("→");
                     printf("\033[1C"); // cursor right
                     printf("\033[1m");
                     break;
                 case 145:
-                    // printf("↑");
+                    printf("↑");
                     printf("\033[1A"); // cursor up
                     printf("\033[1m");
                     break;
@@ -216,7 +216,7 @@ int main()
                     printf("\033c"); // clear
                     break;
                 case 157:
-                    // printf("←");
+                    printf("←");
                     printf("\033[1D"); // cursor left
                     printf("\033[1m");
                     break;
@@ -226,7 +226,7 @@ int main()
 
                 // RTS
                 uint16_t ret_addr = cpu_pop16(&c64.cpu); // Pop return address from stack
-                c64_set_pc(&c64, ret_addr + 1);           // Set PC to return address
+                c64_set_pc(&c64, ret_addr + 1);          // Set PC to return address
 
                 continue;
             }
@@ -240,7 +240,7 @@ int main()
 
                 // RTS
                 uint16_t ret_addr = cpu_pop16(&c64.cpu); // Pop return address from stack
-                c64_set_pc(&c64, ret_addr);               // Set PC to return address
+                c64_set_pc(&c64, ret_addr);              // Set PC to return address
 
                 continue;
             }

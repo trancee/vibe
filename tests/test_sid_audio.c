@@ -4,12 +4,14 @@
  * without the complexity of SID file playback
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 
 #include "SDL.h"
+
 #include "sid6581.h"
 
 #define SAMPLE_RATE 44100
